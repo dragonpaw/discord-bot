@@ -196,6 +196,8 @@ def state_load_yaml(guild_id: hikari.Snowflake) -> structs.GuildState | None:
             return _yaml_dict_to_state(data)
         except Exception as e:
             logger.exception("Error loading YAML state: %r", e)
+            logger.warning("Deleting corrupt state file: %s", yaml_file)
+            yaml_file.unlink()
             return None
 
     # Auto-migrate from pickle if it exists
