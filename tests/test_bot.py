@@ -214,3 +214,55 @@ def test_config_parse_dragonpaw_gist():
     pings = menus["Pings"]
     assert pings.single is False
     assert len(pings.options) == 8
+
+
+def test_yaml_round_trip_with_unicode_emoji(state_dir):
+    """YAML save/load with hikari.UnicodeEmoji keys (matching real bot behavior)."""
+    state = GuildState(
+        id=hikari.Snowflake(42),
+        name="Emoji Guild",
+        config_url="https://example.com/config.toml",
+        config_last=datetime.datetime(2025, 6, 1, 0, 0, 0),
+        lobby_role_id=hikari.Snowflake(100),
+        lobby_channel_id=hikari.Snowflake(200),
+        lobby_welcome_message="Welcome {name}!",
+        role_emojis={
+            (hikari.Snowflake(10), hikari.UnicodeEmoji("⭐")): RoleMenuOptionState(
+                add_role_id=hikari.Snowflake(20),
+                remove_role_ids=[],
+            ),
+            (hikari.Snowflake(10), hikari.UnicodeEmoji("🔥")): RoleMenuOptionState(
+                add_role_id=hikari.Snowflake(30),
+                remove_role_ids=[hikari.Snowflake(20)],
+            ),
+        },
+        role_names={hikari.Snowflake(20): "Star", hikari.Snowflake(30): "Fire"},
+    )
+
+    state_save_yaml(state)
+
+    # Verify safe_load can read it (no Python-tagged objects)
+    yaml_file = state_dir / "42.yaml"
+    assert yaml_file.exists()
+    with open(yaml_file) as f:
+        raw = yaml.safe_load(f)
+    assert isinstance(raw["role_emojis"][10]["⭐"], dict)
+
+    loaded = state_load_yaml(hikari.Snowflake(42))
+    assert loaded is not None
+    assert loaded.id == state.id
+    assert loaded.name == state.name
+    assert loaded.role_names == state.role_names
+    assert loaded.lobby_role_id == state.lobby_role_id
+    assert loaded.lobby_channel_id == state.lobby_channel_id
+    assert loaded.lobby_welcome_message == state.lobby_welcome_message
+
+    # Verify role_emojis round-tripped correctly (keys become plain strings)
+    assert len(loaded.role_emojis) == 2
+    key_star = (hikari.Snowflake(10), "⭐")
+    key_fire = (hikari.Snowflake(10), "🔥")
+    assert key_star in loaded.role_emojis
+    assert key_fire in loaded.role_emojis
+    assert loaded.role_emojis[key_star].add_role_id == hikari.Snowflake(20)
+    assert loaded.role_emojis[key_fire].add_role_id == hikari.Snowflake(30)
+    assert loaded.role_emojis[key_fire].remove_role_ids == [hikari.Snowflake(20)]
