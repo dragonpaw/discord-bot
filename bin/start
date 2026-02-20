@@ -1,10 +1,8 @@
 #!/bin/bash
 echo "Bot starting up..."
 
-export PATH="$HOME/.local/bin:$PATH"
-
 DIR=$( dirname "$0" )
 cd $DIR/..
 echo "Dir: $(pwd)"
 
-exec poetry run python -OO -m dragonpaw_bot
+exec uv run python -OO -m dragonpaw_bot

@@ -2,16 +2,18 @@
 import datetime
 import logging
 import pickle
+import tomllib
 from os import environ
 from pathlib import Path
+from typing import Any
 
 import dotenv
 import hikari
 import hikari.messages
 import lightbulb
 import safer
-import toml
 import uvloop
+import yaml
 
 from dragonpaw_bot import http, structs, utils
 from dragonpaw_bot.plugins.lobby import configure_lobby
@@ -72,7 +74,7 @@ class DragonpawBot(lightbulb.BotApp):
     def state(self, guild_id: hikari.Snowflake) -> structs.GuildState | None:
         # If we don't have a state in-memory, maybe there is one on disk?
         if guild_id not in self._state:
-            state = state_load_pickle(guild_id=guild_id)
+            state = state_load_yaml(guild_id=guild_id)
             if state:
                 # If that returned a state, cache it.
                 self._state[guild_id] = state
@@ -82,7 +84,7 @@ class DragonpawBot(lightbulb.BotApp):
 
     def state_update(self, state: structs.GuildState):
         self._state[state.id] = state
-        state_save_pickle(state=state)
+        state_save_yaml(state=state)
 
 
 bot = DragonpawBot()
@@ -100,7 +102,7 @@ def state_save_pickle(state: structs.GuildState):
     filename = state_path(state.id, extention="pickle")
     logger.info("G=%r Saving state to: %s", state.name, filename)
     with safer.open(filename, "wb") as f:
-        pickle.dump(obj=state.dict(), file=f)
+        pickle.dump(obj=state.model_dump(), file=f)
 
 
 def state_load_pickle(guild_id: hikari.Snowflake) -> structs.GuildState | None:
@@ -113,10 +115,109 @@ def state_load_pickle(guild_id: hikari.Snowflake) -> structs.GuildState | None:
     logger.debug("Loading state from: %s", filename)
     try:
         with safer.open(filename, "rb") as f:
-            return structs.GuildState.parse_obj(pickle.load(f))
+            return structs.GuildState.model_validate(pickle.load(f))
     except Exception as e:
         logger.exception("Error loading file: %r", e)
         return None
+
+
+def _state_to_yaml_dict(state: structs.GuildState) -> dict[str, Any]:
+    """Convert a GuildState to a plain dict suitable for YAML serialization."""
+    data = state.model_dump(mode="json")
+
+    # Convert role_emojis from list-of-pairs (Pydantic tuple-key dump) to nested dict
+    raw_emojis = data.pop("role_emojis", {})
+    nested: dict[int, dict[str, Any]] = {}
+    for key, value in raw_emojis.items():
+        # Pydantic dumps tuple keys as "(<msg_id>, '<emoji>')" strings in JSON mode.
+        # But model_dump(mode="json") with tuple keys actually gives us the tuples
+        # as string repr. We need to work with the original state instead.
+        pass  # handled below
+
+    # Work from the original model to get clean tuple keys
+    nested = {}
+    for (msg_id, emoji), opt_state in state.role_emojis.items():
+        mid = int(msg_id)
+        if mid not in nested:
+            nested[mid] = {}
+        nested[mid][emoji] = opt_state.model_dump(mode="json")
+    data["role_emojis"] = nested
+
+    # Coerce role_names keys to int (Pydantic JSON mode turns Snowflake to str)
+    data["role_names"] = {int(k): v for k, v in data["role_names"].items()}
+
+    return data
+
+
+def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
+    """Convert a YAML-loaded dict back into a GuildState."""
+    # Reconstruct role_emojis as tuple-keyed dict
+    nested_emojis = data.pop("role_emojis", {})
+    role_emojis: dict[tuple[hikari.Snowflake, str], structs.RoleMenuOptionState] = {}
+    for msg_id_str, emoji_map in nested_emojis.items():
+        msg_id = hikari.Snowflake(msg_id_str)
+        for emoji, opt_data in emoji_map.items():
+            opt_data["add_role_id"] = hikari.Snowflake(opt_data["add_role_id"])
+            opt_data["remove_role_ids"] = [
+                hikari.Snowflake(r) for r in opt_data["remove_role_ids"]
+            ]
+            role_emojis[(msg_id, emoji)] = structs.RoleMenuOptionState.model_validate(
+                opt_data
+            )
+    data["role_emojis"] = role_emojis
+
+    # Reconstruct Snowflake types for role_names keys and scalar ID fields
+    data["role_names"] = {
+        hikari.Snowflake(k): v for k, v in data.get("role_names", {}).items()
+    }
+    data["id"] = hikari.Snowflake(data["id"])
+
+    for field in (
+        "lobby_role_id",
+        "lobby_channel_id",
+        "lobby_rules_message_id",
+        "role_channel_id",
+        "log_channel_id",
+    ):
+        if data.get(field) is not None:
+            data[field] = hikari.Snowflake(data[field])
+
+    return structs.GuildState.model_validate(data)
+
+
+def state_save_yaml(state: structs.GuildState) -> None:
+    filename = state_path(state.id, extention="yaml")
+    logger.info("G=%r Saving state to: %s", state.name, filename)
+    data = _state_to_yaml_dict(state)
+    with safer.open(filename, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+
+
+def state_load_yaml(guild_id: hikari.Snowflake) -> structs.GuildState | None:
+    yaml_file = state_path(guild_id=guild_id, extention="yaml")
+
+    if yaml_file.exists():
+        logger.debug("Loading state from: %s", yaml_file)
+        try:
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f)
+            return _yaml_dict_to_state(data)
+        except Exception as e:
+            logger.exception("Error loading YAML state: %r", e)
+            return None
+
+    # Auto-migrate from pickle if it exists
+    pickle_file = state_path(guild_id=guild_id, extention="pickle")
+    if pickle_file.exists():
+        logger.info("Migrating state from pickle to YAML: %s", pickle_file)
+        state = state_load_pickle(guild_id=guild_id)
+        if state:
+            state_save_yaml(state)
+            pickle_file.unlink()
+            return state
+
+    logger.debug("No state file for guild: %d", guild_id)
+    return None
 
 
 # ---------------------------------------------------------------------------- #
@@ -190,8 +291,8 @@ async def config(ctx: lightbulb.Context) -> None:
 def config_parse_toml(guild: hikari.Guild, text: str) -> structs.GuildConfig:
     logger.info("G=%r Loading TOML config for guild: %r", guild.name, guild)
 
-    data = toml.loads(text)
-    return structs.GuildConfig.parse_obj(data)
+    data = tomllib.loads(text)
+    return structs.GuildConfig.model_validate(data)
 
 
 async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> None:
@@ -203,7 +304,7 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
         config_text = await http.get_text(url)
     try:
         config = config_parse_toml(guild=guild, text=config_text)
-    except toml.decoder.TomlDecodeError as e:
+    except tomllib.TOMLDecodeError as e:
         logger.error("Error parsing TOML file: %s", e)
         await utils.report_errors(bot=bot, guild_id=guild.id, error=str(e))
         return
@@ -228,9 +329,9 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
             state=state,
             role_map=role_map,
         )
-        for e in errors:
-            logger.error("Error setting up role menus: %r", e)
-            await utils.report_errors(bot=bot, guild_id=guild.id, error=e)
+        for err in errors:
+            logger.error("Error setting up role menus: %r", err)
+            await utils.report_errors(bot=bot, guild_id=guild.id, error=err)
     else:
         logger.debug("No roles menus")
 
@@ -242,9 +343,9 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
             state=state,
             role_map=role_map,
         )
-        for e in errors:
-            logger.error("Error setting up lobby: %r", e)
-            await utils.report_errors(bot=bot, guild_id=guild.id, error=e)
+        for err in errors:
+            logger.error("Error setting up lobby: %r", err)
+            await utils.report_errors(bot=bot, guild_id=guild.id, error=err)
     else:
         logger.debug("No lobby.")
 

@@ -2,6 +2,7 @@ import datetime
 
 import hikari
 import pydantic
+from pydantic import ConfigDict
 
 
 # ---------------------------------------------------------------------------- #
@@ -44,11 +45,15 @@ class GuildConfig(pydantic.BaseModel):
 #              States: The thing we keep after seting up the Guild             #
 # ---------------------------------------------------------------------------- #
 class RoleMenuOptionState(pydantic.BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     add_role_id: hikari.Snowflake
     remove_role_ids: list[hikari.Snowflake]
 
 
 class GuildState(pydantic.BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     id: hikari.Snowflake
     name: str
 

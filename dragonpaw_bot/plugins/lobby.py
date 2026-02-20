@@ -80,11 +80,11 @@ async def configure_lobby(
 
         if config.click_for_rules and config.role:
             row = plugin.bot.rest.build_message_action_row()
-            (
-                row.add_button(hikari.ButtonStyle.SUCCESS, RULES_AGREED_ID)
-                .set_label("I agree")
-                .set_emoji("✅")
-                .add_to_container()
+            row.add_interactive_button(
+                hikari.ButtonStyle.SUCCESS,
+                RULES_AGREED_ID,
+                emoji="✅",
+                label="I agree",
             )
             await channel.send(embed=embed, component=row)
         else:
@@ -133,7 +133,6 @@ async def on_member_join(plugin: lightbulb.Plugin, event: hikari.MemberCreateEve
             content=msg,
             user_mentions=True,
             role_mentions=True,
-            nonce=event.user_id,
         )
 
 

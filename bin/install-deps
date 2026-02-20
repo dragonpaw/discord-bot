@@ -1,7 +1,4 @@
 #!/bin/bash -x
 set -eu
-export PATH="$HOME/.local/bin:$PATH"
 
-curl -sSL https://install.python-poetry.org | python3 -
-poetry --version
-poetry install --no-interaction
+uv sync

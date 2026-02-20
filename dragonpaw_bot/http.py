@@ -1,4 +1,5 @@
-from typing import *
+from http import HTTPStatus
+from typing import Any
 
 import aiohttp
 
@@ -7,10 +8,10 @@ import aiohttp
 # ---------------------------------------------------------------------------- #
 
 
-async def get_json(url) -> Any:
+async def get_json(url: str) -> Any:
     async with aiohttp.ClientSession(raise_for_status=True) as session:
         async with session.get(url) as r:
-            if r.status == 200:
+            if r.status == HTTPStatus.OK:
                 return await r.json()
 
 

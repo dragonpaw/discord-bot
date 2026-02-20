@@ -77,16 +77,7 @@ async def configure_role_menus(
     colors = rainbow(len(config.menu))
     for x, menu in enumerate(config.menu):
         logger.info("G=%r Adding the menu: %s", guild.name, menu.name)
-        embed = hikari.Embed(color=hikari.Color.from_rgb(*colors[x]))
-        if menu.single:
-            embed.title = menu.name + " (Pick 1)"
-            if menu.description:
-                embed.description = menu.description + "\n_ _\n" + SINGLE_ROLE_MENU
-            else:
-                embed.description = SINGLE_ROLE_MENU
-        else:
-            embed.title = menu.name
-            embed.description = menu.description
+        embed = _build_menu_embed(menu, colors[x])
 
         for o in menu.options:
             e = emoji_map.get(o.emoji)
@@ -105,22 +96,7 @@ async def configure_role_menus(
 
         for o in menu.options:
             key = (message.id, emoji_map[o.emoji].name)
-
-            if menu.single:
-                s = structs.RoleMenuOptionState(
-                    add_role_id=role_map[o.role].id,
-                    remove_role_ids=[
-                        role_map[option.role].id
-                        for option in menu.options
-                        if option != o
-                    ],
-                )
-            else:
-                s = structs.RoleMenuOptionState(
-                    add_role_id=role_map[o.role].id,
-                    remove_role_ids=[],
-                )
-            state.role_emojis[key] = s
+            state.role_emojis[key] = _build_option_state(menu, o, role_map)
 
         # Add the starting reactions
         for o in menu.options:
@@ -131,6 +107,38 @@ async def configure_role_menus(
     # The big note at the end.
     await channel.send(content=ROLE_NOTE)
     return errors
+
+
+def _build_menu_embed(
+    menu: structs.RoleMenuConfig, color: tuple[int, int, int]
+) -> hikari.Embed:
+    embed = hikari.Embed(color=hikari.Color.from_rgb(*color))
+    if menu.single:
+        embed.title = menu.name + " (Pick 1)"
+        if menu.description:
+            embed.description = menu.description + "\n_ _\n" + SINGLE_ROLE_MENU
+        else:
+            embed.description = SINGLE_ROLE_MENU
+    else:
+        embed.title = menu.name
+        embed.description = menu.description
+    return embed
+
+
+def _build_option_state(
+    menu: structs.RoleMenuConfig,
+    option: structs.RoleMenuOptionConfig,
+    role_map: Mapping[str, hikari.Role],
+) -> structs.RoleMenuOptionState:
+    if menu.single:
+        return structs.RoleMenuOptionState(
+            add_role_id=role_map[option.role].id,
+            remove_role_ids=[role_map[o.role].id for o in menu.options if o != option],
+        )
+    return structs.RoleMenuOptionState(
+        add_role_id=role_map[option.role].id,
+        remove_role_ids=[],
+    )
 
 
 @plugin.listener(event=hikari.GuildReactionAddEvent)
