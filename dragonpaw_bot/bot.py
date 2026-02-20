@@ -125,22 +125,14 @@ def _state_to_yaml_dict(state: structs.GuildState) -> dict[str, Any]:
     """Convert a GuildState to a plain dict suitable for YAML serialization."""
     data = state.model_dump(mode="json")
 
-    # Convert role_emojis from list-of-pairs (Pydantic tuple-key dump) to nested dict
-    raw_emojis = data.pop("role_emojis", {})
+    # Convert role_emojis from tuple-keyed dict to nested {msg_id: {emoji: state}}
+    data.pop("role_emojis", None)
     nested: dict[int, dict[str, Any]] = {}
-    for key, value in raw_emojis.items():
-        # Pydantic dumps tuple keys as "(<msg_id>, '<emoji>')" strings in JSON mode.
-        # But model_dump(mode="json") with tuple keys actually gives us the tuples
-        # as string repr. We need to work with the original state instead.
-        pass  # handled below
-
-    # Work from the original model to get clean tuple keys
-    nested = {}
     for (msg_id, emoji), opt_state in state.role_emojis.items():
         mid = int(msg_id)
         if mid not in nested:
             nested[mid] = {}
-        nested[mid][emoji] = opt_state.model_dump(mode="json")
+        nested[mid][str(emoji)] = opt_state.model_dump(mode="json")
     data["role_emojis"] = nested
 
     # Coerce role_names keys to int (Pydantic JSON mode turns Snowflake to str)
