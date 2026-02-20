@@ -1,6 +1,6 @@
 services:
   bot:
-    build: .
+    image: ghcr.io/dragonpaw/discord-bot:latest
     restart: unless-stopped
     environment:
       - BOT_TOKEN

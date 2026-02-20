@@ -8,8 +8,7 @@ on:
   pull_request:
 
 env:
-  CONTAINER_IMAGE: discord-bot
-  CONTAINER_REPO: ghcr.io/dragonpaw/discord-bot
+  IMAGE: ghcr.io/dragonpaw/discord-bot
 
 jobs:
   build:
@@ -24,13 +23,13 @@ jobs:
           export TAG=$(date "+%Y.%m.%d-%H.%M.%S")
           echo "Tag: $TAG"
           echo -n $TAG > .tag
-          docker build . --file Dockerfile -t ${CONTAINER_IMAGE} \
-            --tag ${CONTAINER_REPO}/${CONTAINER_IMAGE}:${TAG} \
-            --tag ${CONTAINER_REPO}/${CONTAINER_IMAGE}:latest \
+          docker build . --file Dockerfile \
+            --tag ${IMAGE}:${TAG} \
+            --tag ${IMAGE}:latest \
             --build-arg BUILD_TAG="$TAG"
 
       # - name: Test with pytest
-      #   run: docker run ${CONTAINER_IMAGE} pytest
+      #   run: docker run ${IMAGE}:latest pytest
 
       - name: Login to GitHub Container Registry
         if: github.event_name == 'push'
@@ -44,5 +43,5 @@ jobs:
         if: github.event_name == 'push'
         run: |
           export TAG=$(cat .tag)
-          docker push ${CONTAINER_REPO}/${CONTAINER_IMAGE}:latest
-          docker push ${CONTAINER_REPO}/${CONTAINER_IMAGE}:${TAG}
+          docker push ${IMAGE}:latest
+          docker push ${IMAGE}:${TAG}
