@@ -8,10 +8,9 @@ on:
   pull_request:
 
 env:
-  CLUSTER: k8s-main
   CONTAINER_IMAGE: discord-bot
   CONTAINER_REPO: ghcr.io/dragonpaw/discord-bot
-  NAMESPACE: ash
+
 jobs:
   build:
     name: Build & Test
@@ -33,12 +32,6 @@ jobs:
       # - name: Test with pytest
       #   run: docker run ${CONTAINER_IMAGE} pytest
 
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        if: github.event_name == 'push'
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
       - name: Login to GitHub Container Registry
         if: github.event_name == 'push'
         uses: docker/login-action@v2
@@ -47,21 +40,9 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup various credentials
+      - name: Push
         if: github.event_name == 'push'
-        run: doctl kubernetes cluster kubeconfig save $CLUSTER
-
-      - name: Build & Push
-        if: github.event_name == 'push'
-        # Because of the TAG, this has to be a single step. Otherwise it
-        # won't be the same on the push, as time will have passed.
         run: |
           export TAG=$(cat .tag)
-
-          # Push some containers
           docker push ${CONTAINER_REPO}/${CONTAINER_IMAGE}:latest
           docker push ${CONTAINER_REPO}/${CONTAINER_IMAGE}:${TAG}
-
-      - name: Deploy to test
-        if: github.event_name == 'push'
-        run: kubectl rollout restart --namespace=${NAMESPACE} sts/${CONTAINER_IMAGE}-test

@@ -1,0 +1,12 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN
+      - CLIENT_ID
+    volumes:
+      - bot-state:/app/state
+
+volumes:
+  bot-state:
