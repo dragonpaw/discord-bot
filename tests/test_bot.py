@@ -1,5 +1,6 @@
 import datetime
 import tomllib
+from pathlib import Path
 from types import SimpleNamespace
 
 import hikari
@@ -17,6 +18,8 @@ from dragonpaw_bot.bot import (
     state_save_yaml,
 )
 from dragonpaw_bot.structs import GuildState, RoleMenuOptionState
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 def _sample_state() -> GuildState:
@@ -164,3 +167,50 @@ def test_auto_migration_from_pickle(state_dir):
     assert not pickle_file.exists()
     yaml_file = state_dir / "99.yaml"
     assert yaml_file.exists()
+
+
+def test_config_parse_dragonpaw_gist():
+    """Parse the real-world config from the dragonpaw gist."""
+    toml_text = (FIXTURES_DIR / "dragonpaw_gist.toml").read_text()
+    guild = SimpleNamespace(name="TestGuild", id=hikari.Snowflake(1))
+    config = config_parse_toml(guild=guild, text=toml_text)
+
+    # Lobby
+    assert config.lobby is not None
+    assert config.lobby.channel == "unverified"
+    assert config.lobby.kick_after_days == 10
+    assert config.lobby.role == "Unverified"
+    assert "{name}" in config.lobby.welcome_message
+
+    # Roles
+    assert config.roles is not None
+    assert config.roles.channel == "roles"
+    assert len(config.roles.menu) == 6
+
+    # Check each menu by name
+    menus = {m.name: m for m in config.roles.menu}
+
+    ds = menus["D/s roles"]
+    assert ds.single is True
+    assert len(ds.options) == 3
+    assert {o.role for o in ds.options} == {"Dominant", "submissive", "Switch"}
+
+    gender = menus["Gender"]
+    assert gender.single is True
+    assert len(gender.options) == 4
+
+    trans = menus["Trans"]
+    assert trans.single is False
+    assert len(trans.options) == 1
+
+    dm = menus["DM Permission"]
+    assert dm.single is True
+    assert len(dm.options) == 2
+
+    kinks = menus["Misc Kinks"]
+    assert kinks.single is False
+    assert len(kinks.options) == 12
+
+    pings = menus["Pings"]
+    assert pings.single is False
+    assert len(pings.options) == 8

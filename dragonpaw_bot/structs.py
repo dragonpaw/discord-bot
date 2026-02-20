@@ -11,10 +11,10 @@ from pydantic import ConfigDict
 class LobbyConfig(pydantic.BaseModel):
     channel: str
     click_for_rules: bool = False
-    kick_after_days: int | None
-    role: str | None
-    rules: str | None
-    welcome_message: str | None
+    kick_after_days: int | None = None
+    role: str | None = None
+    rules: str | None = None
+    welcome_message: str | None = None
 
 
 class RoleMenuOptionConfig(pydantic.BaseModel):
@@ -26,7 +26,7 @@ class RoleMenuOptionConfig(pydantic.BaseModel):
 class RoleMenuConfig(pydantic.BaseModel):
     name: str
     single: bool = False
-    description: str | None
+    description: str | None = None
     options: list[RoleMenuOptionConfig]
 
 
@@ -36,9 +36,9 @@ class RolesConfig(pydantic.BaseModel):
 
 
 class GuildConfig(pydantic.BaseModel):
-    lobby: LobbyConfig | None
-    roles: RolesConfig | None
-    log_channel: str | None
+    lobby: LobbyConfig | None = None
+    roles: RolesConfig | None = None
+    log_channel: str | None = None
 
 
 # ---------------------------------------------------------------------------- #

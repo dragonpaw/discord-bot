@@ -1,0 +1,181 @@
+[lobby]
+channel = "unverified"
+kick_after_days = 10
+role = "Unverified"
+welcome_message = "Welcome to our server {name}! You will need to check out how to do #verification if you want to see the rest of the server. And you can find a lot about this place and our unique views on kink in #about."
+
+[roles]
+channel = "roles"
+
+# --------------------------------------------------------------------------
+# D/s roles
+# --------------------------------------------------------------------------
+[[roles.menu]]
+description = "Please let us know how you identify, in terms of traditional D/s role."
+name = "D/s roles"
+single = true
+
+[[roles.menu.options]]
+description = "I like to make people get me coffee."
+emoji = "coffee"
+role = "Dominant"
+[[roles.menu.options]]
+description = "I like to fetch coffee."
+emoji = "YesSir1"
+role = "submissive"
+[[roles.menu.options]]
+description = "Sometimes I fetch the coffee, sometimes someone fetches me the coffee."
+emoji = "switch"
+role = "Switch"
+
+# --------------------------------------------------------------------------
+# Gender
+# --------------------------------------------------------------------------
+[[roles.menu]]
+name = "Gender"
+single = true
+[[roles.menu.options]]
+description = "Please use 'he/him' when referring to me."
+emoji = "male_sign"
+role = "Male"
+[[roles.menu.options]]
+description = "Please use 'she/her' when referring to me."
+emoji = "female_sign"
+role = "Female"
+[[roles.menu.options]]
+description = "Please use 'they/them' when referring to me."
+emoji = "no_entry_sign"
+role = "Nonbinary"
+[[roles.menu.options]]
+description = "Please use 'it/its' when referring to me."
+emoji = "dolls"
+role = "It/Its"
+
+# --------------------------------------------------------------------------
+# Trans
+# --------------------------------------------------------------------------
+[[roles.menu]]
+description = "You may use this role, if you wish, to let people know that you are trans. This is a **completely optional thing**. (If you feel that trans people should be required to 'warn' you that they are trans, please leave this server.)"
+name = "Trans"
+[[roles.menu.options]]
+description = "I'm trans. Deal with it."
+emoji = "+1"
+role = "Trans"
+
+# --------------------------------------------------------------------------
+# Direct Messaging
+# --------------------------------------------------------------------------
+[[roles.menu]]
+name = "DM Permission"
+single = true
+[[roles.menu.options]]
+description = "Feel free to DM me any time, no need to ask."
+emoji = "white_check_mark"
+role = "DM: Open"
+[[roles.menu.options]]
+description = "Please ask publicly first. (If I am Owned, please ask the person who Owns me.)"
+emoji = "question"
+role = "DM: Ask"
+
+# --------------------------------------------------------------------------
+# Misc Kinks
+# --------------------------------------------------------------------------
+[[roles.menu]]
+description = "What kinda stuff are you into, or curious about?"
+name = "Misc Kinks"
+
+# B & D
+[[roles.menu.options]]
+description = "I like to be restrained, or to restrain others."
+emoji = "ballgag"
+role = "Bondage"
+[[roles.menu.options]]
+description = "I really, **really**, like using rope as a means of bondage on other people."
+emoji = "Rope"
+role = "Rigger"
+[[roles.menu.options]]
+description = "I really like being tied up with rope, as the scene itself, not just as a means to facilitate the scene."
+emoji = "firecracker"
+role = "rope bottom"
+[[roles.menu.options]]
+description = "I really, **really** love the structure and safety of knowing what the rules for me are. Knowing where the boundaries are lets me feel safe exploring within all the space within them. (Otherwise I'm a pile of stress, never knowing if what I want is ok.)"
+emoji = "YesMaster"
+role = "Discipline"
+
+# D/s
+[[roles.menu.options]]
+description = "This isn't a casual bedroom-only thing for me. I live, or want to live, a D/s lifestyle 24/7 as Slave and Owner."
+emoji = "clock1"
+role = "24/7"
+
+# SM
+[[roles.menu.options]]
+description = "I get hard/wet at hurting people."
+emoji = "PinkPaddle"
+role = "Sadist"
+[[roles.menu.options]]
+description = "I get hard/wet at being hurt."
+emoji = "Spank"
+role = "masochist"
+[[roles.menu.options]]
+description = "I get off on topping people in some form: tying them up, flogging them, etc."
+emoji = "arrow_up"
+role = "Top"
+[[roles.menu.options]]
+description = "I don't directly get off on topping people, but will do so when asked and can provide a scene of the bottom's choosing. I will likely get off on them getting off though."
+emoji = "arrow_double_up"
+role = "Service Top"
+[[roles.menu.options]]
+description = "I love to be topped: i.e. flogged, tied up, and generally used."
+emoji = "arrow_down"
+role = "bottom"
+
+# Misc
+[[roles.menu.options]]
+description = "I love to run around with ears and a tail in me."
+emoji = "tailswish"
+role = "Pet play"
+[[roles.menu.options]]
+description = "I love to mix sex and video games. (e.g. Someone uses my Lush while I'm playing Overwatch, and I only get to cum if we win the match.)"
+emoji = "joystick"
+role = "Heal Slut"
+
+# --------------------------------------------------------------------------
+# Pings
+# --------------------------------------------------------------------------
+[[roles.menu]]
+description = "What kind of things would you like pinged for?"
+name = "Pings"
+
+[[roles.menu.options]]
+description = "Ping me for voice chat!"
+emoji = "joinvc"
+role = "Join VC"
+[[roles.menu.options]]
+description = "Ping me when people are being sluts on camera!"
+emoji = "Lunashy"
+role = "Sluts on Cam"
+[[roles.menu.options]]
+description = "Ping me when it's time to do space ninja shit!"
+emoji = "LotusSymbol"
+role = "Warframe"
+[[roles.menu.options]]
+description = "Ping me when you want someone to cause mayhem in Apex with!"
+emoji = "apex"
+role = "Apex Legends"
+[[roles.menu.options]]
+description = "Ping me for Minecraft related things!"
+emoji = "redstone"
+role = "Minecraft"
+[[roles.menu.options]]
+description = "Ping me when we're playing Cards Against Humanity!"
+emoji = "cah"
+role = "Cards Against Humanity"
+[[roles.menu.options]]
+description = "Ping me for events in the San Francisco Bay Area!"
+emoji = "ashyes"
+role = "SF Local Events"
+[[roles.menu.options]]
+description = "Ping me to help support any littles that need it."
+emoji = "ambulance"
+role = "Littles Support"
