@@ -52,7 +52,7 @@ INTENTS = (
     | hikari.Intents.GUILDS
     | hikari.Intents.GUILD_MEMBERS
     | hikari.Intents.GUILD_EMOJIS
-).value
+)
 
 if "TEST_GUILDS" in environ:
     TEST_GUILDS = [int(x) for x in environ["TEST_GUILDS"].split(",")]
@@ -234,9 +234,18 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
         OAUTH_URL.format(CLIENT_ID=CLIENT_ID, OAUTH_PERMISSIONS=OAUTH_PERMISSIONS),
     )
     bot.user_id = event.my_user.id
-    # await bot.update_presence(
-    #     activity=hikari.Activity(type=hikari.ActivityType.CUSTOM, name=ACTIVITY)
-    # )
+
+    flags = event.application_flags
+    if (
+        INTENTS & hikari.Intents.GUILD_MEMBERS
+        and not flags & hikari.ApplicationFlags.GUILD_MEMBERS_INTENT
+    ):
+        logger.warning(
+            "GUILD_MEMBERS intent is requested but NOT enabled in the "
+            "Discord Developer Portal. Lobby welcome messages and member "
+            "join events will silently fail. Enable it under: "
+            "Bot > Privileged Gateway Intents > Server Members Intent"
+        )
 
 
 @bot.listen()
