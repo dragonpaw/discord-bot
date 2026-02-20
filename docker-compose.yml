@@ -2,6 +2,9 @@ services:
   bot:
     image: ghcr.io/dragonpaw/discord-bot:latest
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       - BOT_TOKEN
       - CLIENT_ID
