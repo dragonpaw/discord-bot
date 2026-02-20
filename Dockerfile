@@ -19,6 +19,8 @@ RUN chown python.python /app
 
 USER python
 
+RUN mkdir -p /app/state
+
 COPY . /app
 RUN /app/bin/install-deps
 
