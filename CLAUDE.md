@@ -14,6 +14,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - **Linting:** `uv run ruff check dragonpaw_bot/`
 - **Formatting:** `uv run ruff format dragonpaw_bot/`
 - **Tests:** `uv run pytest`
+- **Single test:** `uv run pytest tests/test_bot.py::test_name`
 
 ## Required Environment Variables
 
@@ -37,7 +38,13 @@ A `.env` file is loaded automatically via `python-dotenv`.
 - **`plugins/role_menus.py`** — Posts embed menus with emoji reactions in a designated channel. Listens for reaction add/remove events to assign/remove Discord roles. Supports single-select menus (picking one removes others).
 - **`plugins/lobby.py`** — Handles new member joins: auto-assigns a role, posts welcome messages, and optionally shows server rules with an "I agree" button that removes the lobby role.
 
+**`utils.py`** — Discord helpers: deleting bot messages, looking up channels/roles/emojis by name, error reporting.
+
+**`http.py`** — Async HTTP client for fetching TOML configs, with special GitHub Gist URL handling.
+
 **Config flow:** Server admins use the `/config` slash command with a URL to a TOML file. The bot fetches and parses it, sets up role menus and lobby, then persists `GuildState` to disk as YAML.
+
+**State serialization note:** `GuildState.role_emojis` uses tuple keys `(message_id, emoji_name)` which require custom transformation for YAML (converted to nested dicts `{msg_id: {emoji: state}}`).
 
 ## Key Conventions
 
@@ -45,3 +52,5 @@ A `.env` file is loaded automatically via `python-dotenv`.
 - Pydantic v2 API (`model_validate`, `.model_dump()`)
 - Logging follows the pattern `logger.info("G=%r U=%r: ...", guild_name, username, ...)`
 - Python version target: 3.13
+- Tests use `pytest-asyncio` with `asyncio_mode = "auto"` (no `@pytest.mark.asyncio` needed)
+- Ruff lint rules: isort (`I`) and pylint (`PL`) enabled in addition to defaults
