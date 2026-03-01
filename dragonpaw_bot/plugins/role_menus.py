@@ -82,9 +82,11 @@ async def configure_role_menus(
         for o in menu.options:
             e = emoji_map.get(o.emoji)
             if not e:
+                logger.error("G=%r Menu=%r: Emoji %r doesn't exist.", guild.name, menu.name, o.emoji)
                 errors.append(f"Emoji '{o.emoji}' doesn't seem to exist.")
                 continue
             if o.role not in role_map:
+                logger.error("G=%r Menu=%r: Role %r doesn't exist.", guild.name, menu.name, o.role)
                 errors.append(f"Role '{o.role}' doesn't seem to exist.")
                 continue
             embed.add_field(
@@ -94,12 +96,21 @@ async def configure_role_menus(
             )
         message = await channel.send(embed=embed)
 
-        for o in menu.options:
+        valid_options = [
+            o for o in menu.options if emoji_map.get(o.emoji) and o.role in role_map
+        ]
+        if not valid_options:
+            logger.warning(
+                "G=%r Menu=%r: No valid options; menu posted with no reactions.",
+                guild.name,
+                menu.name,
+            )
+        for o in valid_options:
             key = (message.id, emoji_map[o.emoji].name)
             state.role_emojis[key] = _build_option_state(menu, o, role_map)
 
         # Add the starting reactions
-        for o in menu.options:
+        for o in valid_options:
             e = emoji_map[o.emoji]
             logger.debug("Adding: %s = %s", e, o.role)
             await message.add_reaction(e)
@@ -133,7 +144,11 @@ def _build_option_state(
     if menu.single:
         return structs.RoleMenuOptionState(
             add_role_id=role_map[option.role].id,
-            remove_role_ids=[role_map[o.role].id for o in menu.options if o != option],
+            remove_role_ids=[
+                role_map[o.role].id
+                for o in menu.options
+                if o != option and o.role in role_map
+            ],
         )
     return structs.RoleMenuOptionState(
         add_role_id=role_map[option.role].id,
