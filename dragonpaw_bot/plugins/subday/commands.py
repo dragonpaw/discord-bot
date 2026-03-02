@@ -287,7 +287,7 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         )
         embed = _graduation_embed(target, prizes)
         staff_msg = (
-            f"{completer.mention} — {target.mention} has **graduated** "
+            f"🎁 {completer.mention} — {target.mention} has **graduated** "
             f"from Where I am Led! Please arrange their prize: "
             f"**{prizes.get(TOTAL_WEEKS, 'a prize')}**."
         )
@@ -302,7 +302,7 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         embed = _milestone_embed(target, week, role_name, prizes)
         prize = prizes.get(week, "a prize")
         staff_msg = (
-            f"{completer.mention} — {target.mention} has reached the "
+            f"🎁 {completer.mention} — {target.mention} has reached the "
             f"**week {week} milestone** of Where I am Led! "
             f"Please arrange their prize: **{prize}**."
         )
@@ -1216,12 +1216,12 @@ class SubDayComplete(
         if week not in milestone_roles:
             if backfill_week:
                 staff_msg = (
-                    f"{ctx.member.mention} backfilled {target.mention} "
+                    f"✅ {ctx.member.mention} backfilled {target.mention} "
                     f"to **Week {week}** (complete)."
                 )
             else:
                 staff_msg = (
-                    f"{ctx.member.mention} marked {target.mention} "
+                    f"✅ {ctx.member.mention} marked {target.mention} "
                     f"complete for **Week {week}**."
                 )
             await utils.log_to_guild(bot, ctx.guild_id, staff_msg)
