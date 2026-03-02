@@ -1090,48 +1090,53 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
             )
             return
 
-    setattr(cfg, field, new_value)
-
-    guild_state.guild_name = guild.name
-    state.save(guild_state)
-
-    display_old = old_value or "None"
-    display_new = new_value or "None"
-    if new_value != old_value:
-        logger.info(
-            "G=%r U=%r: SubDay setting changed: %s = %r (was %r)",
-            guild.name,
-            interaction.user.username,
-            field,
-            display_new,
-            display_old,
-        )
-        # Log to the guild's log channel if configured
-        bot_state = bot.state(guild_id)
-        if bot_state and bot_state.log_channel_id:
-            try:
-                await bot.rest.create_message(
-                    channel=bot_state.log_channel_id,
-                    content=(
-                        f"**SubDay config changed** by {interaction.user.mention}: "
-                        f"`{field}` changed from `{display_old}` to `{display_new}`"
-                    ),
-                )
-            except hikari.HTTPError:
-                logger.warning(
-                    "G=%r: Failed to log config change to log channel",
-                    guild.name,
-                )
-    else:
+    if new_value == old_value:
         logger.debug(
             "G=%r U=%r: SubDay setting unchanged: %s = %r",
             guild.name,
             interaction.user.username,
             field,
-            display_new,
+            new_value,
         )
+        embed = embed_builder(cfg)
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            embed=embed,
+        )
+        return
 
-    # Update the message with new embed
+    setattr(cfg, field, new_value)
+    guild_state.guild_name = guild.name
+    state.save(guild_state)
+
+    display_old = old_value or "None"
+    display_new = new_value or "None"
+    logger.info(
+        "G=%r U=%r: SubDay setting changed: %s = %r (was %r)",
+        guild.name,
+        interaction.user.username,
+        field,
+        display_new,
+        display_old,
+    )
+
+    # Log to the guild's log channel if configured
+    bot_state = bot.state(guild_id)
+    if bot_state and bot_state.log_channel_id:
+        try:
+            await bot.rest.create_message(
+                channel=bot_state.log_channel_id,
+                content=(
+                    f"**SubDay config changed** by {interaction.user.mention}: "
+                    f"`{field}` changed from `{display_old}` to `{display_new}`"
+                ),
+            )
+        except hikari.HTTPError:
+            logger.warning(
+                "G=%r: Failed to log config change to log channel",
+                guild.name,
+            )
+
     embed = embed_builder(cfg)
     embed.set_footer(text="Settings updated.")
     await interaction.create_initial_response(
