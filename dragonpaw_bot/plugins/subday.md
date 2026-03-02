@@ -104,9 +104,10 @@ Milestone roles are configurable per server via `/subday prize-roles`. Setting a
 | `__init__.py` | Plugin entry point, load/unload, component interaction listener |
 | `chart.py` | Star chart image generation (Pillow) for achievement/status embeds |
 | `commands.py` | All slash commands, help handler, achievement embeds, milestone logic, config/prizes commands, component interaction handler |
-| `scheduler.py` | Sunday background task: advances weeks, DMs prompts |
+| `constants.py` | Shared constants: `TOTAL_WEEKS`, `MILESTONE_WEEKS`, `WEEKS_DIR`, interaction ID prefixes |
 | `models.py` | Pydantic models: `SubDayParticipant`, `SubDayGuildConfig`, `SubDayGuildState` |
 | `prompts.py` | Parses weekly markdown files, builds prompt embeds |
+| `scheduler.py` | Sunday background task: advances weeks, DMs prompts |
 | `state.py` | YAML state persistence (load/save/cache) |
 | `weeks/` | 52 weekly prompt files, `rules.md`, `about.md` (mustache template) |
 
