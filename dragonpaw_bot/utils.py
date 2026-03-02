@@ -31,15 +31,19 @@ async def delete_my_messages(
 
 
 async def guild_channel_by_name(
-    bot: DragonpawBot, guild: hikari.Guild, name: str
+    bot: DragonpawBot,
+    guild: hikari.Guild | hikari.Snowflake,
+    name: str,
 ) -> Optional[hikari.GuildTextChannel]:
     logger.debug("Finding channel: %s", name)
-    channels: Sequence[hikari.GuildChannel] = list(guild.get_channels().values())
-    if not channels:
-        channels = await bot.rest.fetch_guild_channels(guild=guild.id)
+    if isinstance(guild, hikari.Guild):
+        channels: Sequence[hikari.GuildChannel] = list(guild.get_channels().values())
+        if not channels:
+            channels = await bot.rest.fetch_guild_channels(guild=guild.id)
+    else:
+        channels = await bot.rest.fetch_guild_channels(guild=guild)
     for channel in channels:
-        if channel.name == name:
-            assert isinstance(channel, hikari.GuildTextChannel)
+        if channel.name == name and isinstance(channel, hikari.GuildTextChannel):
             return channel
     return None
 
@@ -68,6 +72,27 @@ async def guild_roles(
 ) -> Mapping[str, hikari.Role]:
     roles = await bot.rest.fetch_roles(guild=guild.id)
     return {r.name: r for r in roles}
+
+
+async def guild_role_by_name(
+    bot: DragonpawBot,
+    guild: hikari.Guild | hikari.Snowflake,
+    name: str,
+) -> Optional[hikari.Role]:
+    guild_id = guild.id if isinstance(guild, hikari.Guild) else guild
+    roles = await bot.rest.fetch_roles(guild=guild_id)
+    for r in roles:
+        if r.name == name:
+            return r
+    return None
+
+
+def member_has_role(member: hikari.Member, role_name: str) -> bool:
+    """Check if a member has a role by name (via the guild's role cache)."""
+    for role in member.get_roles():
+        if role.name == role_name:
+            return True
+    return False
 
 
 async def report_errors(

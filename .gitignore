@@ -28,7 +28,12 @@ coverage.xml
 .mypy_cache/
 .dmypy.json
 dmypy.json
+.ruff_cache/
 
 # Bot state
 data/
 state/
+
+# Art samples
+IMG_4477.jpg
+/samples/

@@ -94,19 +94,19 @@ bot = DragonpawBot()
 # ---------------------------------------------------------------------------- #
 
 
-def state_path(guild_id: hikari.Snowflake, extention="toml"):
-    return Path(STATE_DIR, str(guild_id) + "." + extention)
+def state_path(guild_id: hikari.Snowflake, extension="toml"):
+    return Path(STATE_DIR, str(guild_id) + "." + extension)
 
 
 def state_save_pickle(state: structs.GuildState):
-    filename = state_path(state.id, extention="pickle")
+    filename = state_path(state.id, extension="pickle")
     logger.info("G=%r Saving state to: %s", state.name, filename)
     with safer.open(filename, "wb") as f:
         pickle.dump(obj=state.model_dump(), file=f)
 
 
 def state_load_pickle(guild_id: hikari.Snowflake) -> structs.GuildState | None:
-    filename = state_path(guild_id=guild_id, extention="pickle")
+    filename = state_path(guild_id=guild_id, extension="pickle")
 
     if not filename.exists():
         logger.debug("No state file for guild: %d", guild_id)
@@ -178,7 +178,7 @@ def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
 
 
 def state_save_yaml(state: structs.GuildState) -> None:
-    filename = state_path(state.id, extention="yaml")
+    filename = state_path(state.id, extension="yaml")
     logger.info("G=%r Saving state to: %s", state.name, filename)
     data = _state_to_yaml_dict(state)
     with safer.open(filename, "w") as f:
@@ -186,7 +186,7 @@ def state_save_yaml(state: structs.GuildState) -> None:
 
 
 def state_load_yaml(guild_id: hikari.Snowflake) -> structs.GuildState | None:
-    yaml_file = state_path(guild_id=guild_id, extention="yaml")
+    yaml_file = state_path(guild_id=guild_id, extension="yaml")
 
     if yaml_file.exists():
         logger.debug("Loading state from: %s", yaml_file)
@@ -201,7 +201,7 @@ def state_load_yaml(guild_id: hikari.Snowflake) -> structs.GuildState | None:
             return None
 
     # Auto-migrate from pickle if it exists
-    pickle_file = state_path(guild_id=guild_id, extention="pickle")
+    pickle_file = state_path(guild_id=guild_id, extension="pickle")
     if pickle_file.exists():
         logger.info("Migrating state from pickle to YAML: %s", pickle_file)
         state = state_load_pickle(guild_id=guild_id)
@@ -359,3 +359,4 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
 
 bot.load_extensions("dragonpaw_bot.plugins.lobby")
 bot.load_extensions("dragonpaw_bot.plugins.role_menus")
+bot.load_extensions("dragonpaw_bot.plugins.subday")

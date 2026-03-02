@@ -49,7 +49,7 @@ def test_state_path_default_extension():
 
 
 def test_state_path_custom_extension():
-    p = state_path(hikari.Snowflake(42), extention="yaml")
+    p = state_path(hikari.Snowflake(42), extension="yaml")
     assert p.name == "42.yaml"
 
 

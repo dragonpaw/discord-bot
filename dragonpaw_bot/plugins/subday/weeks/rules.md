@@ -1,0 +1,2 @@
+1. Below you'll find a 'Guidepost', two 'Thoughts for the week' and a 'Writing assignment'. Please write out your thoughts for the first three prompts, and then do the writing assignment. Usually the first three are only a few sentences each, whereas the final assignment will be a bit longer.
+2. Show your work to your Owner. Or if you are not Owned, then check in with any member of staff and discuss your four answers with them.

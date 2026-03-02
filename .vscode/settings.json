@@ -23,7 +23,7 @@
     "aiohttp",
     "dotenv",
     "Dragonpaw",
-    "extention",
+    "lightbulb",
     "hikari",
     "uvloop"
   ]
