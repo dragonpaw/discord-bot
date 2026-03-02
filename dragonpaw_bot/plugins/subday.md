@@ -111,7 +111,7 @@ Submissives can register an owner via `/subday owner @user`. The owner receives 
 2. Owner clicks Accept → `owner_id` is set, sub is notified via DM
 3. Owner clicks Decline → `pending_owner_id` is cleared, sub is notified
 
-**Button custom IDs:** `subday_owner_approve:{guild_id}:{sub_user_id}` — guild_id is embedded because buttons are clicked in DMs where `interaction.guild_id` is None.
+**Button custom IDs:** `subday_owner_request:approve|deny:{guild_id}:{sub_user_id}` — guild_id is embedded because buttons are clicked in DMs where `interaction.guild_id` is None.
 
 **Edge cases:**
 - New request while one is pending → overwrites `pending_owner_id`, sends new DM (direct replacement)

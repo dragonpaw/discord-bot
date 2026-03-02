@@ -13,18 +13,26 @@ from dragonpaw_bot.plugins.subday.constants import (
     MILESTONE_WEEKS,
     SUBDAY_CFG_ROLE_PREFIX,
     SUBDAY_CONFIG_PREFIX,
-    SUBDAY_OWNER_PREFIX,
+    SUBDAY_OWNER_REQUEST_PREFIX,
     SUBDAY_SIGNUP_ID,
     TOTAL_WEEKS,
 )
 from dragonpaw_bot.plugins.subday.models import SubDayParticipant
+from dragonpaw_bot.utils import InteractionHandler
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
-__all__ = ["MILESTONE_WEEKS", "TOTAL_WEEKS"]
+__all__ = ["INTERACTION_HANDLERS", "MILESTONE_WEEKS", "TOTAL_WEEKS"]
 
 logger = logging.getLogger(__name__)
+
+INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
+    SUBDAY_OWNER_REQUEST_PREFIX: commands.handle_owner_interaction,
+    SUBDAY_SIGNUP_ID: commands.handle_signup_interaction,
+    SUBDAY_CONFIG_PREFIX: commands.handle_config_interaction,
+    SUBDAY_CFG_ROLE_PREFIX: commands.handle_config_interaction,
+}
 
 loader = lightbulb.Loader()
 
@@ -44,71 +52,6 @@ class SubDayHelp(
 
 commands.register(subday_group)
 loader.command(subday_group)
-
-
-async def _respond_error(
-    interaction: hikari.ComponentInteraction, message: str
-) -> None:
-    """Try to send an ephemeral error response; ignore if the interaction expired."""
-    try:
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content=message,
-            flags=hikari.MessageFlag.EPHEMERAL,
-        )
-    except hikari.NotFoundError:
-        pass  # Interaction already expired or was already responded to
-
-
-@loader.listener(hikari.InteractionCreateEvent)
-async def on_interaction(event: hikari.InteractionCreateEvent) -> None:
-    if not isinstance(event.interaction, hikari.ComponentInteraction):
-        return
-    interaction = event.interaction
-    cid = interaction.custom_id
-    logger.debug(
-        "Component interaction: custom_id=%r user=%r guild=%r",
-        cid,
-        interaction.user.username,
-        interaction.guild_id,
-    )
-    if cid.startswith(SUBDAY_OWNER_PREFIX):
-        try:
-            await commands.handle_owner_interaction(interaction)
-        except Exception:
-            logger.exception(
-                "Error handling owner interaction: user=%r custom_id=%r",
-                interaction.user.username,
-                cid,
-            )
-            await _respond_error(
-                interaction, "An error occurred processing the owner request."
-            )
-        return
-    if cid == SUBDAY_SIGNUP_ID:
-        try:
-            await commands.handle_signup_interaction(interaction)
-        except Exception:
-            logger.exception(
-                "Error handling signup interaction: user=%r guild=%r",
-                interaction.user.username,
-                interaction.guild_id,
-            )
-            await _respond_error(interaction, "An error occurred during signup.")
-        return
-    if not (
-        cid.startswith(SUBDAY_CONFIG_PREFIX) or cid.startswith(SUBDAY_CFG_ROLE_PREFIX)
-    ):
-        return
-    try:
-        await commands.handle_config_interaction(interaction)
-    except Exception:
-        logger.exception(
-            "Error handling config interaction: custom_id=%r user=%r",
-            cid,
-            interaction.user.username,
-        )
-        await _respond_error(interaction, "An error occurred updating settings.")
 
 
 # ---------------------------------------------------------------------------- #

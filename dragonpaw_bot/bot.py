@@ -15,11 +15,25 @@ import uvloop
 import yaml
 
 from dragonpaw_bot import http, structs, utils
+from dragonpaw_bot.plugins.lobby import INTERACTION_HANDLERS as lobby_handlers
 from dragonpaw_bot.plugins.lobby import configure_lobby
 from dragonpaw_bot.plugins.role_menus import configure_role_menus
+from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
+from dragonpaw_bot.utils import InteractionHandler
 
 logging.getLogger("dragonpaw_bot").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Interaction dispatch table: (prefix, handler, error_label).
+# Sorted longest-prefix-first so "subday_cfg_role:" matches before "subday_cfg:".
+_INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
+    [
+        *((p, h, "processing your agreement") for p, h in lobby_handlers.items()),
+        *((p, h, "processing your request") for p, h in subday_handlers.items()),
+    ],
+    key=lambda r: len(r[0]),
+    reverse=True,
+)
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -360,6 +374,67 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
     # logger.debug("Final state: %r", state)
     bot.state_update(state)
     logger.info("G=%r Configured guild.", guild.name)
+
+
+async def _respond_interaction_error(
+    interaction: hikari.ComponentInteraction, message: str
+) -> None:
+    """Try to send an ephemeral error response; ignore if the interaction expired."""
+    try:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content=message,
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+    except hikari.NotFoundError:
+        pass  # Interaction expired
+    except hikari.HTTPError:
+        logger.warning(
+            "Failed to send error response for interaction custom_id=%r",
+            interaction.custom_id,
+        )
+
+
+@bot.listen(hikari.InteractionCreateEvent)
+async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None:
+    """Central dispatcher for component interactions.
+
+    Routes to handlers by prefix match from _INTERACTION_ROUTES.
+    Unmatched interactions are logged as errors.
+    """
+    if not isinstance(event.interaction, hikari.ComponentInteraction):
+        return
+    interaction = event.interaction
+    cid = interaction.custom_id
+
+    logger.debug(
+        "Component interaction: custom_id=%r user=%r guild=%r",
+        cid,
+        interaction.user.username,
+        interaction.guild_id,
+    )
+
+    for prefix, handler, error_label in _INTERACTION_ROUTES:
+        if cid.startswith(prefix):
+            try:
+                await handler(interaction)
+            except Exception:
+                logger.exception(
+                    "Error handling interaction: custom_id=%r user=%r",
+                    cid,
+                    interaction.user.username,
+                )
+                await _respond_interaction_error(
+                    interaction, f"An error occurred {error_label}."
+                )
+            return
+
+    logger.error(
+        "Unhandled component interaction: custom_id=%r user=%r guild=%r",
+        cid,
+        interaction.user.username,
+        interaction.guild_id,
+    )
 
 
 @bot.listen(hikari.StartingEvent)

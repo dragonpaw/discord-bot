@@ -8,6 +8,7 @@ import lightbulb
 
 from dragonpaw_bot import structs, utils
 from dragonpaw_bot.colors import SOLARIZED_BLUE
+from dragonpaw_bot.utils import InteractionHandler
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -129,36 +130,38 @@ async def on_member_join(event: hikari.MemberCreateEvent):
         )
 
 
-@loader.listener(hikari.InteractionCreateEvent)
-async def on_interaction(event: hikari.InteractionCreateEvent):
-    if not isinstance(event.interaction, hikari.ComponentInteraction):
-        return
-    if not event.interaction.guild_id:
-        return
-    logger.debug("Interaction event: %r=%r", type(event), event)
-
-    bot: DragonpawBot = event.app  # type: ignore[assignment]
-    c = bot.state(event.interaction.guild_id)
-    if not c:
-        logger.error("Called on an unknown guild: %r", event.interaction.guild_id)
+async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
+    """Handle the 'I agree' button click from the lobby rules message."""
+    if not interaction.guild_id:
         return
 
-    if event.interaction.custom_id == RULES_AGREED_ID and c.lobby_role_id:
-        logger.info(
-            "G:%s U:%s agreed to the rules, they are %s no more.",
-            c.name,
-            event.interaction.user.username,
-            c.role_names[c.lobby_role_id],
-        )
-        await bot.rest.remove_role_from_member(
-            guild=event.interaction.guild_id,
-            user=event.interaction.user.id,
-            role=c.lobby_role_id,
-        )
-        await event.interaction.create_initial_response(
-            content="Thank you. Removing your {} role.".format(
-                c.role_names[c.lobby_role_id]
-            ),
-            response_type=hikari.ResponseType.MESSAGE_CREATE,
-            flags=hikari.MessageFlag.EPHEMERAL,
-        )
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    guild_state = bot.state(interaction.guild_id)
+    if not guild_state:
+        logger.error("Called on an unknown guild: %r", interaction.guild_id)
+        return
+
+    if not guild_state.lobby_role_id:
+        return
+
+    logger.info(
+        "G:%s U:%s agreed to the rules, they are %s no more.",
+        guild_state.name,
+        interaction.user.username,
+        guild_state.role_names[guild_state.lobby_role_id],
+    )
+    await bot.rest.remove_role_from_member(
+        guild=interaction.guild_id,
+        user=interaction.user.id,
+        role=guild_state.lobby_role_id,
+    )
+    await interaction.create_initial_response(
+        content=f"Thank you. Removing your {guild_state.role_names[guild_state.lobby_role_id]} role.",
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+
+
+INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
+    RULES_AGREED_ID: handle_rules_agreed,
+}

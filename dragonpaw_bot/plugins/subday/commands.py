@@ -21,8 +21,7 @@ from dragonpaw_bot.plugins.subday.constants import (
     MILESTONE_WEEKS,
     SUBDAY_CFG_ROLE_PREFIX,
     SUBDAY_CONFIG_PREFIX,
-    SUBDAY_OWNER_APPROVE_PREFIX,
-    SUBDAY_OWNER_DENY_PREFIX,
+    SUBDAY_OWNER_REQUEST_PREFIX,
     SUBDAY_SIGNUP_ID,
     TOTAL_WEEKS,
 )
@@ -855,12 +854,12 @@ class SubDayOwner(
         row = bot.rest.build_message_action_row()
         row.add_interactive_button(
             hikari.ButtonStyle.SUCCESS,
-            f"{SUBDAY_OWNER_APPROVE_PREFIX}{ctx.guild_id}:{user_id}",
+            f"{SUBDAY_OWNER_REQUEST_PREFIX}approve:{ctx.guild_id}:{user_id}",
             label="Accept",
         )
         row.add_interactive_button(
             hikari.ButtonStyle.DANGER,
-            f"{SUBDAY_OWNER_DENY_PREFIX}{ctx.guild_id}:{user_id}",
+            f"{SUBDAY_OWNER_REQUEST_PREFIX}deny:{ctx.guild_id}:{user_id}",
             label="Decline",
         )
 
@@ -906,22 +905,164 @@ class SubDayOwner(
         )
 
 
+async def _log_to_guild(
+    bot: DragonpawBot, guild_id: int, guild_name: str | None, message: str
+) -> None:
+    """Send a message to the guild's log channel, if one is configured.
+
+    Best-effort: silently returns if no log channel is set. Errors are logged
+    as warnings but not raised.
+    """
+    bot_state = bot.state(hikari.Snowflake(guild_id))
+    if bot_state and bot_state.log_channel_id:
+        try:
+            await bot.rest.create_message(
+                channel=bot_state.log_channel_id, content=message
+            )
+        except Exception:
+            logger.warning(
+                "G=%r: Failed to send to log channel: %s",
+                guild_name,
+                message,
+                exc_info=True,
+            )
+
+
+async def _handle_owner_approve(
+    interaction: hikari.ComponentInteraction,
+    guild_state: state.SubDayGuildState,
+    participant: SubDayParticipant,
+    guild_id: int,
+    sub_user_id: int,
+) -> None:
+    """Process an owner approval interaction."""
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    owner_user_id = int(interaction.user.id)
+
+    # Verify owner is still in the guild
+    try:
+        await bot.rest.fetch_member(
+            hikari.Snowflake(guild_id), hikari.Snowflake(owner_user_id)
+        )
+    except hikari.NotFoundError:
+        participant.pending_owner_id = None
+        state.save(guild_state)
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="You're no longer in that server, so the request has been cancelled.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    participant.owner_id = owner_user_id
+    participant.pending_owner_id = None
+    state.save(guild_state)
+
+    logger.info(
+        "G=%r: Owner approved — owner=%d sub=%d",
+        guild_state.guild_name,
+        owner_user_id,
+        sub_user_id,
+    )
+
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        content=f"You've accepted! You're now the owner for <@{sub_user_id}>.",
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+
+    # Notify sub
+    try:
+        sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
+        dm = await sub_user.fetch_dm_channel()
+        await dm.send(
+            f"<@{owner_user_id}> has **accepted** your owner request! "
+            "They'll now receive copies of your weekly prompts. 💜"
+        )
+    except hikari.HTTPError:
+        logger.warning(
+            "G=%r: Could not DM sub %d about owner approval",
+            guild_state.guild_name,
+            sub_user_id,
+        )
+
+    await _log_to_guild(
+        bot,
+        guild_id,
+        guild_state.guild_name,
+        f"✅ **SubDay owner accepted** — <@{owner_user_id}> "
+        f"accepted ownership of <@{sub_user_id}>",
+    )
+
+
+async def _handle_owner_deny(
+    interaction: hikari.ComponentInteraction,
+    guild_state: state.SubDayGuildState,
+    participant: SubDayParticipant,
+    guild_id: int,
+    sub_user_id: int,
+) -> None:
+    """Process an owner denial interaction."""
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    owner_user_id = int(interaction.user.id)
+
+    participant.pending_owner_id = None
+    state.save(guild_state)
+
+    logger.info(
+        "G=%r: Owner denied — owner=%d sub=%d",
+        guild_state.guild_name,
+        owner_user_id,
+        sub_user_id,
+    )
+
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        content="You've declined the request.",
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+
+    # Notify sub
+    try:
+        sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
+        dm = await sub_user.fetch_dm_channel()
+        await dm.send(f"<@{owner_user_id}> has **declined** your owner request.")
+    except hikari.HTTPError:
+        logger.warning(
+            "G=%r: Could not DM sub %d about owner denial",
+            guild_state.guild_name,
+            sub_user_id,
+        )
+
+    await _log_to_guild(
+        bot,
+        guild_id,
+        guild_state.guild_name,
+        f"❌ **SubDay owner declined** — <@{owner_user_id}> "
+        f"declined ownership of <@{sub_user_id}>",
+    )
+
+
 async def handle_owner_interaction(interaction: hikari.ComponentInteraction) -> None:
     """Handle Accept/Decline button clicks for owner requests."""
     cid = interaction.custom_id
     owner_user_id = int(interaction.user.id)
 
-    if cid.startswith(SUBDAY_OWNER_APPROVE_PREFIX):
-        parts = cid.removeprefix(SUBDAY_OWNER_APPROVE_PREFIX).split(":")
-        approve = True
-    elif cid.startswith(SUBDAY_OWNER_DENY_PREFIX):
-        parts = cid.removeprefix(SUBDAY_OWNER_DENY_PREFIX).split(":")
-        approve = False
-    else:
+    # Format: subday_owner_request:approve|deny:guild_id:sub_user_id
+    _OWNER_REQUEST_PARTS = 3
+    parts = cid.removeprefix(SUBDAY_OWNER_REQUEST_PREFIX).split(":")
+    if len(parts) != _OWNER_REQUEST_PARTS or parts[0] not in ("approve", "deny"):
+        logger.warning("Unrecognized owner interaction custom_id=%r", cid)
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="This button is no longer valid.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
         return
 
-    guild_id = int(parts[0])
-    sub_user_id = int(parts[1])
+    approve = parts[0] == "approve"
+    guild_id = int(parts[1])
+    sub_user_id = int(parts[2])
 
     guild_state = state.load(guild_id)
     participant = guild_state.participants.get(sub_user_id)
@@ -951,75 +1092,14 @@ async def handle_owner_interaction(interaction: hikari.ComponentInteraction) -> 
         )
         return
 
-    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
-
     if approve:
-        # Verify owner is still in the guild
-        try:
-            await bot.rest.fetch_member(
-                hikari.Snowflake(guild_id), hikari.Snowflake(owner_user_id)
-            )
-        except hikari.NotFoundError:
-            participant.pending_owner_id = None
-            state.save(guild_state)
-            await interaction.create_initial_response(
-                response_type=hikari.ResponseType.MESSAGE_CREATE,
-                content="You're no longer in that server, so the request has been cancelled.",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            return
-
-        participant.owner_id = owner_user_id
-        participant.pending_owner_id = None
-        state.save(guild_state)
-
-        logger.info(
-            "G=%r: Owner approved — owner=%d sub=%d",
-            guild_state.guild_name,
-            owner_user_id,
-            sub_user_id,
+        await _handle_owner_approve(
+            interaction, guild_state, participant, guild_id, sub_user_id
         )
-
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content=f"You've accepted! You're now the owner for <@{sub_user_id}>.",
-            flags=hikari.MessageFlag.EPHEMERAL,
-        )
-
-        # Notify sub
-        try:
-            sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
-            dm = await sub_user.fetch_dm_channel()
-            await dm.send(
-                f"<@{owner_user_id}> has **accepted** your owner request! "
-                "They'll now receive copies of your weekly prompts. 💜"
-            )
-        except hikari.HTTPError:
-            logger.debug("Could not DM sub %d about owner approval", sub_user_id)
     else:
-        participant.pending_owner_id = None
-        state.save(guild_state)
-
-        logger.info(
-            "G=%r: Owner denied — owner=%d sub=%d",
-            guild_state.guild_name,
-            owner_user_id,
-            sub_user_id,
+        await _handle_owner_deny(
+            interaction, guild_state, participant, guild_id, sub_user_id
         )
-
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="You've declined the request.",
-            flags=hikari.MessageFlag.EPHEMERAL,
-        )
-
-        # Notify sub
-        try:
-            sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
-            dm = await sub_user.fetch_dm_channel()
-            await dm.send(f"<@{owner_user_id}> has **declined** your owner request.")
-        except hikari.HTTPError:
-            logger.debug("Could not DM sub %d about owner denial", sub_user_id)
 
 
 class SubDaySignup(
@@ -1228,7 +1308,10 @@ class SubDayList(
             icon = "✅" if p.week_completed else "⏳"
             if p.current_week > TOTAL_WEEKS:
                 icon = "🎓"
-            lines.append(f"{icon} <@{uid}> — Week {p.current_week}/{TOTAL_WEEKS}")
+            line = f"{icon} <@{uid}> — Week {p.current_week}/{TOTAL_WEEKS}"
+            if p.owner_id:
+                line += f" (owner: <@{p.owner_id}>)"
+            lines.append(line)
 
         embed = hikari.Embed(
             title="Where I am Led — Participants",

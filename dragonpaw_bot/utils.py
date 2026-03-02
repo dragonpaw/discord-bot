@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Mapping, Optional, Sequence, Union
 
 import hikari
@@ -9,6 +10,8 @@ import lightbulb
 from emojis.db.db import EMOJI_DB
 
 from dragonpaw_bot.colors import SOLARIZED_RED
+
+InteractionHandler = Callable[[hikari.ComponentInteraction], Awaitable[None]]
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
