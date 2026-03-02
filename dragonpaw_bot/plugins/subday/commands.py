@@ -635,22 +635,16 @@ def _owned_sub_status_embed(
         else:
             status += f"\n🎁 Next prize ({weeks_away}w away): **{prize}**"
 
-    embed = hikari.Embed(
-        title=f"{icon} {sub_name}'s Progress",
-        description=f"<@{sub_user_id}>\n{status}",
+    status += (
+        f"\n\n**Progress**: {p.current_week}/{TOTAL_WEEKS} weeks"
+        f"\n**Signed up**: <t:{int(p.signup_date.timestamp())}:R>"
+    )
+
+    return hikari.Embed(
+        title=f"{icon} @{sub_name}'s Progress",
+        description=status,
         color=SOLARIZED_CYAN,
     )
-    embed.add_field(
-        name="Progress",
-        value=f"{p.current_week}/{TOTAL_WEEKS} weeks",
-        inline=True,
-    )
-    embed.add_field(
-        name="Signed up",
-        value=f"<t:{int(p.signup_date.timestamp())}:R>",
-        inline=True,
-    )
-    return embed
 
 
 def _own_progress_embed(
@@ -720,28 +714,19 @@ def _own_progress_embed(
         week_completed=p.week_completed,
     )
 
+    status_text += (
+        f"\n\n**Progress**: {p.current_week}/{TOTAL_WEEKS} weeks"
+        f"\n**Signed up**: <t:{int(p.signup_date.timestamp())}:R>"
+    )
+    if p.owner_id:
+        status_text += f"\n**👤 Owner**: <@{p.owner_id}>"
+
     embed = hikari.Embed(
         title="Where I am Led — Your Progress",
         description=status_text,
         color=SOLARIZED_VIOLET,
     )
     embed.set_image(chart_bytes)
-    embed.add_field(
-        name="Progress",
-        value=f"{p.current_week}/{TOTAL_WEEKS} weeks",
-        inline=True,
-    )
-    embed.add_field(
-        name="Signed up",
-        value=f"<t:{int(p.signup_date.timestamp())}:R>",
-        inline=True,
-    )
-    if p.owner_id:
-        embed.add_field(
-            name="👤 Owner",
-            value=f"<@{p.owner_id}>",
-            inline=True,
-        )
     return embed
 
 
