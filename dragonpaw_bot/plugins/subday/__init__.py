@@ -203,18 +203,19 @@ async def _advance_participant(  # noqa: PLR0911
         )
         return False
 
+    # Check guild membership before mutating state
+    try:
+        member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
+    except hikari.NotFoundError:
+        logger.info("G=%r U=%d: Left the server, removing from SubDay", guild.name, uid)
+        return None  # sentinel: remove
+
     participant.current_week += 1
     participant.week_completed = False
     participant.week_sent = False
     logger.info(
         "G=%r U=%d: Advanced to week %d", guild.name, uid, participant.current_week
     )
-
-    try:
-        member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
-    except hikari.NotFoundError:
-        logger.info("G=%r U=%d: Left the server, removing from SubDay", guild.name, uid)
-        return None  # sentinel: remove
 
     if participant.current_week <= TOTAL_WEEKS:
         try:

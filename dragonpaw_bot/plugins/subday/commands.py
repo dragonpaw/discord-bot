@@ -103,9 +103,9 @@ async def help_handler(ctx: lightbulb.Context) -> None:
                 "`/subday complete @user week:<n>` — Backfill to a specific week"
             )
     if bot.owner_ids and ctx.user.id in bot.owner_ids:
-        lines.append("`/subday config` — Configure settings (server owner)")
-        lines.append("`/subday prize-roles` — Set milestone roles (server owner)")
-        lines.append("`/subday prizes` — Set milestone prizes (server owner)")
+        lines.append("`/subday config` — Configure settings (admin)")
+        lines.append("`/subday prize-roles` — Set milestone roles (admin)")
+        lines.append("`/subday prizes` — Set milestone prizes (admin)")
 
     embed = hikari.Embed(
         title="Where I am Led — Commands",
@@ -618,8 +618,8 @@ def _owned_sub_status_embed(
             status += f"\n🎁 Next prize ({weeks_away}w away): **{prize}**"
 
     embed = hikari.Embed(
-        title=f"{icon} <@{sub_user_id}>",
-        description=status,
+        title=f"{icon} Sub's Progress",
+        description=f"<@{sub_user_id}>\n{status}",
         color=SOLARIZED_CYAN,
     )
     embed.add_field(
