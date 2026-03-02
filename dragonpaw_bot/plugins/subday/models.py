@@ -30,7 +30,6 @@ class SubDayGuildConfig(pydantic.BaseModel):
     complete_role: str | None = None
     backfill_role: str | None = None
     achievements_channel: str | None = None
-    staff_channel: str | None = None
     role_13: str | None = "SubChallenge: 13wks"
     role_26: str | None = "SubChallenge: 26wks"
     role_39: str | None = "SubChallenge: 39wks"

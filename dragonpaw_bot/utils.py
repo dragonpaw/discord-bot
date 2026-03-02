@@ -220,6 +220,25 @@ async def check_channel_perms(
     return missing
 
 
+async def log_to_guild(
+    bot: DragonpawBot,
+    guild_id: hikari.Snowflake,
+    message: str,
+) -> None:
+    """Send a plain-text message to the guild's configured log channel.
+
+    Silently returns if no log channel is configured.
+    """
+    c = bot.state(guild_id)
+    if not c or not c.log_channel_id:
+        logger.debug("G=%r: No log channel configured, skipping log message", guild_id)
+        return
+    try:
+        await bot.rest.create_message(channel=c.log_channel_id, content=message)
+    except hikari.HTTPError as exc:
+        logger.warning("G=%r: Failed to send log message: %s", c.name, exc)
+
+
 async def report_errors(
     bot: DragonpawBot,
     guild_id: hikari.Snowflake,
@@ -234,18 +253,13 @@ async def report_errors(
         logger.warning("Would have said: %s", error)
         return
 
-    # Where to boss?
-    if c.log_channel_id:
-        to = c.log_channel_id
-    elif c.role_channel_id:
-        to = c.role_channel_id
-    else:
-        logger.error("G:%r No place to complain to: %s", c.name, error)
+    if not c.log_channel_id:
+        logger.error("G=%r: No log channel configured: %s", c.name, error)
         return
 
     logger.error("G=%r %s", c.name, error)
     await bot.rest.create_message(
-        channel=to,
+        channel=c.log_channel_id,
         embed=hikari.Embed(
             color=SOLARIZED_RED,
             title="🤯 Oh Snap!",

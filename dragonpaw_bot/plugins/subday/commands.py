@@ -219,30 +219,6 @@ async def _dm_completion(
         )
 
 
-async def _notify_staff(
-    bot: DragonpawBot,
-    guild_id: hikari.Snowflake,
-    staff_channel: str,
-    message: str,
-) -> None:
-    """Send a message to the named staff channel. Logs a warning on failure."""
-    channel = await utils.guild_channel_by_name(bot, guild_id, staff_channel)
-    if not channel:
-        logger.warning(
-            "G=%r: No #%s channel found for staff notice", guild_id, staff_channel
-        )
-        return
-    try:
-        await channel.send(message)
-    except hikari.HTTPError as exc:
-        logger.warning(
-            "G=%r: Failed to send staff notice to #%s: %s",
-            guild_id,
-            staff_channel,
-            exc,
-        )
-
-
 async def _post_achievement(  # noqa: PLR0912, PLR0913
     bot: DragonpawBot,
     guild_id: hikari.Snowflake,
@@ -353,9 +329,8 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         else:
             logger.warning("Role %r not found in guild", role_name)
 
-    # Notify staff
-    if cfg.staff_channel:
-        await _notify_staff(bot, guild_id, cfg.staff_channel, staff_msg)
+    # Log to guild log channel
+    await utils.log_to_guild(bot, guild_id, staff_msg)
 
 
 # ---------------------------------------------------------------------------- #
@@ -983,14 +958,12 @@ async def _handle_owner_approve(
             sub_user_id,
         )
 
-    if guild_state.config.staff_channel:
-        await _notify_staff(
-            bot,
-            hikari.Snowflake(guild_id),
-            guild_state.config.staff_channel,
-            f"✅ **SubDay owner accepted** — <@{owner_user_id}> "
-            f"accepted ownership of <@{sub_user_id}>",
-        )
+    await utils.log_to_guild(
+        bot,
+        hikari.Snowflake(guild_id),
+        f"✅ **SubDay owner accepted** — <@{owner_user_id}> "
+        f"accepted ownership of <@{sub_user_id}>",
+    )
 
 
 async def _handle_owner_deny(
@@ -1032,14 +1005,12 @@ async def _handle_owner_deny(
             sub_user_id,
         )
 
-    if guild_state.config.staff_channel:
-        await _notify_staff(
-            bot,
-            hikari.Snowflake(guild_id),
-            guild_state.config.staff_channel,
-            f"❌ **SubDay owner declined** — <@{owner_user_id}> "
-            f"declined ownership of <@{sub_user_id}>",
-        )
+    await utils.log_to_guild(
+        bot,
+        hikari.Snowflake(guild_id),
+        f"❌ **SubDay owner declined** — <@{owner_user_id}> "
+        f"declined ownership of <@{sub_user_id}>",
+    )
 
 
 async def handle_owner_interaction(interaction: hikari.ComponentInteraction) -> None:
@@ -1236,10 +1207,10 @@ class SubDayComplete(
             bot, ctx.guild_id, ctx.member, target, week, cfg, guild_state.guild_name
         )
 
-        # Notify staff channel of completion (milestones are already notified
-        # by _post_achievement, so only send for regular completions/backfills)
+        # Log completion (milestones are already logged by _post_achievement,
+        # so only send for regular completions/backfills)
         milestone_roles = cfg.milestone_roles()
-        if cfg.staff_channel and week not in milestone_roles:
+        if week not in milestone_roles:
             if backfill_week:
                 staff_msg = (
                     f"{ctx.member.mention} backfilled {target.mention} "
@@ -1250,7 +1221,7 @@ class SubDayComplete(
                     f"{ctx.member.mention} marked {target.mention} "
                     f"complete for **Week {week}**."
                 )
-            await _notify_staff(bot, ctx.guild_id, cfg.staff_channel, staff_msg)
+            await utils.log_to_guild(bot, ctx.guild_id, staff_msg)
 
         if auto_enrolled:
             response = (
@@ -1405,11 +1376,6 @@ def _config_embed(cfg: SubDayGuildConfig) -> hikari.Embed:
         else "_Disabled_",
         inline=True,
     )
-    embed.add_field(
-        name="Staff channel",
-        value=f"`#{cfg.staff_channel}`" if cfg.staff_channel else "_Disabled_",
-        inline=True,
-    )
     roles = cfg.milestone_roles()
     role_lines = [
         f"**Week {w}:** `{r}`" if r else f"**Week {w}:** _None_"
@@ -1529,22 +1495,6 @@ async def _config_components(
         else []
     )
     rows.append(_DefaultsActionRow(row4, defaults4))
-
-    # Row 5: Staff channel select
-    row5 = bot.rest.build_message_action_row()
-    row5.add_channel_menu(
-        f"{SUBDAY_CONFIG_PREFIX}staff_channel",
-        channel_types=[hikari.ChannelType.GUILD_TEXT],
-        placeholder="Staff channel (completions and milestones)",
-        min_values=0,
-        max_values=1,
-    )
-    defaults5 = (
-        [{"id": str(channel_map[cfg.staff_channel]), "type": "channel"}]
-        if cfg.staff_channel and cfg.staff_channel in channel_map
-        else []
-    )
-    rows.append(_DefaultsActionRow(row5, defaults5))
 
     return rows
 
@@ -1684,7 +1634,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         new_value = _resolve_select_value(interaction, field)
 
     # For channel fields, verify the bot can write to the selected channel
-    if new_value and field in ("achievements_channel", "staff_channel"):
+    if new_value and field == "achievements_channel":
         if await _reject_missing_perms(
             interaction, bot, guild_id, guild_state, new_value
         ):
@@ -1722,22 +1672,12 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         display_old,
     )
 
-    # Log to the guild's log channel if configured
-    bot_state = bot.state(guild_id)
-    if bot_state and bot_state.log_channel_id:
-        try:
-            await bot.rest.create_message(
-                channel=bot_state.log_channel_id,
-                content=(
-                    f"**SubDay config changed** by {interaction.user.mention}: "
-                    f"`{field}` changed from `{display_old}` to `{display_new}`"
-                ),
-            )
-        except hikari.HTTPError:
-            logger.warning(
-                "G=%r: Failed to log config change to log channel",
-                guild.name,
-            )
+    await utils.log_to_guild(
+        bot,
+        guild_id,
+        f"**SubDay config changed** by {interaction.user.mention}: "
+        f"`{field}` changed from `{display_old}` to `{display_new}`",
+    )
 
     embed = embed_builder(cfg)
     embed.set_footer(text="Settings updated.")

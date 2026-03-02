@@ -61,8 +61,6 @@ def test_state_path_custom_extension():
 
 def test_config_parse_toml_valid():
     toml_text = """
-log_channel = "bot-logs"
-
 [lobby]
 channel = "welcome"
 kick_after_days = 3
@@ -84,7 +82,6 @@ description = "Red role"
 """
     guild = SimpleNamespace(name="TestGuild", id=hikari.Snowflake(1))
     config = config_parse_toml(guild=guild, text=toml_text)
-    assert config.log_channel == "bot-logs"
     assert config.lobby is not None
     assert config.lobby.channel == "welcome"
     assert config.lobby.kick_after_days == 3

@@ -305,6 +305,61 @@ class Config(
         await configure_guild(bot=bot, guild=g, url=self.url)
 
 
+@loader.command
+class Logging(
+    lightbulb.SlashCommand,
+    name="logging",
+    description="Set or clear the bot's log channel for this server.",
+    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+):
+    channel = lightbulb.channel(
+        "channel", "Channel for bot logs (omit to clear)", default=None
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        if not ctx.guild_id:
+            logger.error("Interaction without a guild?!: %r", ctx)
+            return
+
+        guild = await bot.rest.fetch_guild(guild=ctx.guild_id)
+        state = bot.state(ctx.guild_id)
+        if not state:
+            state = structs.GuildState(
+                id=ctx.guild_id,
+                name=guild.name,
+                config_url="",
+                config_last=datetime.datetime.now(),
+                role_emojis={},
+                role_names={},
+            )
+
+        if self.channel is not None:
+            state.log_channel_id = self.channel.id
+            bot.state_update(state)
+            logger.info(
+                "G=%r U=%r: Set log channel to #%s",
+                guild.name,
+                ctx.user.username,
+                self.channel.name,
+            )
+            await ctx.respond(
+                f"Log channel set to <#{self.channel.id}>.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+        else:
+            state.log_channel_id = None
+            bot.state_update(state)
+            logger.info(
+                "G=%r U=%r: Cleared log channel",
+                guild.name,
+                ctx.user.username,
+            )
+            await ctx.respond(
+                "Log channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
+            )
+
+
 # ---------------------------------------------------------------------------- #
 #                                Config handling                               #
 # ---------------------------------------------------------------------------- #
@@ -333,6 +388,7 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
 
     role_map = await utils.guild_roles(bot=bot, guild=guild)
 
+    old_state = bot.state(guild.id)
     state = structs.GuildState(
         id=guild.id,
         name=guild.name,
@@ -340,6 +396,7 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
         config_last=datetime.datetime.now(),
         role_names={r.id: r.name for r in role_map.values()},
         role_emojis={},
+        log_channel_id=old_state.log_channel_id if old_state else None,
     )
 
     # Start setting up the guild

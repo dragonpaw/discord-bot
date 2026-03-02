@@ -38,7 +38,6 @@ class RolesConfig(pydantic.BaseModel):
 class GuildConfig(pydantic.BaseModel):
     lobby: LobbyConfig | None = None
     roles: RolesConfig | None = None
-    log_channel: str | None = None
 
 
 # ---------------------------------------------------------------------------- #

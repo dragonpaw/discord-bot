@@ -15,17 +15,13 @@ from dragonpaw_bot.structs import (
 
 def test_guild_config_minimal():
     """Nullable fields can be explicitly set to None."""
-    config = GuildConfig.model_validate(
-        {"lobby": None, "roles": None, "log_channel": None}
-    )
+    config = GuildConfig.model_validate({"lobby": None, "roles": None})
     assert config.lobby is None
     assert config.roles is None
-    assert config.log_channel is None
 
 
 def test_guild_config_full():
     data = {
-        "log_channel": "bot-logs",
         "lobby": {
             "channel": "welcome",
             "kick_after_days": 7,
@@ -48,7 +44,6 @@ def test_guild_config_full():
         },
     }
     config = GuildConfig.model_validate(data)
-    assert config.log_channel == "bot-logs"
 
     assert isinstance(config.lobby, LobbyConfig)
     assert config.lobby.channel == "welcome"
