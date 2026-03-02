@@ -1,12 +1,15 @@
 import datetime
+import logging
 import tomllib
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import hikari
 import pytest
 import yaml
 
+import dragonpaw_bot.bot as bot_module
 from dragonpaw_bot.bot import (
     STATE_DIR,
     _state_to_yaml_dict,
@@ -14,6 +17,7 @@ from dragonpaw_bot.bot import (
     client,
     config_parse_toml,
     loader,
+    on_component_interaction,
     state_load_yaml,
     state_path,
     state_save_pickle,
@@ -282,3 +286,50 @@ async def test_bot_startup_loads_extensions():
         "dragonpaw_bot.plugins.role_menus",
         "dragonpaw_bot.plugins.subday",
     )
+
+
+def _make_component_event(custom_id: str) -> hikari.InteractionCreateEvent:
+    """Build a fake InteractionCreateEvent with a ComponentInteraction."""
+    user = Mock(spec=hikari.User)
+    user.username = "testuser"
+    interaction = Mock(spec=hikari.ComponentInteraction)
+    interaction.custom_id = custom_id
+    interaction.user = user
+    interaction.guild_id = hikari.Snowflake(1)
+    interaction.create_initial_response = AsyncMock()
+    event = Mock(spec=hikari.InteractionCreateEvent)
+    event.interaction = interaction
+    return event
+
+
+async def test_unknown_interaction_id_logs_error(caplog):
+    """Unknown custom_id values should emit an error log."""
+    event = _make_component_event("totally_bogus_id")
+    with caplog.at_level(logging.ERROR, logger="dragonpaw_bot.bot"):
+        await on_component_interaction(event)
+    assert any("Unhandled component interaction" in r.message for r in caplog.records)
+    assert any("totally_bogus_id" in r.message for r in caplog.records)
+
+
+async def test_handler_exception_logs_and_responds(monkeypatch, caplog):
+    """When a matched handler raises, the dispatcher should log and send an error response."""
+
+    async def _exploding_handler(interaction):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        bot_module,
+        "_INTERACTION_ROUTES",
+        [("test_prefix:", _exploding_handler, "testing")],
+    )
+
+    event = _make_component_event("test_prefix:123")
+    interaction = event.interaction
+
+    with caplog.at_level(logging.ERROR, logger="dragonpaw_bot.bot"):
+        await on_component_interaction(event)
+
+    assert any("Error handling interaction" in r.message for r in caplog.records)
+    interaction.create_initial_response.assert_called_once()
+    call_kwargs = interaction.create_initial_response.call_args
+    assert "error occurred" in str(call_kwargs).lower()
