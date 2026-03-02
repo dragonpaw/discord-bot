@@ -11,7 +11,9 @@ from dragonpaw_bot.bot import (
     STATE_DIR,
     _state_to_yaml_dict,
     _yaml_dict_to_state,
+    client,
     config_parse_toml,
+    loader,
     state_load_yaml,
     state_path,
     state_save_pickle,
@@ -266,3 +268,17 @@ def test_yaml_round_trip_with_unicode_emoji(state_dir):
     assert loaded.role_emojis[key_star].add_role_id == hikari.Snowflake(20)
     assert loaded.role_emojis[key_fire].add_role_id == hikari.Snowflake(30)
     assert loaded.role_emojis[key_fire].remove_role_ids == [hikari.Snowflake(20)]
+
+
+async def test_bot_startup_loads_extensions():
+    """Verify the bot loader and all extensions load without errors.
+
+    This exercises the same code path as on_starting: loading the
+    bot.py loader into the client, then loading all plugin extensions.
+    """
+    await loader.add_to_client(client)
+    await client.load_extensions(
+        "dragonpaw_bot.plugins.lobby",
+        "dragonpaw_bot.plugins.role_menus",
+        "dragonpaw_bot.plugins.subday",
+    )
