@@ -287,7 +287,7 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         )
         embed = _graduation_embed(target, prizes)
         staff_msg = (
-            f"🎁 {completer.mention} — {target.mention} has **graduated** "
+            f"🎓 {completer.mention} — {target.mention} has **graduated** "
             f"from Where I am Led! Please arrange their prize: "
             f"**{prizes.get(TOTAL_WEEKS, 'a prize')}**."
         )
@@ -964,7 +964,7 @@ async def _handle_owner_approve(
     await utils.log_to_guild(
         bot,
         hikari.Snowflake(guild_id),
-        f"✅ **SubDay owner accepted** — <@{owner_user_id}> "
+        f"🤝 **SubDay owner accepted** — <@{owner_user_id}> "
         f"accepted ownership of <@{sub_user_id}>",
     )
 
@@ -1011,7 +1011,7 @@ async def _handle_owner_deny(
     await utils.log_to_guild(
         bot,
         hikari.Snowflake(guild_id),
-        f"❌ **SubDay owner declined** — <@{owner_user_id}> "
+        f"😢 **SubDay owner declined** — <@{owner_user_id}> "
         f"declined ownership of <@{sub_user_id}>",
     )
 
@@ -1216,7 +1216,7 @@ class SubDayComplete(
         if week not in milestone_roles:
             if backfill_week:
                 staff_msg = (
-                    f"✅ {ctx.member.mention} backfilled {target.mention} "
+                    f"⏩ {ctx.member.mention} backfilled {target.mention} "
                     f"to **Week {week}** (complete)."
                 )
             else:
@@ -1683,7 +1683,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     await utils.log_to_guild(
         bot,
         guild_id,
-        f"**SubDay config changed** by {interaction.user.mention}: "
+        f"⚙️ **SubDay config changed** by {interaction.user.mention}: "
         f"`{field}` changed from `{display_old}` to `{display_new}`",
     )
 
