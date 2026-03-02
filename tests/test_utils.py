@@ -2,7 +2,11 @@ from unittest.mock import AsyncMock, Mock
 
 import hikari
 
-from dragonpaw_bot.utils import check_channel_perms, has_permission
+from dragonpaw_bot.utils import (
+    check_channel_perms,
+    has_any_role_permission,
+    has_permission,
+)
 
 # ---------------------------------------------------------------------------- #
 #                              has_permission                                   #
@@ -59,6 +63,35 @@ def test_has_permission_none_role_non_owner_fails():
     guild = _mock_guild(owner_id=999)
     member = _mock_member(user_id=200, roles=["Admin"])
     assert has_permission(guild, member, None) is False
+
+
+# ---------------------------------------------------------------------------- #
+#                        has_any_role_permission                                #
+# ---------------------------------------------------------------------------- #
+
+
+def test_has_any_role_permission_owner_bypass():
+    guild = _mock_guild(owner_id=100)
+    member = _mock_member(user_id=100)
+    assert has_any_role_permission(guild, member, ["RoleA", "RoleB"]) is True
+
+
+def test_has_any_role_permission_match_one_of_many():
+    guild = _mock_guild(owner_id=999)
+    member = _mock_member(user_id=200, roles=["RoleB"])
+    assert has_any_role_permission(guild, member, ["RoleA", "RoleB"]) is True
+
+
+def test_has_any_role_permission_no_match():
+    guild = _mock_guild(owner_id=999)
+    member = _mock_member(user_id=200, roles=["RoleC"])
+    assert has_any_role_permission(guild, member, ["RoleA", "RoleB"]) is False
+
+
+def test_has_any_role_permission_empty_list_non_owner():
+    guild = _mock_guild(owner_id=999)
+    member = _mock_member(user_id=200, roles=["Admin"])
+    assert has_any_role_permission(guild, member, []) is False
 
 
 # ---------------------------------------------------------------------------- #

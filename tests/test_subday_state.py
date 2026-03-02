@@ -94,6 +94,26 @@ def test_milestone_detection():
     assert 1 not in MILESTONE_WEEKS
 
 
+def test_enroll_role_coerces_string():
+    cfg = SubDayGuildConfig(enroll_role="Subscriber")
+    assert cfg.enroll_role == ["Subscriber"]
+
+
+def test_enroll_role_coerces_none():
+    cfg = SubDayGuildConfig(enroll_role=None)
+    assert cfg.enroll_role == []
+
+
+def test_enroll_role_passthrough_list():
+    cfg = SubDayGuildConfig(enroll_role=["RoleA", "RoleB"])
+    assert cfg.enroll_role == ["RoleA", "RoleB"]
+
+
+def test_enroll_role_default():
+    cfg = SubDayGuildConfig()
+    assert cfg.enroll_role == []
+
+
 def test_milestone_roles_from_config():
     cfg = SubDayGuildConfig()
     roles = cfg.milestone_roles()

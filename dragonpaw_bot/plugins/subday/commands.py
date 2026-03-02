@@ -44,14 +44,23 @@ def _get_bot(ctx: lightbulb.Context) -> DragonpawBot:
 async def _check_permission(
     ctx: lightbulb.Context,
     guild: hikari.Guild | hikari.RESTGuild,
-    role_name: str | None,
+    role_name: str | list[str] | None,
     action: str,
 ) -> bool:
     """Check permission and respond with denial if lacking. Returns True if allowed."""
     assert ctx.member
-    if utils.has_permission(guild, ctx.member, role_name):
+    if isinstance(role_name, list):
+        allowed = utils.has_any_role_permission(guild, ctx.member, role_name)
+        label = (
+            "one of the **" + "**, **".join(role_name) + "** roles"
+            if role_name
+            else "server owner status"
+        )
+    else:
+        allowed = utils.has_permission(guild, ctx.member, role_name)
+        label = f"**{role_name}** role" if role_name else "server owner status"
+    if allowed:
         return True
-    label = f"**{role_name}** role" if role_name else "server owner status"
     logger.warning(
         "G=%r U=%r: SubDay %s denied, missing %s",
         guild.name,
@@ -79,7 +88,7 @@ async def help_handler(ctx: lightbulb.Context) -> None:
         "`/subday status` — Check your progress",
     ]
     if ctx.member:
-        if utils.has_permission(guild, ctx.member, cfg.enroll_role):
+        if utils.has_any_role_permission(guild, ctx.member, cfg.enroll_role):
             lines.append("`/subday signup` — Sign up for the program")
         if utils.has_permission(guild, ctx.member, cfg.complete_role):
             lines.append("`/subday complete @user` — Mark a week complete")
@@ -405,9 +414,11 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
     cfg = guild_state.config
 
     guild = await bot.rest.fetch_guild(guild_id)
-    if not utils.has_permission(guild, interaction.member, cfg.enroll_role):
+    if not utils.has_any_role_permission(guild, interaction.member, cfg.enroll_role):
         label = (
-            f"**{cfg.enroll_role}** role" if cfg.enroll_role else "server owner status"
+            "one of the **" + "**, **".join(cfg.enroll_role) + "** roles"
+            if cfg.enroll_role
+            else "server owner status"
         )
         logger.warning(
             "G=%r U=%r: SubDay signup denied, missing %s",
@@ -463,7 +474,7 @@ class SubDayAbout(
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
-        enroll_role = cfg.enroll_role or "server owner"
+        enroll_label = ", ".join(cfg.enroll_role) if cfg.enroll_role else "server owner"
 
         # -- Embed 1: Introduction (violet) --
         intro = hikari.Embed(
@@ -473,7 +484,7 @@ class SubDayAbout(
         intro.add_field(
             name="📖 What's this all about?",
             value=(
-                f"For folks with the **{enroll_role}** role "
+                f"For folks with the **{enroll_label}** role "
                 "(with their Owner's permission, if Owned), we invite you to "
                 "participate in our weekly \"Subday\" (Sunday) journaling.\n\n"
                 "It's based on *Where I am Led* by Christina Parker — a set of "
@@ -942,8 +953,8 @@ def _config_embed(cfg: SubDayGuildConfig) -> hikari.Embed:
         color=SOLARIZED_VIOLET,
     )
     embed.add_field(
-        name="Enroll role",
-        value=f"`{cfg.enroll_role}`" if cfg.enroll_role else "_Owner-only_",
+        name="Enroll role(s)",
+        value=", ".join(f"`{r}`" for r in cfg.enroll_role) if cfg.enroll_role else "_Owner-only_",
         inline=True,
     )
     embed.add_field(
@@ -992,14 +1003,14 @@ def _config_components(bot: DragonpawBot) -> list[hikari.api.ComponentBuilder]:
     """Build the action rows for the config message."""
     rows: list[hikari.api.ComponentBuilder] = []
 
-    # Row 1: Enroll role select
+    # Row 1: Enroll role select (multi-select)
     row1 = bot.rest.build_message_action_row()
     row1.add_select_menu(
         hikari.ComponentType.ROLE_SELECT_MENU,
         f"{SUBDAY_CONFIG_PREFIX}enroll_role",
-        placeholder="Enroll role (who can sign up)",
+        placeholder="Enroll role(s) (who can sign up)",
         min_values=0,
-        max_values=1,
+        max_values=25,
     )
     rows.append(row1)
 
@@ -1061,6 +1072,9 @@ ROLE_FIELDS = {
 }
 
 
+MULTI_ROLE_FIELDS = {"enroll_role"}
+
+
 def _resolve_select_value(
     interaction: hikari.ComponentInteraction, field: str
 ) -> str | None:
@@ -1076,6 +1090,28 @@ def _resolve_select_value(
         return role.name if role else None
     channel = resolved.channels.get(snowflake) if resolved.channels else None
     return channel.name if channel else None
+
+
+def _resolve_multi_role_value(
+    interaction: hikari.ComponentInteraction,
+) -> list[str]:
+    """Extract role names from a multi-select role interaction."""
+    if not interaction.values or not interaction.resolved or not interaction.resolved.roles:
+        return []
+    names: list[str] = []
+    for val in interaction.values:
+        snowflake = hikari.Snowflake(val)
+        role = interaction.resolved.roles.get(snowflake)
+        if role:
+            names.append(role.name)
+    return names
+
+
+def _display_config_value(v: object) -> str:
+    """Format a config value for display in log/audit messages."""
+    if isinstance(v, list):
+        return ", ".join(v) if v else "None"
+    return v or "None"  # type: ignore[return-value]
 
 
 async def handle_config_interaction(interaction: hikari.ComponentInteraction) -> None:
@@ -1116,7 +1152,11 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     cfg = guild_state.config
     old_value = getattr(cfg, field)
 
-    new_value = _resolve_select_value(interaction, field)
+    # Multi-role fields use a separate resolver
+    if field in MULTI_ROLE_FIELDS:
+        new_value = _resolve_multi_role_value(interaction)
+    else:
+        new_value = _resolve_select_value(interaction, field)
 
     # For channel fields, verify the bot can write to the selected channel
     if new_value and field in ("achievements_channel", "staff_channel"):
@@ -1160,8 +1200,8 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     guild_state.guild_name = guild.name
     state.save(guild_state)
 
-    display_old = old_value or "None"
-    display_new = new_value or "None"
+    display_old = _display_config_value(old_value)
+    display_new = _display_config_value(new_value)
     logger.info(
         "G=%r U=%r: SubDay setting changed: %s = %r (was %r)",
         guild.name,

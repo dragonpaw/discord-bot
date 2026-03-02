@@ -112,6 +112,23 @@ def has_permission(
     return False
 
 
+def has_any_role_permission(
+    guild: hikari.Guild | hikari.RESTGuild,
+    member: hikari.Member,
+    role_names: list[str],
+) -> bool:
+    """Check if member has any of the named roles, or is the guild owner.
+
+    When role_names is empty, only the guild owner passes (owner-only access).
+    """
+    if member.id == guild.owner_id:
+        return True
+    for name in role_names:
+        if member_has_role(member, name):
+            return True
+    return False
+
+
 async def get_guild(
     ctx: lightbulb.Context, bot: DragonpawBot
 ) -> hikari.Guild | hikari.RESTGuild:

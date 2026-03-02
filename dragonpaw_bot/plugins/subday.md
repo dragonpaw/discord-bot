@@ -6,7 +6,7 @@ A 52-week guided journal program for submissives. Participants sign up, receive 
 
 All role permissions, channel names, and prize descriptions are configurable per server via `/subday config` (owner only). Settings are stored in the guild's `SubDayGuildState` and persisted to YAML. Old state files without a `config` key automatically get defaults via Pydantic.
 
-**Defaults:** All fields (`enroll_role`, `complete_role`, `backfill_role`, `achievements_channel`, `staff_channel`) default to `None`, meaning guild-owner-only access and no channel posts until configured.
+**Defaults:** All fields (`enroll_role`, `complete_role`, `backfill_role`, `achievements_channel`, `staff_channel`) default to empty/None, meaning guild-owner-only access and no channel posts until configured. `enroll_role` supports multiple roles (OR logic: any matching role grants access); old single-string values are automatically migrated to a list.
 
 **Guild owner bypass:** The server owner (guild owner) always passes role permission checks (enroll, complete, backfill), regardless of whether they have the required role.
 
@@ -17,7 +17,7 @@ All role permissions, channel names, and prize descriptions are configurable per
 - **help** — Shows contextual help listing only the commands the user can access based on their roles and permissions.
 - **about** — Displays program info as three color-coded embeds (violet intro, cyan details, yellow rewards). Content is built from guild config (roles, prizes). Includes a "Sign Up" button that runs the same signup logic as `/subday signup`.
 - **status** — Shows the user's own progress: current week, completion status, next milestone, signup date.
-- **signup** — Requires configured `enroll_role` (or owner). Registers user, DMs week 1 prompt + rules. Handles DM failures gracefully with a warning message.
+- **signup** — Requires any configured `enroll_role` (or owner). Registers user, DMs week 1 prompt + rules. Handles DM failures gracefully with a warning message.
 - **complete @user [week:\<n\>]** — Requires configured `complete_role` (or owner). Marks the user's current week done. Cannot complete yourself. DMs the user a completion embed with their star chart. If `achievements_channel` is set, also posts achievement there. At milestones: assigns role, pings staff (if `staff_channel` is set). Logs all completions to `staff_channel` if configured. With optional `week` parameter: requires `backfill_role` instead, sets the participant to that week and marks it complete in one step. Auto-enrolls the user if they aren't signed up yet.
 - **list** — Requires configured `complete_role` (or owner). Shows all participants + progress with status icons.
 - **remove @user** — Requires configured `complete_role` (or owner). Removes a participant.
@@ -31,7 +31,7 @@ The config command sends an ephemeral message with 5 select menus:
 
 | Dropdown | Type | Default | Description |
 |----------|------|---------|-------------|
-| Enroll role | Role select | _None (owner-only)_ | Role allowed to sign up |
+| Enroll role(s) | Role select (multi) | _None (owner-only)_ | Roles allowed to sign up (any match grants access) |
 | Complete role | Role select | _None (owner-only)_ | Role allowed to complete/list/remove |
 | Backfill role | Role select | _None (owner-only)_ | Role allowed to backfill weeks via `/subday complete week:<n>` |
 | Achievements channel | Channel select | _None (disabled)_ | Channel for public achievement posts |

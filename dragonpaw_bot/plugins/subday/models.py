@@ -14,7 +14,16 @@ class SubDayParticipant(pydantic.BaseModel):
 
 
 class SubDayGuildConfig(pydantic.BaseModel):
-    enroll_role: str | None = None
+    enroll_role: list[str] = []
+
+    @pydantic.field_validator("enroll_role", mode="before")
+    @classmethod
+    def _coerce_enroll_role(cls, v: object) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        return v  # type: ignore[return-value]
     complete_role: str | None = None
     backfill_role: str | None = None
     achievements_channel: str | None = None
