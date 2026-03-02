@@ -8,6 +8,8 @@ from pathlib import Path
 import hikari
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
+
 # ---------------------------------------------------------------------------- #
 #                                   Constants                                   #
 # ---------------------------------------------------------------------------- #
@@ -19,13 +21,11 @@ FONT_NUMBERS_LIGHT = FONTS_DIR / "DaxCondensed_Light.ttf"
 FONT_MILESTONE = FONTS_DIR / "DaxCondensed-Medium.ttf"
 FONT_USERNAME = FONTS_DIR / "Caveat-Bold.ttf"
 
-TOTAL_WEEKS = 52
 COLS = 7
 ROWS_PER_SECTION = 2
 CELLS_PER_SECTION = COLS * ROWS_PER_SECTION  # 14
 WEEKS_PER_SECTION = CELLS_PER_SECTION - 1  # 13 (last cell is the prize cell)
 SECTIONS = 4
-MILESTONE_WEEKS = {13, 26, 39, 52}
 
 # Supersampling scale for anti-aliased stars
 SS = 3

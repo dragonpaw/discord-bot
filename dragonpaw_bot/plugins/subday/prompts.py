@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 import hikari
 
 from dragonpaw_bot.colors import SOLARIZED_VIOLET
-
-WEEKS_DIR = Path(__file__).parent / "weeks"
+from dragonpaw_bot.plugins.subday.constants import WEEKS_DIR
 
 _cache: dict[int, WeekPrompt] = {}
 

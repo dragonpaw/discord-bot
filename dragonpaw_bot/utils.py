@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Mapping, Optional, Sequence, Union
 
 import hikari
 import hikari.messages
+import lightbulb
 from emojis.db.db import EMOJI_DB
 
 from dragonpaw_bot.colors import SOLARIZED_RED
@@ -109,6 +110,18 @@ def has_permission(
     if role_name:
         return member_has_role(member, role_name)
     return False
+
+
+async def get_guild(
+    ctx: lightbulb.Context, bot: DragonpawBot
+) -> hikari.Guild | hikari.RESTGuild:
+    """Get guild from cache, falling back to REST fetch."""
+    assert ctx.guild_id
+    guild = ctx.get_guild()
+    if guild:
+        return guild
+    logger.debug("G=%r: Guild not in cache, fetching via REST", ctx.guild_id)
+    return await bot.rest.fetch_guild(ctx.guild_id)
 
 
 PERM_LABELS: dict[hikari.Permissions, str] = {

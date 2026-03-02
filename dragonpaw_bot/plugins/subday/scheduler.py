@@ -8,13 +8,12 @@ from typing import TYPE_CHECKING
 import hikari
 
 from dragonpaw_bot.plugins.subday import prompts, state
+from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = logging.getLogger(__name__)
-
-TOTAL_WEEKS = 52
 SUNDAY_SEND_HOUR = 14  # UTC
 SUNDAY_WEEKDAY = 6  # Monday=0 ... Sunday=6
 

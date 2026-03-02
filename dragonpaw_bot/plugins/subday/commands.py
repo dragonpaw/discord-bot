@@ -4,7 +4,6 @@ from __future__ import annotations
 import datetime
 import logging
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import hikari
@@ -17,6 +16,14 @@ from dragonpaw_bot.colors import (
     SOLARIZED_YELLOW,
 )
 from dragonpaw_bot.plugins.subday import chart, prompts, state
+from dragonpaw_bot.plugins.subday.constants import (
+    MILESTONE_WEEKS,
+    SUBDAY_CFG_ROLE_PREFIX,
+    SUBDAY_CONFIG_PREFIX,
+    SUBDAY_SIGNUP_ID,
+    TOTAL_WEEKS,
+    WEEKS_DIR,
+)
 from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig, SubDayParticipant
 
 if TYPE_CHECKING:
@@ -24,27 +31,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-MILESTONE_WEEKS = (13, 26, 39, 52)
-TOTAL_WEEKS = 52
-SUBDAY_SIGNUP_ID = "subday_signup"
-WEEKS_DIR = Path(__file__).parent / "weeks"
-
 
 # ---------------------------------------------------------------------------- #
 #                                   Helpers                                    #
 # ---------------------------------------------------------------------------- #
-
-
-async def _get_guild(
-    ctx: lightbulb.Context, bot: DragonpawBot
-) -> hikari.Guild | hikari.RESTGuild:
-    """Get guild from cache, falling back to REST fetch."""
-    assert ctx.guild_id
-    guild = ctx.get_guild()
-    if guild:
-        return guild
-    logger.debug("G=%r: Guild not in cache, fetching via REST", ctx.guild_id)
-    return await bot.rest.fetch_guild(ctx.guild_id)
 
 
 async def _check_permission(
@@ -76,7 +66,7 @@ async def help_handler(ctx: lightbulb.Context) -> None:
     """Show contextual help listing commands the user can access."""
     assert ctx.guild_id
     bot: DragonpawBot = ctx.app  # type: ignore[assignment]
-    guild = await _get_guild(ctx, bot)
+    guild = await utils.get_guild(ctx, bot)
     guild_state = state.load(int(ctx.guild_id))
     cfg = guild_state.config
 
@@ -618,7 +608,7 @@ def _register_signup(subday_group: lightbulb.SlashCommandGroup) -> None:
     async def subday_signup(ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
         bot: DragonpawBot = ctx.app  # type: ignore[assignment]
-        guild = await _get_guild(ctx, bot)
+        guild = await utils.get_guild(ctx, bot)
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
@@ -692,7 +682,7 @@ def _register_complete(subday_group: lightbulb.SlashCommandGroup) -> None:
     async def subday_complete(ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
         bot: DragonpawBot = ctx.app  # type: ignore[assignment]
-        guild = await _get_guild(ctx, bot)
+        guild = await utils.get_guild(ctx, bot)
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
@@ -782,7 +772,7 @@ def _register_list(subday_group: lightbulb.SlashCommandGroup) -> None:
     async def subday_list(ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
         bot: DragonpawBot = ctx.app  # type: ignore[assignment]
-        guild = await _get_guild(ctx, bot)
+        guild = await utils.get_guild(ctx, bot)
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
@@ -829,7 +819,7 @@ def _register_remove(subday_group: lightbulb.SlashCommandGroup) -> None:
     async def subday_remove(ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
         bot: DragonpawBot = ctx.app  # type: ignore[assignment]
-        guild = await _get_guild(ctx, bot)
+        guild = await utils.get_guild(ctx, bot)
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
@@ -860,10 +850,6 @@ def _register_remove(subday_group: lightbulb.SlashCommandGroup) -> None:
             target.username,
             ctx.author.username,
         )
-
-
-SUBDAY_CONFIG_PREFIX = "subday_cfg:"
-SUBDAY_CFG_ROLE_PREFIX = "subday_cfg_role:"
 
 
 def _config_embed(cfg: SubDayGuildConfig) -> hikari.Embed:

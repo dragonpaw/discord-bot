@@ -7,7 +7,13 @@ import hikari
 import lightbulb
 
 from dragonpaw_bot.plugins.subday import commands, scheduler
-from dragonpaw_bot.plugins.subday.commands import MILESTONE_WEEKS, TOTAL_WEEKS
+from dragonpaw_bot.plugins.subday.constants import (
+    MILESTONE_WEEKS,
+    SUBDAY_CFG_ROLE_PREFIX,
+    SUBDAY_CONFIG_PREFIX,
+    SUBDAY_SIGNUP_ID,
+    TOTAL_WEEKS,
+)
 
 __all__ = ["MILESTONE_WEEKS", "TOTAL_WEEKS"]
 
@@ -48,12 +54,11 @@ async def on_interaction(event: hikari.InteractionCreateEvent) -> None:
     if not isinstance(event.interaction, hikari.ComponentInteraction):
         return
     cid = event.interaction.custom_id
-    if cid == commands.SUBDAY_SIGNUP_ID:
+    if cid == SUBDAY_SIGNUP_ID:
         await commands.handle_signup_interaction(event.interaction)
         return
     if not (
-        cid.startswith(commands.SUBDAY_CONFIG_PREFIX)
-        or cid.startswith(commands.SUBDAY_CFG_ROLE_PREFIX)
+        cid.startswith(SUBDAY_CONFIG_PREFIX) or cid.startswith(SUBDAY_CFG_ROLE_PREFIX)
     ):
         return
     await commands.handle_config_interaction(event.interaction)
