@@ -51,6 +51,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 ## Key Conventions
 
 - Uses `uvloop` as the async event loop
+- **Discord interaction timeout:** Discord gives 3 seconds to respond to an interaction before it expires. Always call `ctx.respond()` (or `interaction.create_initial_response()`) **before** any slow work like sending DMs, posting to channels, assigning roles, or calling `log_to_guild()`. Do the fast stuff (state save, build response), respond, then do async work after.
 - **lightbulb v3 patterns:**
   - Extensions use `lightbulb.Loader()` (not `Plugin`)
   - Commands are class-based, inheriting from `lightbulb.SlashCommand` with `@lightbulb.invoke` on the invoke method
