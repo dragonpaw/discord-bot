@@ -113,12 +113,10 @@ async def on_member_join(event: hikari.MemberCreateEvent):
                 days=c.lobby_kick_days,
             )
         except KeyError as e:
-            await utils.report_errors(
-                bot=bot,
-                guild_id=event.guild_id,
-                error="Welcome message has an unknown substitution in it: {}".format(
-                    str(e)
-                ),
+            await utils.log_to_guild(
+                bot,
+                event.guild_id,
+                f"🤯 **Lobby error:** Welcome message has an unknown substitution: {e}",
             )
             return
 

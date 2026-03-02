@@ -9,8 +9,6 @@ import hikari.messages
 import lightbulb
 from emojis.db.db import EMOJI_DB
 
-from dragonpaw_bot.colors import SOLARIZED_RED
-
 InteractionHandler = Callable[[hikari.ComponentInteraction], Awaitable[None]]
 
 if TYPE_CHECKING:
@@ -237,32 +235,3 @@ async def log_to_guild(
         await bot.rest.create_message(channel=c.log_channel_id, content=message)
     except hikari.HTTPError as exc:
         logger.warning("G=%r: Failed to send log message: %s", c.name, exc)
-
-
-async def report_errors(
-    bot: DragonpawBot,
-    guild_id: hikari.Snowflake,
-    error: str,
-):
-    """Dump all the config errors somewhere, where hopefully they get seen."""
-
-    # BUG: This doesn't work on initial setup as there's no state file to read at first
-    c = bot.state(guild_id)
-    if not c:
-        logger.error("Can't report errors on an unknown guild: %r", guild_id)
-        logger.warning("Would have said: %s", error)
-        return
-
-    if not c.log_channel_id:
-        logger.error("G=%r: No log channel configured: %s", c.name, error)
-        return
-
-    logger.error("G=%r %s", c.name, error)
-    await bot.rest.create_message(
-        channel=c.log_channel_id,
-        embed=hikari.Embed(
-            color=SOLARIZED_RED,
-            title="🤯 Oh Snap!",
-            description=error,
-        ),
-    )

@@ -31,8 +31,8 @@ When `single = true`, choosing a new option automatically removes all other role
 
 ### Error Handling
 
-- Missing emojis or roles are logged and reported via `utils.report_errors`
-- `ForbiddenError` on role add/remove is caught and reported to the guild
+- Missing emojis or roles are logged and reported via `utils.log_to_guild`
+- `ForbiddenError` on role add/remove is caught and reported to the guild log channel
 - Menus with no valid options are posted but with a warning logged
 
 ### State

@@ -205,13 +205,11 @@ async def on_reaction_add(event: hikari.GuildReactionAddEvent):
         )
     except hikari.ForbiddenError:
         role = c.role_names[todo.add_role_id]
-        await utils.report_errors(
-            bot=bot,
-            guild_id=event.guild_id,
-            error=(
-                f"Unable to add role: **{role}**, "
-                "please check my permissions relative to that role."
-            ),
+        await utils.log_to_guild(
+            bot,
+            event.guild_id,
+            f"🤯 Unable to add role: **{role}**, "
+            "please check my permissions relative to that role.",
         )
 
     # And maybe remove some old ones.
@@ -222,13 +220,11 @@ async def on_reaction_add(event: hikari.GuildReactionAddEvent):
             )
         except hikari.ForbiddenError:
             role = c.role_names[r_id]
-            await utils.report_errors(
-                bot=bot,
-                guild_id=event.guild_id,
-                error=(
-                    f"Unable to remove role: **{role}**, "
-                    "please check my permissions relative to that role."
-                ),
+            await utils.log_to_guild(
+                bot,
+                event.guild_id,
+                f"🤯 Unable to remove role: **{role}**, "
+                "please check my permissions relative to that role.",
             )
 
 
@@ -285,11 +281,9 @@ async def on_reaction_remove(event: hikari.GuildReactionDeleteEvent):
     except hikari.ForbiddenError:
         logger.error("G=%r Unable to remove role, got Forbidden", c.name)
         role = c.role_names[todo.add_role_id]
-        await utils.report_errors(
-            bot=bot,
-            guild_id=event.guild_id,
-            error=(
-                f"Unable to remove role: **{role}**, "
-                "please check my permissions relative to that role."
-            ),
+        await utils.log_to_guild(
+            bot,
+            event.guild_id,
+            f"🤯 Unable to remove role: **{role}**, "
+            "please check my permissions relative to that role.",
         )
