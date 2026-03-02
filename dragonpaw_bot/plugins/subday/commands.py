@@ -410,6 +410,9 @@ async def _do_signup(
         guild.name,
         user.username,
     )
+    await utils.log_to_guild(
+        bot, guild_id, f"📝 {user.mention} signed up for **Where I am Led**."
+    )
     return msg
 
 
@@ -1342,6 +1345,11 @@ class SubDayRemove(
             guild_state.guild_name,
             target.username,
             ctx.user.username,
+        )
+        await utils.log_to_guild(
+            bot,
+            ctx.guild_id,
+            f"🗑️ {ctx.member.mention} removed {target.mention} from **Where I am Led**.",
         )
 
 
