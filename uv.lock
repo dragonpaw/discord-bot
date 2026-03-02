@@ -96,6 +96,15 @@ wheels = [
 ]
 
 [[package]]
+name = "async-timeout"
+version = "5.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a5/ae/136395dfbfe00dfc94da3f3e136d0b13f394cba8f4841120e34226265780/async_timeout-5.0.1.tar.gz", hash = "sha256:d9321a7a3d5a6a5e187e824d2fa0793ce379a202935782d555d6e9d2735677d3", size = 9274, upload-time = "2024-11-06T16:41:39.6Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/ba/e2081de779ca30d473f21f5b30e0e737c438205440784c7dfc81efc2b029/async_timeout-5.0.1-py3-none-any.whl", hash = "sha256:39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c", size = 6233, upload-time = "2024-11-06T16:41:37.9Z" },
+]
+
+[[package]]
 name = "attrs"
 version = "25.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -241,6 +250,28 @@ wheels = [
 ]
 
 [[package]]
+name = "confspec"
+version = "0.0.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d9/62/d3a900cff5b9eefa4f1716e45c6358302713ce263eff637455fba97a8378/confspec-0.0.5.tar.gz", hash = "sha256:49faf2f1fd64b63da74790f62b4348fd658340d9ec227c4c95e808ebeb48b036", size = 66530, upload-time = "2025-10-20T14:39:52.42Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/fb/b622edac3422f448975f2eb4915ef8d87eba2cc501d18c825713eeca4495/confspec-0.0.5-py3-none-any.whl", hash = "sha256:042dcbc368173163d2c1bbb2a9f58ba4d17c98fd0c6e8e97e6a7972faf8ef57f", size = 17213, upload-time = "2025-10-20T14:39:51.042Z" },
+]
+
+[[package]]
+name = "croniter"
+version = "6.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+    { name = "pytz" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ad/2f/44d1ae153a0e27be56be43465e5cb39b9650c781e001e7864389deb25090/croniter-6.0.0.tar.gz", hash = "sha256:37c504b313956114a983ece2c2b07790b1f1094fe9d81cc94739214748255577", size = 64481, upload-time = "2024-12-17T17:17:47.32Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/4b/290b4c3efd6417a8b0c284896de19b1d5855e6dbdb97d2a35e68fa42de85/croniter-6.0.0-py2.py3-none-any.whl", hash = "sha256:2f878c3856f17896979b2a4379ba1f09c83e374931ea15cc835c5dd2eee9b368", size = 25468, upload-time = "2024-12-17T17:17:45.359Z" },
+]
+
+[[package]]
 name = "decorator"
 version = "5.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -255,6 +286,7 @@ version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
+    { name = "croniter" },
     { name = "emojis" },
     { name = "hikari", extra = ["speedups"] },
     { name = "hikari-lightbulb" },
@@ -279,9 +311,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11,<4" },
+    { name = "croniter", specifier = ">=6,<7" },
     { name = "emojis", specifier = ">=0.7,<1" },
     { name = "hikari", extras = ["speedups"], specifier = ">=2.1,<3" },
-    { name = "hikari-lightbulb", specifier = ">=2.3,<3" },
+    { name = "hikari-lightbulb", specifier = ">=3.2,<4" },
     { name = "palettable", specifier = ">=3.3,<4" },
     { name = "pillow", specifier = ">=11,<13" },
     { name = "pydantic", specifier = ">=2,<3" },
@@ -361,7 +394,7 @@ wheels = [
 
 [[package]]
 name = "hikari"
-version = "2.1.1"
+version = "2.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -369,28 +402,33 @@ dependencies = [
     { name = "colorlog" },
     { name = "multidict" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/8a/97d513c8ee6fa94b1a3cc25d2b5e31132987497c72373d888b6e420483a3/hikari-2.1.1.tar.gz", hash = "sha256:70c3987d87a5eb29db9ab448989ae8e2c65d3f2e44a392bc5c6e1d77db8e146c", size = 442935, upload-time = "2025-02-26T11:15:22.424Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/06/bd/e4bd16c662fe7614bb6f38aba40a095aef998af0602674fe24740d3814cd/hikari-2.5.0.tar.gz", hash = "sha256:b8fe7e5cd5adfedcdcc488a86781bc946002fb79d984a473736624dd8201993b", size = 1924829, upload-time = "2025-10-31T12:34:27.838Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/de/53/6e0ee541deb4dcce0790d5f03cfa95a96022b44b29bca12029cb10e5d84b/hikari-2.1.1-py3-none-any.whl", hash = "sha256:9633babb36e7be42db386112ca87a8ef2e1f63ce79a352dcc874147801d29a05", size = 545719, upload-time = "2025-02-26T11:15:20.196Z" },
+    { url = "https://files.pythonhosted.org/packages/66/c5/256c7d498cbe8e67edfd9bb2971740eadb662effcf9b9c1aff8e6d21e90d/hikari-2.5.0-py3-none-any.whl", hash = "sha256:fd108b51c73f46b562ac9e7cd48d4f74655224083ae37a319a417c30418a40ec", size = 580206, upload-time = "2025-10-31T12:34:25.633Z" },
 ]
 
 [package.optional-dependencies]
 speedups = [
     { name = "aiohttp", extra = ["speedups"] },
+    { name = "backports-zstd" },
     { name = "ciso8601" },
     { name = "orjson" },
 ]
 
 [[package]]
 name = "hikari-lightbulb"
-version = "2.3.5.post1"
+version = "3.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "async-timeout" },
+    { name = "confspec" },
     { name = "hikari" },
+    { name = "linkd" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ff/8d/0f6e8bd5f155dd672d382f76e07b6ff71bebc50dada1677ff6c65bd39017/hikari_lightbulb-2.3.5.post1.tar.gz", hash = "sha256:89ece6d07a87853c015c8626783ebdb90f9a903c8c03024d71208021adbd9b27", size = 87469, upload-time = "2024-09-26T17:30:06.419Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/db/0b/02ea547ed350cb8ae733afe5d77325b03cd488664daeb70b3e02e151b037/hikari_lightbulb-3.2.3.tar.gz", hash = "sha256:9db7747a93c0a1af7702a4acf078cc89afdee3a6914521609b4d7693b5244b91", size = 136755, upload-time = "2025-12-27T21:41:35.052Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/ce/ee34a508ac6d6eefffe70bb477ce677f36873539bef288ada4976e5e790c/hikari_lightbulb-2.3.5.post1-py3-none-any.whl", hash = "sha256:9d4e6d180e5d38c97c0d89fba2bae5859b5c79d2a848d321fb8866e3b028816f", size = 118212, upload-time = "2024-09-26T17:30:04.466Z" },
+    { url = "https://files.pythonhosted.org/packages/73/29/bd8b0b7b8475b02265a2862b43d2183f56e7cff36033852f86bd135bace7/hikari_lightbulb-3.2.3-py3-none-any.whl", hash = "sha256:b957e1cf804dbe3acd7b6127646e9ec2e5fe39d3d631dc4402f8dd2078057626", size = 105008, upload-time = "2025-12-27T21:41:33.451Z" },
 ]
 
 [[package]]
@@ -454,6 +492,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/72/3a/79a912fbd4d8dd6fbb02bf69afd3bb72cf0c729bb3063c6f4498603db17a/jedi-0.19.2.tar.gz", hash = "sha256:4770dc3de41bde3966b02eb84fbcf557fb33cce26ad23da12c742fb50ecb11f0", size = 1231287, upload-time = "2024-11-11T01:41:42.873Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c0/5a/9cac0c82afec3d09ccd97c8b6502d48f165f9124db81b4bcb90b4af974ee/jedi-0.19.2-py2.py3-none-any.whl", hash = "sha256:a8ef22bde8490f57fe5c7681a3c83cb58874daf72b4784de3cce5b6ef6edb5b9", size = 1572278, upload-time = "2024-11-11T01:41:40.175Z" },
+]
+
+[[package]]
+name = "linkd"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/5e/65e569aeb37f7d06368468472bf8329cf31d6fdc53a0bf7f7a73982fb65b/linkd-0.2.1.tar.gz", hash = "sha256:48879ec0bc5490107bd3d9e62bba2c5490531c368794b7fb28f01afea37eed17", size = 44853, upload-time = "2025-12-27T21:34:45.194Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ae/c3/94c0dc294de2384fd949b62ac978f7b2a49a8e3301080e3b65652a4815de/linkd-0.2.1-py3-none-any.whl", hash = "sha256:517e136b57e1146a366a82ff2944876053ba41761976b3b47d7070c9ea5f1d71", size = 40182, upload-time = "2025-12-27T21:34:43.551Z" },
 ]
 
 [[package]]
@@ -796,6 +843,27 @@ wheels = [
 ]
 
 [[package]]
+name = "python-dateutil"
+version = "2.9.0.post0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
+name = "pytz"
+version = "2025.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/bf/abbd3cdfb8fbc7fb3d4d38d320f2441b1e7cbe29be4f23797b4a2b5d8aac/pytz-2025.2.tar.gz", hash = "sha256:360b9e3dbb49a209c21ad61809c7fb453643e048b38924c765813546746e81c3", size = 320884, upload-time = "2025-03-25T02:25:00.538Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/c4/34e93fe5f5429d7570ec1fa436f1986fb1f00c3e0f43a589fe2bbcd22c3f/pytz-2025.2-py2.py3-none-any.whl", hash = "sha256:5ddf76296dd8c44c26eb8f4b6f35488f3ccbf6fbbd7adee0b7262d43f0ec2f00", size = 509225, upload-time = "2025-03-25T02:24:58.468Z" },
+]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -854,6 +922,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/82/f3/748f4d6f65d1756b9ae577f329c951cda23fb900e4de9f70900ced962085/setuptools-82.0.0.tar.gz", hash = "sha256:22e0a2d69474c6ae4feb01951cb69d515ed23728cf96d05513d36e42b62b37cb", size = 1144893, upload-time = "2026-02-08T15:08:40.206Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/c6/76dc613121b793286a3f91621d7b75a2b493e0390ddca50f11993eadf192/setuptools-82.0.0-py3-none-any.whl", hash = "sha256:70b18734b607bd1da571d097d236cfcfacaf01de45717d59e6e04b96877532e0", size = 1003468, upload-time = "2026-02-08T15:08:38.723Z" },
+]
+
+[[package]]
+name = "six"
+version = "1.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
 ]
 
 [[package]]

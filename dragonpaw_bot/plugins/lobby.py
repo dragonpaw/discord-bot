@@ -13,17 +13,10 @@ if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = logging.getLogger(__name__)
-plugin = lightbulb.Plugin("Lobby")
+
+loader = lightbulb.Loader()
 
 RULES_AGREED_ID = "rules_agreed"
-
-
-def load(bot: lightbulb.BotApp):
-    bot.add_plugin(plugin)
-
-
-def unload(bot: lightbulb.BotApp):
-    bot.remove_plugin(plugin)
 
 
 async def configure_lobby(
@@ -79,7 +72,7 @@ async def configure_lobby(
         state.lobby_click_for_rules = config.click_for_rules
 
         if config.click_for_rules and config.role:
-            row = plugin.bot.rest.build_message_action_row()
+            row = bot.rest.build_message_action_row()
             row.add_interactive_button(
                 hikari.ButtonStyle.SUCCESS,
                 RULES_AGREED_ID,
@@ -94,12 +87,12 @@ async def configure_lobby(
     return errors
 
 
-@plugin.listener(event=hikari.MemberCreateEvent, bind=True)
-async def on_member_join(plugin: lightbulb.Plugin, event: hikari.MemberCreateEvent):
+@loader.listener(hikari.MemberCreateEvent)
+async def on_member_join(event: hikari.MemberCreateEvent):
     """Handle a new member joining the server."""
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
 
-    assert isinstance(plugin.bot, DragonpawBot)
-    c = plugin.bot.state(event.guild_id)
+    c = bot.state(event.guild_id)
     if not c:
         logger.error("Called on an unknown guild: %r", event.guild_id)
         return
@@ -120,7 +113,7 @@ async def on_member_join(plugin: lightbulb.Plugin, event: hikari.MemberCreateEve
             )
         except KeyError as e:
             await utils.report_errors(
-                bot=plugin.bot,
+                bot=bot,
                 guild_id=event.guild_id,
                 error="Welcome message has an unknown substitution in it: {}".format(
                     str(e)
@@ -128,7 +121,7 @@ async def on_member_join(plugin: lightbulb.Plugin, event: hikari.MemberCreateEve
             )
             return
 
-        await plugin.bot.rest.create_message(
+        await bot.rest.create_message(
             channel=c.lobby_channel_id,
             content=msg,
             user_mentions=True,
@@ -136,18 +129,16 @@ async def on_member_join(plugin: lightbulb.Plugin, event: hikari.MemberCreateEve
         )
 
 
-@plugin.listener(event=hikari.InteractionCreateEvent, bind=True)
-async def on_interaction(
-    plugin: lightbulb.Plugin, event: hikari.InteractionCreateEvent
-):
+@loader.listener(hikari.InteractionCreateEvent)
+async def on_interaction(event: hikari.InteractionCreateEvent):
     if not isinstance(event.interaction, hikari.ComponentInteraction):
         return
     if not event.interaction.guild_id:
         return
     logger.debug("Interaction event: %r=%r", type(event), event)
 
-    assert isinstance(plugin.bot, DragonpawBot)
-    c = plugin.bot.state(event.interaction.guild_id)
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
+    c = bot.state(event.interaction.guild_id)
     if not c:
         logger.error("Called on an unknown guild: %r", event.interaction.guild_id)
         return
@@ -159,7 +150,7 @@ async def on_interaction(
             event.interaction.user.username,
             c.role_names[c.lobby_role_id],
         )
-        await plugin.bot.rest.remove_role_from_member(
+        await bot.rest.remove_role_from_member(
             guild=event.interaction.guild_id,
             user=event.interaction.user.id,
             role=c.lobby_role_id,

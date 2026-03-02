@@ -37,6 +37,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------- #
 
 
+def _get_bot(ctx: lightbulb.Context) -> DragonpawBot:
+    bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
+    return bot
+
+
 async def _check_permission(
     ctx: lightbulb.Context,
     guild: hikari.Guild | hikari.RESTGuild,
@@ -51,7 +56,7 @@ async def _check_permission(
     logger.warning(
         "G=%r U=%r: SubDay %s denied, missing %s",
         guild.name,
-        ctx.author.username,
+        ctx.user.username,
         action,
         label,
     )
@@ -65,7 +70,7 @@ async def _check_permission(
 async def help_handler(ctx: lightbulb.Context) -> None:
     """Show contextual help listing commands the user can access."""
     assert ctx.guild_id
-    bot: DragonpawBot = ctx.app  # type: ignore[assignment]
+    bot = _get_bot(ctx)
     guild = await utils.get_guild(ctx, bot)
     guild_state = state.load(int(ctx.guild_id))
     cfg = guild_state.config
@@ -85,7 +90,7 @@ async def help_handler(ctx: lightbulb.Context) -> None:
             lines.append(
                 "`/subday complete @user week:<n>` — Backfill to a specific week"
             )
-    if ctx.app.owner_ids and ctx.author.id in ctx.app.owner_ids:
+    if bot.owner_ids and ctx.user.id in bot.owner_ids:
         lines.append("`/subday config` — Configure settings (bot owner)")
         lines.append("`/subday prize-roles` — Set milestone roles (bot owner)")
         lines.append("`/subday prizes` — Set milestone prizes (bot owner)")
@@ -166,8 +171,8 @@ async def _dm_completion(
     try:
         dm = await target.user.fetch_dm_channel()
         embed = _regular_completion_embed(target, week)
-        embed.set_image("attachment://star_chart.png")
-        await dm.send(embed=embed, attachment=chart_bytes)
+        embed.set_image(chart_bytes)
+        await dm.send(embed=embed)
         logger.info("U=%r: Sent completion DM for week %d", target.username, week)
     except hikari.HTTPError as exc:
         logger.warning(
@@ -199,7 +204,7 @@ async def _notify_staff(
         )
 
 
-async def _post_achievement(  # noqa: PLR0913
+async def _post_achievement(  # noqa: PLR0912, PLR0913
     bot: DragonpawBot,
     guild_id: hikari.Snowflake,
     completer: hikari.Member,
@@ -240,9 +245,16 @@ async def _post_achievement(  # noqa: PLR0913
     # Regular completion — just post the embed
     if week not in milestone_roles:
         if achievements:
-            embed = _regular_completion_embed(target, week)
-            embed.set_image("attachment://star_chart.png")
-            await achievements.send(embed=embed, attachment=chart_bytes)
+            try:
+                embed = _regular_completion_embed(target, week)
+                embed.set_image(chart_bytes)
+                await achievements.send(embed=embed)
+            except hikari.HTTPError as exc:
+                logger.warning(
+                    "G=%r: Failed to post achievement: %s",
+                    cfg.achievements_channel,
+                    exc,
+                )
         return
 
     role_name = milestone_roles[week]
@@ -272,8 +284,15 @@ async def _post_achievement(  # noqa: PLR0913
         )
 
     if achievements:
-        embed.set_image("attachment://star_chart.png")
-        await achievements.send(embed=embed, attachment=chart_bytes)
+        try:
+            embed.set_image(chart_bytes)
+            await achievements.send(embed=embed)
+        except hikari.HTTPError as exc:
+            logger.warning(
+                "G=%r: Failed to post milestone achievement: %s",
+                cfg.achievements_channel,
+                exc,
+            )
 
     # Assign milestone role (skip if None)
     if role_name:
@@ -417,28 +436,30 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
 # ---------------------------------------------------------------------------- #
 
 
-def register(subday_group: lightbulb.SlashCommandGroup) -> None:
+def register(subday_group: lightbulb.Group) -> None:
     """Register all subcommands on the given command group."""
-    _register_about(subday_group)
-    _register_status(subday_group)
-    _register_signup(subday_group)
-    _register_complete(subday_group)
-    _register_list(subday_group)
-    _register_remove(subday_group)
-    _register_config(subday_group)
-    _register_prize_roles(subday_group)
-    _register_prizes(subday_group)
+    subday_group.register(SubDayAbout)
+    subday_group.register(SubDayStatus)
+    subday_group.register(SubDaySignup)
+    subday_group.register(SubDayComplete)
+    subday_group.register(SubDayList)
+    subday_group.register(SubDayRemove)
+    subday_group.register(SubDayConfig)
+    subday_group.register(SubDayPrizeRoles)
+    subday_group.register(SubDayPrizes)
 
 
-def _register_about(subday_group: lightbulb.SlashCommandGroup) -> None:
-    @subday_group.child
-    @lightbulb.command("about", "Learn about the Where I am Led program")
-    @lightbulb.implements(lightbulb.SlashSubCommand)
-    async def subday_about(ctx: lightbulb.Context) -> None:
+class SubDayAbout(
+    lightbulb.SlashCommand,
+    name="about",
+    description="Learn about the Where I am Led program",
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         logger.info(
             "U=%r: Viewed SubDay about",
-            ctx.author.username,
+            ctx.user.username,
         )
 
         guild_state = state.load(int(ctx.guild_id))
@@ -488,23 +509,26 @@ def _register_about(subday_group: lightbulb.SlashCommandGroup) -> None:
         for heading, body in sections.items():
             embed.add_field(name=heading, value=body or "\u200b", inline=False)
 
-        row = ctx.app.rest.build_message_action_row()
+        bot = _get_bot(ctx)
+        row = bot.rest.build_message_action_row()
         row.add_interactive_button(
             hikari.ButtonStyle.SUCCESS, SUBDAY_SIGNUP_ID, label="Sign Up"
         )
         await ctx.respond(embed=embed, component=row)
 
 
-def _register_status(subday_group: lightbulb.SlashCommandGroup) -> None:
-    @subday_group.child
-    @lightbulb.command("status", "Check your own progress in Where I am Led")
-    @lightbulb.implements(lightbulb.SlashSubCommand)
-    async def subday_status(ctx: lightbulb.Context) -> None:
+class SubDayStatus(
+    lightbulb.SlashCommand,
+    name="status",
+    description="Check your own progress in Where I am Led",
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        logger.info("U=%r: Checking SubDay status", ctx.author.username)
+        logger.info("U=%r: Checking SubDay status", ctx.user.username)
 
         guild_state = state.load(int(ctx.guild_id))
-        user_id = int(ctx.author.id)
+        user_id = int(ctx.user.id)
 
         if user_id not in guild_state.participants:
             await ctx.respond(
@@ -518,7 +542,7 @@ def _register_status(subday_group: lightbulb.SlashCommandGroup) -> None:
 
         if p.current_week > TOTAL_WEEKS:
             chart_bytes = chart.render_star_chart(
-                username=ctx.author.username,
+                username=ctx.user.username,
                 current_week=p.current_week,
                 week_completed=p.week_completed,
             )
@@ -530,10 +554,9 @@ def _register_status(subday_group: lightbulb.SlashCommandGroup) -> None:
                 ),
                 color=SOLARIZED_MAGENTA,
             )
-            embed.set_image("attachment://star_chart.png")
+            embed.set_image(chart_bytes)
             await ctx.respond(
                 embed=embed,
-                attachment=chart_bytes,
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -572,7 +595,7 @@ def _register_status(subday_group: lightbulb.SlashCommandGroup) -> None:
             status_text += f"\n\n{milestone_text}"
 
         chart_bytes = chart.render_star_chart(
-            username=ctx.author.username,
+            username=ctx.user.username,
             current_week=p.current_week,
             week_completed=p.week_completed,
         )
@@ -582,7 +605,7 @@ def _register_status(subday_group: lightbulb.SlashCommandGroup) -> None:
             description=status_text,
             color=SOLARIZED_VIOLET,
         )
-        embed.set_image("attachment://star_chart.png")
+        embed.set_image(chart_bytes)
         embed.add_field(
             name="Progress",
             value=f"{p.current_week}/{TOTAL_WEEKS} weeks",
@@ -596,18 +619,19 @@ def _register_status(subday_group: lightbulb.SlashCommandGroup) -> None:
 
         await ctx.respond(
             embed=embed,
-            attachment=chart_bytes,
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
 
-def _register_signup(subday_group: lightbulb.SlashCommandGroup) -> None:
-    @subday_group.child
-    @lightbulb.command("signup", "Sign up for the Where I am Led program")
-    @lightbulb.implements(lightbulb.SlashSubCommand)
-    async def subday_signup(ctx: lightbulb.Context) -> None:
+class SubDaySignup(
+    lightbulb.SlashCommand,
+    name="signup",
+    description="Sign up for the Where I am Led program",
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
-        bot: DragonpawBot = ctx.app  # type: ignore[assignment]
+        bot = _get_bot(ctx)
         guild = await utils.get_guild(ctx, bot)
 
         guild_state = state.load(int(ctx.guild_id))
@@ -616,7 +640,7 @@ def _register_signup(subday_group: lightbulb.SlashCommandGroup) -> None:
         if not await _check_permission(ctx, guild, cfg.enroll_role, "signup"):
             return
 
-        msg = await _do_signup(bot, ctx.guild_id, ctx.author)
+        msg = await _do_signup(bot, ctx.guild_id, ctx.user)
         await ctx.respond(msg, flags=hikari.MessageFlag.EPHEMERAL)
 
 
@@ -666,33 +690,35 @@ def _validate_normal_complete(
     return None
 
 
-def _register_complete(subday_group: lightbulb.SlashCommandGroup) -> None:
-    @subday_group.child
-    @lightbulb.option(
+class SubDayComplete(
+    lightbulb.SlashCommand,
+    name="complete",
+    description="Mark a participant's current week as complete",
+):
+    user = lightbulb.user("user", "The participant to mark complete")
+    week = lightbulb.integer(
         "week",
         "Backfill: set to this week and mark complete",
-        type=int,
         min_value=1,
         max_value=TOTAL_WEEKS,
-        required=False,
+        default=None,
     )
-    @lightbulb.option("user", "The participant to mark complete", type=hikari.Member)
-    @lightbulb.command("complete", "Mark a participant's current week as complete")
-    @lightbulb.implements(lightbulb.SlashSubCommand)
-    async def subday_complete(ctx: lightbulb.Context) -> None:
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
-        bot: DragonpawBot = ctx.app  # type: ignore[assignment]
+        bot = _get_bot(ctx)
         guild = await utils.get_guild(ctx, bot)
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
 
-        target: hikari.Member = ctx.options.user
+        target: hikari.Member = self.user  # type: ignore[assignment]
         target_id = int(target.id)
 
         # If the requested week matches the participant's current week, fall back
         # to normal complete so the reviewer only needs complete_role, not backfill_role.
-        backfill_week: int | None = ctx.options.week
+        backfill_week: int | None = self.week
         existing = guild_state.participants.get(target_id)
         if backfill_week and existing and existing.current_week == backfill_week:
             backfill_week = None
@@ -704,8 +730,8 @@ def _register_complete(subday_group: lightbulb.SlashCommandGroup) -> None:
             return
 
         # Prevent self-completion
-        if target.id == ctx.author.id:
-            logger.debug("U=%r: SubDay self-completion blocked", ctx.author.username)
+        if target.id == ctx.user.id:
+            logger.debug("U=%r: SubDay self-completion blocked", ctx.user.username)
             await ctx.respond(
                 "You cannot mark your own work as complete.",
                 flags=hikari.MessageFlag.EPHEMERAL,
@@ -760,18 +786,20 @@ def _register_complete(subday_group: lightbulb.SlashCommandGroup) -> None:
             guild_state.guild_name,
             target.username,
             week,
-            ctx.author.username,
+            ctx.user.username,
             ", backfill" if backfill_week else "",
         )
 
 
-def _register_list(subday_group: lightbulb.SlashCommandGroup) -> None:
-    @subday_group.child
-    @lightbulb.command("list", "List all participants and their progress")
-    @lightbulb.implements(lightbulb.SlashSubCommand)
-    async def subday_list(ctx: lightbulb.Context) -> None:
+class SubDayList(
+    lightbulb.SlashCommand,
+    name="list",
+    description="List all participants and their progress",
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
-        bot: DragonpawBot = ctx.app  # type: ignore[assignment]
+        bot = _get_bot(ctx)
         guild = await utils.get_guild(ctx, bot)
 
         guild_state = state.load(int(ctx.guild_id))
@@ -783,7 +811,7 @@ def _register_list(subday_group: lightbulb.SlashCommandGroup) -> None:
         logger.info(
             "G=%r U=%r: Listing SubDay participants (%d enrolled)",
             guild_state.guild_name,
-            ctx.author.username,
+            ctx.user.username,
             len(guild_state.participants),
         )
 
@@ -811,14 +839,17 @@ def _register_list(subday_group: lightbulb.SlashCommandGroup) -> None:
         await ctx.respond(embed=embed, flags=hikari.MessageFlag.EPHEMERAL)
 
 
-def _register_remove(subday_group: lightbulb.SlashCommandGroup) -> None:
-    @subday_group.child
-    @lightbulb.option("user", "The participant to remove", type=hikari.Member)
-    @lightbulb.command("remove", "Remove a participant from the program")
-    @lightbulb.implements(lightbulb.SlashSubCommand)
-    async def subday_remove(ctx: lightbulb.Context) -> None:
+class SubDayRemove(
+    lightbulb.SlashCommand,
+    name="remove",
+    description="Remove a participant from the program",
+):
+    user = lightbulb.user("user", "The participant to remove")
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
-        bot: DragonpawBot = ctx.app  # type: ignore[assignment]
+        bot = _get_bot(ctx)
         guild = await utils.get_guild(ctx, bot)
 
         guild_state = state.load(int(ctx.guild_id))
@@ -827,7 +858,7 @@ def _register_remove(subday_group: lightbulb.SlashCommandGroup) -> None:
         if not await _check_permission(ctx, guild, cfg.complete_role, "remove"):
             return
 
-        target: hikari.Member = ctx.options.user
+        target: hikari.Member = self.user  # type: ignore[assignment]
         target_id = int(target.id)
 
         if target_id not in guild_state.participants:
@@ -848,7 +879,7 @@ def _register_remove(subday_group: lightbulb.SlashCommandGroup) -> None:
             "G=%r U=%r: Removed from SubDay by %s",
             guild_state.guild_name,
             target.username,
-            ctx.author.username,
+            ctx.user.username,
         )
 
 
@@ -906,7 +937,7 @@ def _config_embed(cfg: SubDayGuildConfig) -> hikari.Embed:
     return embed
 
 
-def _config_components(bot: lightbulb.BotApp) -> list[hikari.api.ComponentBuilder]:
+def _config_components(bot: DragonpawBot) -> list[hikari.api.ComponentBuilder]:
     """Build the action rows for the config message."""
     rows: list[hikari.api.ComponentBuilder] = []
 
@@ -1019,12 +1050,13 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         )
         return
 
-    # Only allow the bot owner
+    # Only allow the guild owner
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
-    if not (bot.owner_ids and interaction.user.id in bot.owner_ids):
+    guild = await bot.rest.fetch_guild(guild_id)
+    if interaction.user.id != guild.owner_id:
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="Only the bot owner can change these settings.",
+            content="Only the server owner can change these settings.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
@@ -1060,19 +1092,42 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     setattr(cfg, field, new_value)
 
-    guild = await bot.rest.fetch_guild(guild_id)
     guild_state.guild_name = guild.name
     state.save(guild_state)
 
+    display_old = old_value or "None"
+    display_new = new_value or "None"
     if new_value != old_value:
-        display_old = old_value or "None"
-        display_new = new_value or "None"
         logger.info(
-            "G=%r U=%r: SubDay config %s: %s -> %s",
-            guild_state.guild_name,
+            "G=%r U=%r: SubDay setting changed: %s = %r (was %r)",
+            guild.name,
             interaction.user.username,
             field,
+            display_new,
             display_old,
+        )
+        # Log to the guild's log channel if configured
+        bot_state = bot.state(guild_id)
+        if bot_state and bot_state.log_channel_id:
+            try:
+                await bot.rest.create_message(
+                    channel=bot_state.log_channel_id,
+                    content=(
+                        f"**SubDay config changed** by {interaction.user.mention}: "
+                        f"`{field}` changed from `{display_old}` to `{display_new}`"
+                    ),
+                )
+            except hikari.HTTPError:
+                logger.warning(
+                    "G=%r: Failed to log config change to log channel",
+                    guild.name,
+                )
+    else:
+        logger.debug(
+            "G=%r U=%r: SubDay setting unchanged: %s = %r",
+            guild.name,
+            interaction.user.username,
+            field,
             display_new,
         )
 
@@ -1085,19 +1140,20 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     )
 
 
-def _register_config(subday_group: lightbulb.SlashCommandGroup) -> None:
-    @subday_group.child
-    @lightbulb.add_checks(lightbulb.owner_only)
-    @lightbulb.command(
-        "config", "Configure SubDay settings for this server (owner only)"
-    )
-    @lightbulb.implements(lightbulb.SlashSubCommand)
-    async def subday_config(ctx: lightbulb.Context) -> None:
+class SubDayConfig(
+    lightbulb.SlashCommand,
+    name="config",
+    description="Configure SubDay settings for this server (owner only)",
+    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
+        bot = _get_bot(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _config_embed(cfg)
-        components = _config_components(ctx.app)
+        components = _config_components(bot)
         await ctx.respond(
             embed=embed,
             components=components,
@@ -1126,7 +1182,7 @@ def _prize_roles_embed(cfg: SubDayGuildConfig) -> hikari.Embed:
 
 
 def _prize_roles_components(
-    bot: lightbulb.BotApp,
+    bot: DragonpawBot,
 ) -> list[hikari.api.ComponentBuilder]:
     """Build the action rows for the prize-roles message."""
     rows: list[hikari.api.ComponentBuilder] = []
@@ -1143,20 +1199,20 @@ def _prize_roles_components(
     return rows
 
 
-def _register_prize_roles(subday_group: lightbulb.SlashCommandGroup) -> None:
-    @subday_group.child
-    @lightbulb.add_checks(lightbulb.owner_only)
-    @lightbulb.command(
-        "prize-roles",
-        "Configure milestone roles for this server (owner only)",
-    )
-    @lightbulb.implements(lightbulb.SlashSubCommand)
-    async def subday_prize_roles(ctx: lightbulb.Context) -> None:
+class SubDayPrizeRoles(
+    lightbulb.SlashCommand,
+    name="prize-roles",
+    description="Configure milestone roles for this server (owner only)",
+    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
+        bot = _get_bot(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _prize_roles_embed(cfg)
-        components = _prize_roles_components(ctx.app)
+        components = _prize_roles_components(bot)
         await ctx.respond(
             embed=embed,
             components=components,
@@ -1164,31 +1220,29 @@ def _register_prize_roles(subday_group: lightbulb.SlashCommandGroup) -> None:
         )
 
 
-def _register_prizes(subday_group: lightbulb.SlashCommandGroup) -> None:
-    @subday_group.child
-    @lightbulb.add_checks(lightbulb.owner_only)
-    @lightbulb.option(
-        "prize_52", "Prize for week 52 graduation", type=str, required=False
+class SubDayPrizes(
+    lightbulb.SlashCommand,
+    name="prizes",
+    description="Set milestone prize descriptions (owner only)",
+    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+):
+    prize_13 = lightbulb.string("prize_13", "Prize for week 13 milestone", default=None)
+    prize_26 = lightbulb.string("prize_26", "Prize for week 26 milestone", default=None)
+    prize_39 = lightbulb.string("prize_39", "Prize for week 39 milestone", default=None)
+    prize_52 = lightbulb.string(
+        "prize_52", "Prize for week 52 graduation", default=None
     )
-    @lightbulb.option(
-        "prize_39", "Prize for week 39 milestone", type=str, required=False
-    )
-    @lightbulb.option(
-        "prize_26", "Prize for week 26 milestone", type=str, required=False
-    )
-    @lightbulb.option(
-        "prize_13", "Prize for week 13 milestone", type=str, required=False
-    )
-    @lightbulb.command("prizes", "Set milestone prize descriptions (owner only)")
-    @lightbulb.implements(lightbulb.SlashSubCommand)
-    async def subday_prizes(ctx: lightbulb.Context) -> None:
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
+        bot = _get_bot(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         changed = False
 
         for field in ("prize_13", "prize_26", "prize_39", "prize_52"):
-            value = getattr(ctx.options, field, None)
+            value = getattr(self, field, None)
             if value is not None:
                 old_value = getattr(cfg, field)
                 setattr(cfg, field, value)
@@ -1196,14 +1250,14 @@ def _register_prizes(subday_group: lightbulb.SlashCommandGroup) -> None:
                 logger.info(
                     "G=%r U=%r: SubDay %s: %s -> %s",
                     guild_state.guild_name,
-                    ctx.author.username,
+                    ctx.user.username,
                     field,
                     old_value,
                     value,
                 )
 
         if changed:
-            guild = await ctx.app.rest.fetch_guild(ctx.guild_id)
+            guild = await bot.rest.fetch_guild(ctx.guild_id)
             guild_state.guild_name = guild.name
             state.save(guild_state)
 

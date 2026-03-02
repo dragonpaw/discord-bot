@@ -57,16 +57,16 @@ else:
     TEST_GUILDS = []
 
 
-class DragonpawBot(lightbulb.BotApp):
+class DragonpawBot(hikari.GatewayBot):
     def __init__(self):
         super().__init__(
             token=environ["BOT_TOKEN"],
-            default_enabled_guilds=TEST_GUILDS,
             intents=INTENTS,
             force_color=True,
         )
         self._state: dict[hikari.Snowflake, structs.GuildState] = {}
-        self.user_id: hikari.Snowflake | None
+        self.user_id: hikari.Snowflake | None = None
+        self.owner_ids: set[hikari.Snowflake] = set()
         logger.info("TEST_GUILDS=%r", TEST_GUILDS)
 
     def state(self, guild_id: hikari.Snowflake) -> structs.GuildState | None:
@@ -86,6 +86,12 @@ class DragonpawBot(lightbulb.BotApp):
 
 
 bot = DragonpawBot()
+client = lightbulb.client_from_app(bot, default_enabled_guilds=TEST_GUILDS)
+
+# Register bot in DI so tasks/commands can access it
+registry = client.di.registry_for(lightbulb.di.Contexts.DEFAULT)
+registry.register_value(hikari.GatewayBot, bot)
+registry.register_value(DragonpawBot, bot)
 
 # ---------------------------------------------------------------------------- #
 #                                 File handling                                #
@@ -217,7 +223,7 @@ def state_load_yaml(guild_id: hikari.Snowflake) -> structs.GuildState | None:
 # ---------------------------------------------------------------------------- #
 
 
-@bot.listen()
+@bot.listen(hikari.ShardReadyEvent)
 async def on_ready(event: hikari.ShardReadyEvent) -> None:
     """Post-initialization for the bot."""
     logger.info("Connected to Discord as %r", event.my_user)
@@ -226,6 +232,13 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
         OAUTH_URL.format(CLIENT_ID=CLIENT_ID, OAUTH_PERMISSIONS=OAUTH_PERMISSIONS),
     )
     bot.user_id = event.my_user.id
+
+    # Populate owner_ids from the application info
+    app = await bot.rest.fetch_application()
+    bot.owner_ids = {app.owner.id}
+    if app.team is not None:
+        bot.owner_ids.update(app.team.members.keys())
+    logger.info("Bot owner IDs: %r", bot.owner_ids)
 
     flags = event.application_flags
     if (
@@ -240,7 +253,7 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
         )
 
 
-@bot.listen()
+@bot.listen(hikari.GuildAvailableEvent)
 async def on_guild_available(event: hikari.GuildAvailableEvent):
     state = bot.state(guild_id=event.guild_id)
     if state:
@@ -251,7 +264,7 @@ async def on_guild_available(event: hikari.GuildAvailableEvent):
         logger.info("G=%r No state found, so nothing to do.", name)
 
 
-@bot.listen()
+@bot.listen(hikari.GuildJoinEvent)
 async def on_guild_join(event: hikari.GuildJoinEvent):
     guild = await bot.rest.fetch_guild(guild=event.guild_id)
     logger.info("G=%r Joined server.", guild.name)
@@ -261,27 +274,29 @@ async def on_guild_join(event: hikari.GuildJoinEvent):
 #                                   Commands                                   #
 # ---------------------------------------------------------------------------- #
 
+loader = lightbulb.Loader()
 
-@bot.command
-@lightbulb.add_checks(lightbulb.has_guild_permissions(hikari.Permissions.MANAGE_ROLES))
-@lightbulb.option("url", "Link to the config you wish to use")
-@lightbulb.command(
-    "config",
+
+@loader.command
+class Config(
+    lightbulb.SlashCommand,
+    name="config",
     description="Configure Dragonpaw Bot via a url to a TOML file.",
-    ephemeral=True,
-)
-@lightbulb.implements(lightbulb.SlashCommand)
-async def config(ctx: lightbulb.Context) -> None:
-    if not ctx.guild_id:
-        logger.error("Interaction without a guild?!: %r", ctx)
-        return
+    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_ROLES)],
+):
+    url = lightbulb.string("url", "Link to the config you wish to use")
 
-    await ctx.respond("Config loading now...")
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        if not ctx.guild_id:
+            logger.error("Interaction without a guild?!: %r", ctx)
+            return
 
-    g = await bot.rest.fetch_guild(guild=ctx.guild_id)
-    logger.info("G=%r Setting up guild with file %r", g.name, ctx.options.url)
-    assert isinstance(ctx.app, DragonpawBot)
-    await configure_guild(bot=ctx.app, guild=g, url=ctx.options.url)
+        await ctx.respond("Config loading now...", flags=hikari.MessageFlag.EPHEMERAL)
+
+        g = await bot.rest.fetch_guild(guild=ctx.guild_id)
+        logger.info("G=%r Setting up guild with file %r", g.name, self.url)
+        await configure_guild(bot=bot, guild=g, url=self.url)
 
 
 # ---------------------------------------------------------------------------- #
@@ -355,6 +370,12 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
     logger.info("G=%r Configured guild.", guild.name)
 
 
-bot.load_extensions("dragonpaw_bot.plugins.lobby")
-bot.load_extensions("dragonpaw_bot.plugins.role_menus")
-bot.load_extensions("dragonpaw_bot.plugins.subday")
+@bot.listen(hikari.StartingEvent)
+async def on_starting(_: hikari.StartingEvent) -> None:
+    client.register(loader)
+    await client.load_extensions(
+        "dragonpaw_bot.plugins.lobby",
+        "dragonpaw_bot.plugins.role_menus",
+        "dragonpaw_bot.plugins.subday",
+    )
+    await client.start()

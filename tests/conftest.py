@@ -3,7 +3,7 @@ import os
 import pytest
 
 # bot.py reads these env vars at import time, so set dummies before importing.
-os.environ.setdefault("BOT_TOKEN", "fake-token-for-tests")
+os.environ.setdefault("BOT_TOKEN", "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.GabcDE.fake-token-for-tests-only")
 os.environ.setdefault("CLIENT_ID", "000000000000000000")
 
 import dragonpaw_bot.bot as bot_module  # noqa: E402

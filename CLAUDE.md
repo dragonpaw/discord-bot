@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikari-lightbulb** framework. It provides features for Discord servers: reaction-based role menus, a lobby/welcome system with optional click-through rules, and a 52-week guided journal program (SubDay).
+A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikari-lightbulb v3** framework. It provides features for Discord servers: reaction-based role menus, a lobby/welcome system with optional click-through rules, and a 52-week guided journal program (SubDay).
 
 ## Build & Run Commands
 
@@ -27,16 +27,16 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **Entry point:** `dragonpaw_bot/__main__.py` → calls `bot.run()` from `bot.py`.
 
-**`bot.py`** — Core module. Defines `DragonpawBot` (subclass of `lightbulb.BotApp`), the `/config` slash command, guild state persistence (YAML files in `state/`), and config loading from remote TOML files (including GitHub Gists via `http.py`).
+**`bot.py`** — Core module. Defines `DragonpawBot` (subclass of `hikari.GatewayBot`) with state management, plus a `lightbulb.Client` created via `client_from_app()`. The `/config` slash command is defined here as a class-based command. Extensions are loaded asynchronously on `StartingEvent`.
 
 **`structs.py`** — All data models using Pydantic v2. Two layers:
 - **Config models** (`GuildConfig`, `LobbyConfig`, `RolesConfig`, etc.) — parsed from TOML config files
 - **State models** (`GuildState`, `RoleMenuOptionState`) — runtime state persisted as YAML files
 
-**Plugins** (loaded via `bot.load_extensions`):
+**Extensions** (loaded via `client.load_extensions` during `StartingEvent`):
 - **`plugins/role_menus.py`** — Posts embed menus with emoji reactions in a designated channel. Listens for reaction add/remove events to assign/remove Discord roles. Supports single-select menus (picking one removes others).
 - **`plugins/lobby.py`** — Handles new member joins: auto-assigns a role, posts welcome messages, and optionally shows server rules with an "I agree" button that removes the lobby role.
-- **`plugins/subday/`** — 52-week guided journal program ("Where I am Led"). See `plugins/subday.md` for details. Multi-file plugin with models, commands, scheduler, prompt parser, and state persistence.
+- **`plugins/subday/`** — 52-week guided journal program ("Where I am Led"). See `plugins/subday.md` for details. Multi-file plugin with models, commands, cron scheduler, prompt parser, and state persistence.
 
 **`utils.py`** — Discord helpers: deleting bot messages, looking up channels/roles/emojis by name, checking member roles, error reporting.
 
@@ -49,13 +49,22 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 ## Key Conventions
 
 - Uses `uvloop` as the async event loop
+- **lightbulb v3 patterns:**
+  - Extensions use `lightbulb.Loader()` (not `Plugin`)
+  - Commands are class-based, inheriting from `lightbulb.SlashCommand` with `@lightbulb.invoke` on the invoke method
+  - Command groups use `lightbulb.Group()` with `@group.register` for subcommands
+  - Options are class attributes: `user = lightbulb.user("user", "description")`
+  - Checks use `hooks=[lightbulb.prefab.owner_only]` or `hooks=[lightbulb.prefab.has_permissions(...)]` in class params
+  - Scheduled tasks use `@loader.task(lightbulb.crontrigger("..."))` with DI
+  - Context API: `ctx.user` (not `ctx.author`), `ctx.client.app` to get the bot
+  - Event listeners: `@loader.listener(hikari.EventType)`, access bot via `event.app`
 - Pydantic v2 API (`model_validate`, `.model_dump()`)
 - Logging follows the pattern `logger.info("G=%r U=%r: ...", guild_name, username, ...)`
 - Debug logging is enabled for the `dragonpaw_bot` logger (`logging.DEBUG`)
 - Python version target: 3.13
 - Tests use `pytest-asyncio` with `asyncio_mode = "auto"` (no `@pytest.mark.asyncio` needed)
 - Ruff lint rules: isort (`I`) and pylint (`PL`) enabled in addition to defaults
-- New features should be implemented as plugins under `dragonpaw_bot/plugins/`
+- New features should be implemented as extensions under `dragonpaw_bot/plugins/`
 - Plugins should include comprehensive logging at appropriate levels:
   - **Info**: user actions (signups, completions, config changes)
   - **Debug**: internal details (state loads, DM delivery, tick timing)

@@ -28,16 +28,7 @@ SINGLE_ROLE_MENU = (
     "Choosing a new one will remove all the others from your profile."
 )
 
-plugin = lightbulb.Plugin("RoleMenus")
-plugin.add_checks(lightbulb.checks.human_only)
-
-
-def load(bot):
-    bot.add_plugin(plugin)
-
-
-def unload(bot):
-    bot.remove_plugin(plugin)
+loader = lightbulb.Loader()
 
 
 async def configure_role_menus(
@@ -166,23 +157,20 @@ def _build_option_state(
     )
 
 
-@plugin.listener(event=hikari.GuildReactionAddEvent)
+@loader.listener(hikari.GuildReactionAddEvent)
 async def on_reaction_add(event: hikari.GuildReactionAddEvent):
     """Process a possible role addition request."""
-
-    assert isinstance(plugin.bot, DragonpawBot)
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
 
     if not event.emoji_name:
         logger.error("Reaction without an emoji?!: %r", event)
         return
 
-    assert plugin.bot.user_id
-    if event.user_id == plugin.bot.user_id:
+    assert bot.user_id
+    if event.user_id == bot.user_id:
         return
 
-    assert isinstance(plugin.bot, DragonpawBot)
-
-    c = plugin.bot.state(event.guild_id)
+    c = bot.state(event.guild_id)
     if not c:
         logger.error("Called on an unknown guild: %r", event.guild_id)
         return
@@ -200,13 +188,6 @@ async def on_reaction_add(event: hikari.GuildReactionAddEvent):
             "Unknown emoji %r... Don't care that it is being added...", event.emoji_name
         )
         return
-        # TODO: Police the messages I sent for rogue emoji added by users
-        # logger.warning("G:%s Unknown emoji on role... Removing it.", c.name)
-        # await self.rest.delete_all_reactions_for_emoji(
-        #     channel=event.channel_id,
-        #     message=event.message_id,
-        #     emoji=event.emoji_name,
-        # )
 
     todo = c.role_emojis[key]
     logger.info(
@@ -225,7 +206,7 @@ async def on_reaction_add(event: hikari.GuildReactionAddEvent):
     except hikari.ForbiddenError:
         role = c.role_names[todo.add_role_id]
         await utils.report_errors(
-            bot=plugin.bot,
+            bot=bot,
             guild_id=event.guild_id,
             error=(
                 f"Unable to add role: **{role}**, "
@@ -242,7 +223,7 @@ async def on_reaction_add(event: hikari.GuildReactionAddEvent):
         except hikari.ForbiddenError:
             role = c.role_names[r_id]
             await utils.report_errors(
-                bot=plugin.bot,
+                bot=bot,
                 guild_id=event.guild_id,
                 error=(
                     f"Unable to remove role: **{role}**, "
@@ -251,16 +232,15 @@ async def on_reaction_add(event: hikari.GuildReactionAddEvent):
             )
 
 
-@plugin.listener(event=hikari.GuildReactionDeleteEvent)
+@loader.listener(hikari.GuildReactionDeleteEvent)
 async def on_reaction_remove(event: hikari.GuildReactionDeleteEvent):
     """Process a possible request for role removal."""
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
 
-    assert isinstance(plugin.bot, DragonpawBot)
-
-    if event.user_id == plugin.bot.user_id:
+    if event.user_id == bot.user_id:
         return
 
-    c = plugin.bot.state(event.guild_id)
+    c = bot.state(event.guild_id)
     if not c:
         logger.error("Called on an unknown guild: %r", event.guild_id)
         return
@@ -280,7 +260,7 @@ async def on_reaction_remove(event: hikari.GuildReactionDeleteEvent):
         return
 
     # Is this user in the cache?
-    cached = plugin.bot.cache.get_member(event.guild_id, event.user_id)
+    cached = bot.cache.get_member(event.guild_id, event.user_id)
     # If so, this makes the logs nicer
     if cached:
         username = cached.display_name
@@ -296,7 +276,7 @@ async def on_reaction_remove(event: hikari.GuildReactionDeleteEvent):
     )
 
     try:
-        await plugin.bot.rest.remove_role_from_member(
+        await bot.rest.remove_role_from_member(
             guild=c.id,
             user=event.user_id,
             role=todo.add_role_id,
@@ -306,7 +286,7 @@ async def on_reaction_remove(event: hikari.GuildReactionDeleteEvent):
         logger.error("G=%r Unable to remove role, got Forbidden", c.name)
         role = c.role_names[todo.add_role_id]
         await utils.report_errors(
-            bot=plugin.bot,
+            bot=bot,
             guild_id=event.guild_id,
             error=(
                 f"Unable to remove role: **{role}**, "

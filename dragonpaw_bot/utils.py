@@ -117,7 +117,7 @@ async def get_guild(
 ) -> hikari.Guild | hikari.RESTGuild:
     """Get guild from cache, falling back to REST fetch."""
     assert ctx.guild_id
-    guild = ctx.get_guild()
+    guild = bot.cache.get_guild(ctx.guild_id)
     if guild:
         return guild
     logger.debug("G=%r: Guild not in cache, fetching via REST", ctx.guild_id)
@@ -158,7 +158,18 @@ async def check_channel_perms(
         return []
 
     # Apply channel permission overwrites
-    channel = await bot.rest.fetch_channel(channel_id)
+    try:
+        channel = await bot.rest.fetch_channel(channel_id)
+    except hikari.ForbiddenError:
+        logger.warning(
+            "Cannot fetch channel %r in guild %r — bot lacks View Channel permission",
+            channel_id,
+            guild_id,
+        )
+        return ["View Channel (cannot access channel)"]
+    except hikari.NotFoundError:
+        logger.warning("Channel %r in guild %r no longer exists", channel_id, guild_id)
+        return ["Channel not found (may have been deleted)"]
     if isinstance(channel, hikari.PermissibleGuildChannel):
         overwrites = channel.permission_overwrites
         # @everyone overwrite
