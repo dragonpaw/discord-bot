@@ -611,7 +611,7 @@ class SubDayAbout(
 
 
 def _owned_sub_status_embed(
-    sub_user_id: int, p: SubDayParticipant, cfg: SubDayGuildConfig
+    sub_user_id: int, p: SubDayParticipant, cfg: SubDayGuildConfig, sub_name: str
 ) -> hikari.Embed:
     """Build a compact status embed for an owned sub (no star chart)."""
     if p.current_week > TOTAL_WEEKS:
@@ -636,7 +636,7 @@ def _owned_sub_status_embed(
             status += f"\n🎁 Next prize ({weeks_away}w away): **{prize}**"
 
     embed = hikari.Embed(
-        title=f"{icon} Sub's Progress",
+        title=f"{icon} {sub_name}'s Progress",
         description=f"<@{sub_user_id}>\n{status}",
         color=SOLARIZED_CYAN,
     )
@@ -736,6 +736,12 @@ def _own_progress_embed(
         value=f"<t:{int(p.signup_date.timestamp())}:R>",
         inline=True,
     )
+    if p.owner_id:
+        embed.add_field(
+            name="👤 Owner",
+            value=f"<@{p.owner_id}>",
+            inline=True,
+        )
     return embed
 
 
@@ -774,10 +780,16 @@ class SubDayStatus(
             display_name = ctx.member.display_name if ctx.member else ctx.user.username
             embeds.append(_own_progress_embed(own_participant, display_name, cfg))
 
+        bot = _get_bot(ctx)
         for sub_uid, sub_p in owned_subs:
             if len(embeds) >= MAX_EMBEDS_PER_MESSAGE:
                 break
-            embeds.append(_owned_sub_status_embed(sub_uid, sub_p, cfg))
+            try:
+                member = await bot.rest.fetch_member(ctx.guild_id, sub_uid)
+                sub_name = member.display_name
+            except hikari.NotFoundError:
+                sub_name = f"User {sub_uid}"
+            embeds.append(_owned_sub_status_embed(sub_uid, sub_p, cfg, sub_name))
 
         await ctx.respond(
             embeds=embeds,
