@@ -7,7 +7,6 @@ from os import environ
 from pathlib import Path
 from typing import Any
 
-import dotenv
 import hikari
 import hikari.messages
 import lightbulb
@@ -18,8 +17,6 @@ import yaml
 from dragonpaw_bot import http, structs, utils
 from dragonpaw_bot.plugins.lobby import configure_lobby
 from dragonpaw_bot.plugins.role_menus import configure_role_menus
-
-dotenv.load_dotenv()
 
 logging.getLogger("dragonpaw_bot").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -58,7 +55,6 @@ if "TEST_GUILDS" in environ:
     TEST_GUILDS = [int(x) for x in environ["TEST_GUILDS"].split(",")]
 else:
     TEST_GUILDS = []
-logger.info("TEST_GUILDS=%r", TEST_GUILDS)
 
 
 class DragonpawBot(lightbulb.BotApp):
@@ -71,6 +67,7 @@ class DragonpawBot(lightbulb.BotApp):
         )
         self._state: dict[hikari.Snowflake, structs.GuildState] = {}
         self.user_id: hikari.Snowflake | None
+        logger.info("TEST_GUILDS=%r", TEST_GUILDS)
 
     def state(self, guild_id: hikari.Snowflake) -> structs.GuildState | None:
         # If we don't have a state in-memory, maybe there is one on disk?

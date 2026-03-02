@@ -22,7 +22,6 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - `CLIENT_ID` — Discord application client ID
 - `TEST_GUILDS` (optional) — Comma-separated guild IDs for slash command testing
 
-A `.env` file is loaded automatically via `python-dotenv`.
 
 ## Architecture
 
