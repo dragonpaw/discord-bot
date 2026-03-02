@@ -196,6 +196,7 @@ async def _dm_completion(
     target: hikari.Member,
     week: int,
     chart_bytes: hikari.Bytes,
+    guild_name: str,
 ) -> None:
     """DM the target their completion embed and star chart."""
     try:
@@ -203,10 +204,18 @@ async def _dm_completion(
         embed = _regular_completion_embed(target, week)
         embed.set_image(chart_bytes)
         await dm.send(embed=embed)
-        logger.info("U=%r: Sent completion DM for week %d", target.username, week)
+        logger.info(
+            "G=%r U=%r: Sent completion DM for week %d",
+            guild_name,
+            target.username,
+            week,
+        )
     except hikari.HTTPError as exc:
         logger.warning(
-            "U=%r: Cannot DM user for completion notice: %s", target.username, exc
+            "G=%r U=%r: Cannot DM user for completion notice: %s",
+            guild_name,
+            target.username,
+            exc,
         )
 
 
@@ -241,9 +250,15 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
     target: hikari.Member,
     week: int,
     cfg: SubDayGuildConfig,
+    guild_name: str,
 ) -> None:
     """Post achievement embed and handle milestone/graduation rewards."""
-    logger.debug("U=%r: Posting achievement for week %d", target.username, week)
+    logger.debug(
+        "G=%r U=%r: Posting achievement for week %d",
+        guild_name,
+        target.username,
+        week,
+    )
     prizes = cfg.milestone_prizes()
 
     # Fetch channels once upfront
@@ -268,7 +283,7 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         week_completed=True,
     )
 
-    await _dm_completion(target, week, chart_bytes)
+    await _dm_completion(target, week, chart_bytes, guild_name)
 
     milestone_roles = cfg.milestone_roles()
 
@@ -291,7 +306,9 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
 
     # Milestone or graduation
     if week == TOTAL_WEEKS:
-        logger.info("U=%r: GRADUATED from Where I am Led!", target.username)
+        logger.info(
+            "G=%r U=%r: GRADUATED from Where I am Led!", guild_name, target.username
+        )
         embed = _graduation_embed(target, prizes)
         staff_msg = (
             f"{completer.mention} — {target.mention} has **graduated** "
@@ -300,7 +317,8 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         )
     else:
         logger.info(
-            "U=%r: Reached milestone week %d (%s)",
+            "G=%r U=%r: Reached milestone week %d (%s)",
+            guild_name,
             target.username,
             week,
             role_name or "no role",
@@ -329,7 +347,9 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         role = await utils.guild_role_by_name(bot, guild_id, role_name)
         if role:
             await target.add_role(role, reason=f"SubDay: week {week}")
-            logger.info("U=%r: Assigned role %r", target.username, role.name)
+            logger.info(
+                "G=%r U=%r: Assigned role %r", guild_name, target.username, role.name
+            )
         else:
             logger.warning("Role %r not found in guild", role_name)
 
@@ -495,7 +515,8 @@ class SubDayAbout(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         logger.info(
-            "U=%r: Viewed SubDay about",
+            "G=%r U=%r: Viewed SubDay about",
+            ctx.guild_id,
             ctx.user.username,
         )
 
@@ -738,7 +759,9 @@ class SubDayStatus(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        logger.info("U=%r: Checking SubDay status", ctx.user.username)
+        logger.info(
+            "G=%r U=%r: Checking SubDay status", ctx.guild_id, ctx.user.username
+        )
 
         guild_state = state.load(int(ctx.guild_id))
         user_id = int(ctx.user.id)
@@ -902,29 +925,6 @@ class SubDayOwner(
         )
 
 
-async def _log_to_guild(
-    bot: DragonpawBot, guild_id: int, guild_name: str | None, message: str
-) -> None:
-    """Send a message to the guild's log channel, if one is configured.
-
-    Best-effort: silently returns if no log channel is set. Errors are logged
-    as warnings but not raised.
-    """
-    bot_state = bot.state(hikari.Snowflake(guild_id))
-    if bot_state and bot_state.log_channel_id:
-        try:
-            await bot.rest.create_message(
-                channel=bot_state.log_channel_id, content=message
-            )
-        except Exception:
-            logger.warning(
-                "G=%r: Failed to send to log channel: %s",
-                guild_name,
-                message,
-                exc_info=True,
-            )
-
-
 async def _handle_owner_approve(
     interaction: hikari.ComponentInteraction,
     guild_state: state.SubDayGuildState,
@@ -983,13 +983,14 @@ async def _handle_owner_approve(
             sub_user_id,
         )
 
-    await _log_to_guild(
-        bot,
-        guild_id,
-        guild_state.guild_name,
-        f"✅ **SubDay owner accepted** — <@{owner_user_id}> "
-        f"accepted ownership of <@{sub_user_id}>",
-    )
+    if guild_state.config.staff_channel:
+        await _notify_staff(
+            bot,
+            hikari.Snowflake(guild_id),
+            guild_state.config.staff_channel,
+            f"✅ **SubDay owner accepted** — <@{owner_user_id}> "
+            f"accepted ownership of <@{sub_user_id}>",
+        )
 
 
 async def _handle_owner_deny(
@@ -1031,13 +1032,14 @@ async def _handle_owner_deny(
             sub_user_id,
         )
 
-    await _log_to_guild(
-        bot,
-        guild_id,
-        guild_state.guild_name,
-        f"❌ **SubDay owner declined** — <@{owner_user_id}> "
-        f"declined ownership of <@{sub_user_id}>",
-    )
+    if guild_state.config.staff_channel:
+        await _notify_staff(
+            bot,
+            hikari.Snowflake(guild_id),
+            guild_state.config.staff_channel,
+            f"❌ **SubDay owner declined** — <@{owner_user_id}> "
+            f"declined ownership of <@{sub_user_id}>",
+        )
 
 
 async def handle_owner_interaction(interaction: hikari.ComponentInteraction) -> None:
@@ -1230,7 +1232,9 @@ class SubDayComplete(
         participant.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
         state.save(guild_state)
 
-        await _post_achievement(bot, ctx.guild_id, ctx.member, target, week, cfg)
+        await _post_achievement(
+            bot, ctx.guild_id, ctx.member, target, week, cfg, guild_state.guild_name
+        )
 
         # Notify staff channel of completion (milestones are already notified
         # by _post_achievement, so only send for regular completions/backfills)

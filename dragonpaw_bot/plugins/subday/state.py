@@ -47,7 +47,7 @@ def save(state: SubDayGuildState) -> None:
     """Save guild state to disk and update cache."""
     _cache[state.guild_id] = state
     path = _state_path(state.guild_id)
-    logger.info("Saving subday state to: %s", path)
+    logger.info("G=%r: Saving subday state to: %s", state.guild_name, path)
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     with safer.open(path, "w") as f:
         yaml.dump(

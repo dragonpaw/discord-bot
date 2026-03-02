@@ -145,7 +145,7 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
         return
 
     logger.info(
-        "G:%s U:%s agreed to the rules, they are %s no more.",
+        "G=%r U=%r: Agreed to the rules, they are %s no more.",
         guild_state.name,
         interaction.user.username,
         guild_state.role_names[guild_state.lobby_role_id],
