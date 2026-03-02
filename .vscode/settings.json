@@ -26,5 +26,9 @@
     "lightbulb",
     "hikari",
     "uvloop"
-  ]
+  ],
+  "[markdown]": {
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true
+  }
 }

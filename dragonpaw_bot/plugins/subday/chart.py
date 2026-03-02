@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 FONTS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "fonts"
 FONT_TITLE = FONTS_DIR / "DaxCondensed-Bold.ttf"
 FONT_NUMBERS = FONTS_DIR / "DaxCondensed-Regular.ttf"
+FONT_NUMBERS_LIGHT = FONTS_DIR / "DaxCondensed_Light.ttf"
 FONT_MILESTONE = FONTS_DIR / "DaxCondensed-Medium.ttf"
 FONT_USERNAME = FONTS_DIR / "Caveat-Bold.ttf"
 
@@ -31,62 +32,65 @@ SS = 3
 
 # Canvas
 PADDING = 24
-TITLE_HEIGHT = 48
-SECTION_GAP = 8
-DIVIDER_HEIGHT = 2
+TITLE_HEIGHT = 62  # includes progress area
+PROGRESS_AREA_HEIGHT = 14
+SECTION_GAP = 16
 CELL_W = 100
 CELL_H = 44
+CORNER_RADIUS = 10
 
 GRID_WIDTH = COLS * CELL_W
 CANVAS_WIDTH = GRID_WIDTH + 2 * PADDING
-GRID_HEIGHT = SECTIONS * ROWS_PER_SECTION * CELL_H + (SECTIONS - 1) * (
-    SECTION_GAP + DIVIDER_HEIGHT
-)
+GRID_HEIGHT = SECTIONS * ROWS_PER_SECTION * CELL_H + (SECTIONS - 1) * SECTION_GAP
 CANVAS_HEIGHT = PADDING + TITLE_HEIGHT + GRID_HEIGHT + PADDING
 
 # Star geometry — golden-ratio-based inner radius for a classic star shape
-STAR_OUTER = 18
+STAR_OUTER = 22
 STAR_INNER = STAR_OUTER * 0.38
-GOLD_STAR_OUTER = 22
+GOLD_STAR_OUTER = 26
 GOLD_STAR_INNER = GOLD_STAR_OUTER * 0.38
 
 # Colors
-BG_COLOR = (255, 255, 255)
-DIVIDER_COLOR = (180, 180, 180)
+BG_COLOR = (252, 248, 240)
 TEXT_COLOR = (60, 60, 60)
-NUMBER_COLOR = (80, 80, 80)
-EMPTY_STAR_COLOR = (200, 200, 200)
+NUMBER_COLOR = (185, 180, 170)
+EMPTY_STAR_COLOR = (225, 220, 212)
 GOLD = (255, 215, 0)
 GOLD_DARK = (200, 160, 0)
 GOLD_GLOW = (255, 230, 80, 90)
 HOT_PINK = (255, 20, 100)
 
 STICKER_COLORS = [
-    (220, 40, 40),  # red
-    (255, 20, 100),  # hot pink
-    (50, 80, 220),  # royal blue
-    (70, 170, 240),  # sky blue
-    (40, 170, 70),  # green
-    (100, 210, 50),  # lime
-    (255, 210, 30),  # yellow
-    (255, 140, 30),  # orange
-    (140, 50, 200),  # purple
-    (0, 180, 170),  # teal
-    (200, 40, 180),  # magenta
-    (255, 110, 90),  # coral
-    (180, 30, 60),  # crimson
-    (255, 80, 180),  # rose
-    (30, 50, 180),  # navy
-    (100, 200, 220),  # aqua
-    (20, 130, 50),  # forest
-    (180, 220, 40),  # chartreuse
-    (240, 180, 50),  # amber
-    (220, 90, 20),  # rust
-    (100, 40, 160),  # indigo
-    (60, 210, 140),  # mint
-    (160, 20, 120),  # plum
-    (230, 70, 50),  # vermilion
+    (200, 60, 60),  # muted red
+    (225, 95, 135),  # dusty rose
+    (75, 110, 200),  # medium blue
+    (100, 165, 210),  # soft sky
+    (70, 155, 90),  # sage green
+    (160, 195, 70),  # olive-lime
+    (230, 185, 55),  # warm amber
+    (215, 125, 50),  # burnt orange
+    (130, 75, 175),  # muted purple
+    (50, 165, 155),  # soft teal
+    (175, 70, 145),  # plum
+    (85, 180, 130),  # seafoam
 ]
+
+# Section background tints (progressively warmer)
+SECTION_TINTS: list[tuple[int, int, int, int] | None] = [
+    None,
+    (250, 244, 232, 25),
+    (248, 238, 222, 35),
+    (245, 232, 210, 45),
+]
+
+# Progress bar colors
+PROGRESS_TRACK_COLOR = (235, 230, 222)
+PROGRESS_FILL_COLOR = (200, 180, 140)
+PROGRESS_TEXT_COLOR = (160, 155, 145)
+
+# Milestone cell highlight colors
+MILESTONE_HIGHLIGHT_ACTIVE = (255, 245, 210, 60)
+MILESTONE_HIGHLIGHT_INACTIVE = (240, 238, 232, 40)
 
 # Icon color for prize line drawings
 ICON_COLOR = (100, 100, 100)
@@ -124,7 +128,7 @@ def _render_star_sprite(
     outer_r: float,
     inner_r: float,
     rotation: float = 0.0,
-    outline_width: int = 2,
+    outline_width: int = 1,
 ) -> Image.Image:
     """Render a single anti-aliased star as an RGBA sprite.
 
@@ -152,7 +156,7 @@ def _paste_star(
     outer_r: float,
     inner_r: float,
     rotation: float = 0.0,
-    outline_width: int = 2,
+    outline_width: int = 1,
 ) -> None:
     """Paste an anti-aliased star sprite centered at (cx, cy)."""
     size = int(outer_r * 2 + 4)
@@ -194,7 +198,7 @@ def _paste_gold_star_with_glow(
 
 ICONS_DIR = Path(__file__).resolve().parent / "icons"
 _ICON_FILES = ["gift_card.png", "tail.png", "butt_plug.png", "flogger.png"]
-ICON_SIZE = 28
+ICON_SIZE = 34
 
 # Module-level cache for loaded + resized icon sprites
 _icon_cache: dict[str, Image.Image] = {}
@@ -235,8 +239,96 @@ def _paste_prize_icon(
 
 
 # ---------------------------------------------------------------------------- #
+#                             Rounded corners                                   #
+# ---------------------------------------------------------------------------- #
+
+
+def _apply_rounded_corners(img: Image.Image, radius: int) -> Image.Image:
+    """Apply rounded corners to an RGBA image using an alpha mask."""
+    mask = Image.new("L", img.size, 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.rounded_rectangle(
+        [(0, 0), (img.width - 1, img.height - 1)],
+        radius=radius,
+        fill=255,
+    )
+    img.putalpha(mask)
+    return img
+
+
+# ---------------------------------------------------------------------------- #
 #                             Main render function                              #
 # ---------------------------------------------------------------------------- #
+
+
+def _draw_progress_bar(
+    draw: ImageDraw.ImageDraw,
+    grid_top: int,
+    last_completed: int,
+    font: ImageFont.FreeTypeFont,
+) -> None:
+    """Draw the thin progress bar and fraction text below the title."""
+    bar_y = grid_top - PROGRESS_AREA_HEIGHT - 4
+    bar_height = 4
+    bar_left = PADDING
+    bar_right = CANVAS_WIDTH - PADDING
+    bar_width = bar_right - bar_left
+    progress_frac = last_completed / TOTAL_WEEKS
+
+    # Progress text right-aligned above bar
+    progress_text = f"{last_completed} / {TOTAL_WEEKS}"
+    pt_bbox = font.getbbox(progress_text)
+    pt_w = pt_bbox[2] - pt_bbox[0]
+    draw.text(
+        (bar_right - pt_w, bar_y - 12),
+        progress_text,
+        font=font,
+        fill=PROGRESS_TEXT_COLOR,
+    )
+
+    # Track (rounded)
+    draw.rounded_rectangle(
+        [(bar_left, bar_y), (bar_right, bar_y + bar_height)],
+        radius=2,
+        fill=PROGRESS_TRACK_COLOR,
+    )
+    # Fill (rounded)
+    if progress_frac > 0:
+        fill_right = bar_left + int(bar_width * progress_frac)
+        draw.rounded_rectangle(
+            [(bar_left, bar_y), (fill_right, bar_y + bar_height)],
+            radius=2,
+            fill=PROGRESS_FILL_COLOR,
+        )
+
+    # Milestone markers at 13, 26, 39, 52
+    bar_cy = bar_y + bar_height / 2
+    for mw in (13, 26, 39, 52):
+        mx = bar_left + int(bar_width * mw / TOTAL_WEEKS)
+        reached = last_completed >= mw
+        color = PROGRESS_FILL_COLOR if reached else PROGRESS_TRACK_COLOR
+        r = 3
+        draw.regular_polygon((mx, bar_cy, r), n_sides=4, fill=color, outline=BG_COLOR)
+
+
+def _draw_section_tints(img: Image.Image, grid_top: int) -> None:
+    """Apply progressively warmer tints to each section background."""
+    for section in range(SECTIONS):
+        tint = SECTION_TINTS[section]
+        if tint is None:
+            continue
+        section_y = grid_top + section * (ROWS_PER_SECTION * CELL_H + SECTION_GAP)
+        section_h = ROWS_PER_SECTION * CELL_H
+        overlay = Image.new("RGBA", (GRID_WIDTH, section_h), tint)
+        img.paste(
+            Image.alpha_composite(
+                img.crop(
+                    (PADDING, section_y, PADDING + GRID_WIDTH, section_y + section_h)
+                ),
+                overlay,
+            ),
+            (PADDING, section_y),
+        )
 
 
 def render_star_chart(
@@ -257,7 +349,7 @@ def render_star_chart(
     week_colors = [rng.choice(STICKER_COLORS) for _ in range(TOTAL_WEEKS)]
     week_rotations = [rng.uniform(-0.20, 0.20) for _ in range(TOTAL_WEEKS)]
     week_jitter_x = [rng.uniform(-3, 3) for _ in range(TOTAL_WEEKS)]
-    week_jitter_y = [rng.uniform(-2, 2) for _ in range(TOTAL_WEEKS)]
+    week_jitter_y = [rng.uniform(-1, 1) for _ in range(TOTAL_WEEKS)]
 
     img = Image.new("RGBA", (CANVAS_WIDTH, CANVAS_HEIGHT), (*BG_COLOR, 255))
     draw = ImageDraw.Draw(img)
@@ -265,7 +357,8 @@ def render_star_chart(
     # Load fonts
     title_font = ImageFont.truetype(str(FONT_TITLE), 32)
     username_font = ImageFont.truetype(str(FONT_USERNAME), 38)
-    number_font = ImageFont.truetype(str(FONT_NUMBERS), 16)
+    number_font = ImageFont.truetype(str(FONT_NUMBERS_LIGHT), 13)
+    progress_font = ImageFont.truetype(str(FONT_NUMBERS_LIGHT), 11)
 
     # ---- Title bar ----
     title_text = "Subday Journals:"
@@ -278,8 +371,7 @@ def render_star_chart(
         fill=HOT_PINK,
     )
 
-    # ---- Grid ----
-    # Determine the last completed week for rendering
+    # ---- Determine completion ----
     if current_week > TOTAL_WEEKS:
         last_completed = TOTAL_WEEKS
     elif week_completed:
@@ -288,21 +380,15 @@ def render_star_chart(
         last_completed = current_week - 1
 
     grid_top = PADDING + TITLE_HEIGHT
+
+    _draw_progress_bar(draw, grid_top, last_completed, progress_font)
+    _draw_section_tints(img, grid_top)
+
+    # ---- Grid ----
     week_num = 1
 
     for section in range(SECTIONS):
-        section_y = grid_top + section * (
-            ROWS_PER_SECTION * CELL_H + SECTION_GAP + DIVIDER_HEIGHT
-        )
-
-        # Draw section divider (not before first section)
-        if section > 0:
-            div_y = section_y - SECTION_GAP // 2
-            draw.line(
-                [(PADDING, div_y), (CANVAS_WIDTH - PADDING, div_y)],
-                fill=DIVIDER_COLOR,
-                width=DIVIDER_HEIGHT,
-            )
+        section_y = grid_top + section * (ROWS_PER_SECTION * CELL_H + SECTION_GAP)
 
         for row in range(ROWS_PER_SECTION):
             for col in range(COLS):
@@ -339,20 +425,10 @@ def render_star_chart(
                         milestone_reached,
                     )
 
-    # ---- Border around the whole grid ----
-    draw.rectangle(
-        [
-            (PADDING - 1, grid_top - 1),
-            (CANVAS_WIDTH - PADDING + 1, grid_top + GRID_HEIGHT + 1),
-        ],
-        outline=DIVIDER_COLOR,
-        width=2,
-    )
-
-    # ---- Export as RGB PNG ----
-    rgb = img.convert("RGB")
+    # ---- Rounded corners & export as RGBA PNG ----
+    img = _apply_rounded_corners(img, CORNER_RADIUS)
     buf = io.BytesIO()
-    rgb.save(buf, format="PNG")
+    img.save(buf, format="PNG")
     buf.seek(0)
     return hikari.Bytes(buf, "star_chart.png")
 
@@ -380,7 +456,7 @@ def _draw_week_cell(
     nb = number_font.getbbox(num_text)
     nw = nb[2] - nb[0]
     draw.text(
-        (cx - 28 - nw / 2, cy - (nb[3] - nb[1]) / 2 - 1),
+        (cx - 32 - nw / 2, cy - (nb[3] - nb[1]) / 2 - 1),
         num_text,
         font=number_font,
         fill=NUMBER_COLOR,
@@ -410,7 +486,7 @@ def _draw_week_cell(
             outline=EMPTY_STAR_COLOR,
             outer_r=STAR_OUTER,
             inner_r=STAR_INNER,
-            outline_width=2,
+            outline_width=1,
         )
 
 
@@ -422,7 +498,26 @@ def _draw_prize_cell(
     section: int,
     milestone_reached: bool,
 ) -> None:
-    """Draw a prize cell with gold star and icon."""
+    """Draw a prize cell with gold star, icon, and subtle highlight."""
+    # Milestone cell highlight
+    highlight_color = (
+        MILESTONE_HIGHLIGHT_ACTIVE
+        if milestone_reached
+        else MILESTONE_HIGHLIGHT_INACTIVE
+    )
+    cell_w, cell_h = CELL_W - 4, CELL_H - 4
+    overlay = Image.new("RGBA", (cell_w, cell_h), (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    overlay_draw.rounded_rectangle(
+        [(0, 0), (cell_w - 1, cell_h - 1)],
+        radius=6,
+        fill=highlight_color,
+    )
+    paste_x = int(cx - cell_w / 2)
+    paste_y = int(cy - cell_h / 2)
+    bg_crop = img.crop((paste_x, paste_y, paste_x + cell_w, paste_y + cell_h))
+    img.paste(Image.alpha_composite(bg_crop, overlay), (paste_x, paste_y))
+
     star_cx = cx + 10
     if milestone_reached:
         _paste_gold_star_with_glow(img, star_cx, cy, GOLD_STAR_OUTER, GOLD_STAR_INNER)
@@ -435,7 +530,7 @@ def _draw_prize_cell(
             outline=EMPTY_STAR_COLOR,
             outer_r=GOLD_STAR_OUTER,
             inner_r=GOLD_STAR_INNER,
-            outline_width=2,
+            outline_width=1,
         )
 
     # Prize icon to the left of the star
