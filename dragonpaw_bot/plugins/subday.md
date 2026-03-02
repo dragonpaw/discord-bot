@@ -10,7 +10,7 @@ All role permissions, channel names, and prize descriptions are configurable per
 
 **Guild owner bypass:** The server owner (guild owner) always passes role permission checks (enroll, complete, backfill), regardless of whether they have the required role.
 
-**Admin commands:** The config, prize-roles, and prizes commands require Manage Guild permission. The config interaction handler additionally checks that the user is the server owner.
+**Admin commands:** The config, prize-roles, and prizes commands are restricted to the server (guild) owner only.
 
 ### Slash Commands (`/subday`)
 
@@ -22,9 +22,9 @@ All role permissions, channel names, and prize descriptions are configurable per
 - **complete @user [week:\<n\>]** — Requires configured `complete_role` (or owner). Marks the user's current week done. Cannot complete yourself. DMs the user a completion embed with their star chart. If `achievements_channel` is set, also posts achievement there. At milestones: assigns role, pings staff (if `staff_channel` is set). Logs all completions to `staff_channel` if configured. With optional `week` parameter: requires `backfill_role` instead, sets the participant to that week and marks it complete in one step. Auto-enrolls the user if they aren't signed up yet.
 - **list** — Requires configured `complete_role` (or owner). Shows all participants + progress with status icons.
 - **remove @user** — Requires configured `complete_role` (or owner). Removes a participant.
-- **config** — Requires Manage Guild. Shows current settings as an embed with interactive role and channel select menus (dropdowns) pre-populated with current values. Select a role/channel to set it; deselect to clear back to None. Changes are saved immediately on each selection. The interaction handler verifies the user is the server owner.
-- **prize-roles** — Requires Manage Guild. Shows current milestone role settings with 4 role select menus (one per milestone week) pre-populated with current values. Select a role to set it; deselect to disable role assignment for that milestone. When `None`, the milestone embed still posts but no role is granted.
-- **prizes** — Requires Manage Guild. Sets milestone prize descriptions via slash command options. All options are optional; with no options shows current prizes.
+- **config** — Server owner only. Shows current settings as an embed with interactive role and channel select menus (dropdowns) pre-populated with current values. Select a role/channel to set it; deselect to clear back to None. Changes are saved immediately on each selection.
+- **prize-roles** — Server owner only. Shows current milestone role settings with 4 role select menus (one per milestone week) pre-populated with current values. Select a role to set it; deselect to disable role assignment for that milestone. When `None`, the milestone embed still posts but no role is granted.
+- **prizes** — Server owner only. Sets milestone prize descriptions via slash command options. All options are optional; with no options shows current prizes.
 
 ### Config Settings (`/subday config`)
 

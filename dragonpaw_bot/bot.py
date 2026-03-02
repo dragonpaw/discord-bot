@@ -66,7 +66,6 @@ class DragonpawBot(hikari.GatewayBot):
         )
         self._state: dict[hikari.Snowflake, structs.GuildState] = {}
         self.user_id: hikari.Snowflake | None = None
-        self.owner_ids: set[hikari.Snowflake] = set()
         logger.info("TEST_GUILDS=%r", TEST_GUILDS)
 
     def state(self, guild_id: hikari.Snowflake) -> structs.GuildState | None:
@@ -232,13 +231,6 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
         OAUTH_URL.format(CLIENT_ID=CLIENT_ID, OAUTH_PERMISSIONS=OAUTH_PERMISSIONS),
     )
     bot.user_id = event.my_user.id
-
-    # Populate owner_ids from the application info
-    app = await bot.rest.fetch_application()
-    bot.owner_ids = {app.owner.id}
-    if app.team is not None:
-        bot.owner_ids.update(app.team.members.keys())
-    logger.info("Bot owner IDs: %r", bot.owner_ids)
 
     flags = event.application_flags
     if (

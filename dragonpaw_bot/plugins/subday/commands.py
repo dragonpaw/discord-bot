@@ -44,6 +44,25 @@ def _get_bot(ctx: lightbulb.Context) -> DragonpawBot:
     return bot
 
 
+async def _require_guild_owner(
+    ctx: lightbulb.Context,
+    guild: hikari.Guild | hikari.RESTGuild,
+) -> bool:
+    """Check if the user is the guild owner. Responds with denial if not. Returns True if allowed."""
+    if ctx.user.id == guild.owner_id:
+        return True
+    logger.warning(
+        "G=%r U=%r: SubDay admin command denied, not guild owner",
+        guild.name,
+        ctx.user.username,
+    )
+    await ctx.respond(
+        "Only the server owner can use this command.",
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+    return False
+
+
 async def _check_permission(
     ctx: lightbulb.Context,
     guild: hikari.Guild | hikari.RESTGuild,
@@ -102,10 +121,10 @@ async def help_handler(ctx: lightbulb.Context) -> None:
             lines.append(
                 "`/subday complete @user week:<n>` — Backfill to a specific week"
             )
-    if bot.owner_ids and ctx.user.id in bot.owner_ids:
-        lines.append("`/subday config` — Configure settings (admin)")
-        lines.append("`/subday prize-roles` — Set milestone roles (admin)")
-        lines.append("`/subday prizes` — Set milestone prizes (admin)")
+    if ctx.user.id == guild.owner_id:
+        lines.append("`/subday config` — Configure settings (server owner)")
+        lines.append("`/subday prize-roles` — Set milestone roles (server owner)")
+        lines.append("`/subday prizes` — Set milestone prizes (server owner)")
 
     embed = hikari.Embed(
         title="Where I am Led — Commands",
@@ -1650,12 +1669,14 @@ class SubDayConfig(
     lightbulb.SlashCommand,
     name="config",
     description="Configure SubDay settings for this server (owner only)",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         bot = _get_bot(ctx)
+        guild = await utils.get_guild(ctx, bot)
+        if not await _require_guild_owner(ctx, guild):
+            return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _config_embed(cfg)
@@ -1720,12 +1741,14 @@ class SubDayPrizeRoles(
     lightbulb.SlashCommand,
     name="prize-roles",
     description="Configure milestone roles for this server (owner only)",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         bot = _get_bot(ctx)
+        guild = await utils.get_guild(ctx, bot)
+        if not await _require_guild_owner(ctx, guild):
+            return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _prize_roles_embed(cfg)
@@ -1741,7 +1764,6 @@ class SubDayPrizes(
     lightbulb.SlashCommand,
     name="prizes",
     description="Set milestone prize descriptions (owner only)",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
 ):
     prize_13 = lightbulb.string("prize_13", "Prize for week 13 milestone", default=None)
     prize_26 = lightbulb.string("prize_26", "Prize for week 26 milestone", default=None)
@@ -1754,6 +1776,9 @@ class SubDayPrizes(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         bot = _get_bot(ctx)
+        guild = await utils.get_guild(ctx, bot)
+        if not await _require_guild_owner(ctx, guild):
+            return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         changed = False
