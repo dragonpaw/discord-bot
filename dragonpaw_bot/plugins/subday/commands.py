@@ -17,9 +17,12 @@ from dragonpaw_bot.colors import (
 )
 from dragonpaw_bot.plugins.subday import chart, prompts, state
 from dragonpaw_bot.plugins.subday.constants import (
+    MAX_EMBEDS_PER_MESSAGE,
     MILESTONE_WEEKS,
     SUBDAY_CFG_ROLE_PREFIX,
     SUBDAY_CONFIG_PREFIX,
+    SUBDAY_OWNER_APPROVE_PREFIX,
+    SUBDAY_OWNER_DENY_PREFIX,
     SUBDAY_SIGNUP_ID,
     TOTAL_WEEKS,
 )
@@ -85,7 +88,8 @@ async def help_handler(ctx: lightbulb.Context) -> None:
 
     lines = [
         "`/subday about` — Learn about the program",
-        "`/subday status` — Check your progress",
+        "`/subday status` — Check your progress (and your subs')",
+        "`/subday owner` — Set or clear your owner",
     ]
     if ctx.member:
         if utils.has_any_role_permission(guild, ctx.member, cfg.enroll_role):
@@ -99,9 +103,9 @@ async def help_handler(ctx: lightbulb.Context) -> None:
                 "`/subday complete @user week:<n>` — Backfill to a specific week"
             )
     if bot.owner_ids and ctx.user.id in bot.owner_ids:
-        lines.append("`/subday config` — Configure settings (bot owner)")
-        lines.append("`/subday prize-roles` — Set milestone roles (bot owner)")
-        lines.append("`/subday prizes` — Set milestone prizes (bot owner)")
+        lines.append("`/subday config` — Configure settings (server owner)")
+        lines.append("`/subday prize-roles` — Set milestone roles (server owner)")
+        lines.append("`/subday prizes` — Set milestone prizes (server owner)")
 
     embed = hikari.Embed(
         title="Where I am Led — Commands",
@@ -239,9 +243,9 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
                 cfg.achievements_channel,
             )
 
-    # Generate star chart attachment
+    # Generate star chart attachment (use guild display name)
     chart_bytes = chart.render_star_chart(
-        username=target.username,
+        username=target.display_name,
         current_week=week,
         week_completed=True,
     )
@@ -351,20 +355,24 @@ async def _do_signup(
     # DM week 1
     rules_text = prompts.load_rules()
     prompt = prompts.load_week(1)
-    embed = prompts.build_prompt_embed(prompt)
+    prompt_embed = prompts.build_prompt_embed(prompt)
+
+    welcome_embed = hikari.Embed(
+        title="🎉 Welcome to Where I am Led!",
+        description=(
+            "You've just embarked on a **52-week** guided journal journey "
+            "exploring the psychology and mindset of service.\n\n"
+            f"📋 **Instructions:**\n{rules_text}\n\n"
+            "Each Sunday you'll receive a new prompt right here in your DMs. "
+            "Take your time — there are no deadlines! 💜\n\n"
+            "Here's your first week's prompt below. Good luck! ✨"
+        ),
+        color=SOLARIZED_CYAN,
+    )
 
     try:
         dm = await user.fetch_dm_channel()
-        await dm.send(
-            content=(
-                "**Welcome to Where I am Led!**\n\n"
-                "This is a 52-week guided journal program. Each week you'll "
-                "receive a prompt here via DM.\n\n"
-                f"**Instructions:**\n{rules_text}\n\n"
-                "Here is your first week's prompt:"
-            ),
-        )
-        await dm.send(embed=embed)
+        await dm.send(embeds=[welcome_embed, prompt_embed])
         participant.week_sent = True
         state.save(guild_state)
         msg = (
@@ -450,6 +458,7 @@ def register(subday_group: lightbulb.Group) -> None:
     """Register all subcommands on the given command group."""
     subday_group.register(SubDayAbout)
     subday_group.register(SubDayStatus)
+    subday_group.register(SubDayOwner)
     subday_group.register(SubDaySignup)
     subday_group.register(SubDayComplete)
     subday_group.register(SubDayList)
@@ -486,7 +495,7 @@ class SubDayAbout(
             value=(
                 f"For folks with the **{enroll_label}** role "
                 "(with their Owner's permission, if Owned), we invite you to "
-                "participate in our weekly \"Subday\" (Sunday) journaling.\n\n"
+                'participate in our weekly "Subday" (Sunday) journaling.\n\n'
                 "It's based on *Where I am Led* by Christina Parker — a set of "
                 "weekly prompts exploring the psychology and mindset of a service "
                 "submissive. We strongly encourage all subs to give it a try."
@@ -576,7 +585,140 @@ class SubDayAbout(
         row.add_interactive_button(
             hikari.ButtonStyle.SUCCESS, SUBDAY_SIGNUP_ID, label="Sign Up"
         )
-        await ctx.respond(embeds=[intro, details, signup], component=row)
+        await ctx.respond(
+            embeds=[intro, details, signup],
+            component=row,
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+
+
+def _owned_sub_status_embed(
+    sub_user_id: int, p: SubDayParticipant, cfg: SubDayGuildConfig
+) -> hikari.Embed:
+    """Build a compact status embed for an owned sub (no star chart)."""
+    if p.current_week > TOTAL_WEEKS:
+        icon = "🎓"
+        status = "Graduated!"
+    elif p.week_completed:
+        icon = "✅"
+        status = f"Week {p.current_week} — completed"
+    else:
+        icon = "⏳"
+        status = f"Week {p.current_week} — in progress"
+
+    # Next prize teaser
+    prizes = cfg.milestone_prizes()
+    next_milestone = next((m for m in MILESTONE_WEEKS if m >= p.current_week), None)
+    if next_milestone:
+        prize = prizes.get(next_milestone, "a prize")
+        weeks_away = next_milestone - p.current_week
+        if weeks_away == 0:
+            status += f"\n🎁 Milestone week! Prize: **{prize}**"
+        else:
+            status += f"\n🎁 Next prize ({weeks_away}w away): **{prize}**"
+
+    embed = hikari.Embed(
+        title=f"{icon} <@{sub_user_id}>",
+        description=status,
+        color=SOLARIZED_CYAN,
+    )
+    embed.add_field(
+        name="Progress",
+        value=f"{p.current_week}/{TOTAL_WEEKS} weeks",
+        inline=True,
+    )
+    embed.add_field(
+        name="Signed up",
+        value=f"<t:{int(p.signup_date.timestamp())}:R>",
+        inline=True,
+    )
+    return embed
+
+
+def _own_progress_embed(
+    p: SubDayParticipant, display_name: str, cfg: SubDayGuildConfig
+) -> hikari.Embed:
+    """Build the caller's own progress embed with star chart."""
+    if p.current_week > TOTAL_WEEKS:
+        chart_bytes = chart.render_star_chart(
+            username=display_name,
+            current_week=p.current_week,
+            week_completed=p.week_completed,
+        )
+        embed = hikari.Embed(
+            title="Where I am Led — Graduated!",
+            description=(
+                "You've **graduated** from Where I am Led! "
+                "Congratulations on completing all 52 weeks!"
+            ),
+            color=SOLARIZED_MAGENTA,
+        )
+        embed.set_image(chart_bytes)
+        return embed
+
+    if p.week_completed:
+        status_text = (
+            f"You've completed **Week {p.current_week}**. "
+            "Your next prompt will arrive on Sunday!"
+        )
+    else:
+        status_text = (
+            f"You're currently on **Week {p.current_week}**. "
+            "Complete it and show a reviewer to move on."
+        )
+
+    milestone_roles = cfg.milestone_roles()
+    next_milestone = next(
+        (m for m in sorted(milestone_roles) if m >= p.current_week), None
+    )
+    if next_milestone:
+        role_name = milestone_roles[next_milestone]
+        role_label = f" ({role_name})" if role_name else ""
+        weeks_away = next_milestone - p.current_week
+        if weeks_away == 0:
+            milestone_text = f"This is a milestone week!{role_label}"
+        else:
+            milestone_text = (
+                f"Next milestone: **Week {next_milestone}**"
+                f"{role_label} — "
+                f"{weeks_away} week{'s' if weeks_away != 1 else ''} away"
+            )
+        status_text += f"\n\n{milestone_text}"
+
+    # Next prize teaser
+    prizes = cfg.milestone_prizes()
+    prize_milestone = next((m for m in MILESTONE_WEEKS if m >= p.current_week), None)
+    if prize_milestone:
+        prize = prizes.get(prize_milestone, "a prize")
+        pw = prize_milestone - p.current_week
+        if pw == 0:
+            status_text += f"\n🎁 Milestone week! Prize: **{prize}**"
+        else:
+            status_text += f"\n🎁 Next prize ({pw}w away): **{prize}**"
+
+    chart_bytes = chart.render_star_chart(
+        username=display_name,
+        current_week=p.current_week,
+        week_completed=p.week_completed,
+    )
+
+    embed = hikari.Embed(
+        title="Where I am Led — Your Progress",
+        description=status_text,
+        color=SOLARIZED_VIOLET,
+    )
+    embed.set_image(chart_bytes)
+    embed.add_field(
+        name="Progress",
+        value=f"{p.current_week}/{TOTAL_WEEKS} weeks",
+        inline=True,
+    )
+    embed.add_field(
+        name="Signed up",
+        value=f"<t:{int(p.signup_date.timestamp())}:R>",
+        inline=True,
+    )
+    return embed
 
 
 class SubDayStatus(
@@ -592,7 +734,14 @@ class SubDayStatus(
         guild_state = state.load(int(ctx.guild_id))
         user_id = int(ctx.user.id)
 
-        if user_id not in guild_state.participants:
+        own_participant = guild_state.participants.get(user_id)
+        owned_subs = [
+            (uid, p)
+            for uid, p in guild_state.participants.items()
+            if p.owner_id == user_id
+        ]
+
+        if not own_participant and not owned_subs:
             await ctx.respond(
                 "You're not signed up for Where I am Led. "
                 "Use `/subday signup` to get started!",
@@ -600,89 +749,258 @@ class SubDayStatus(
             )
             return
 
-        p = guild_state.participants[user_id]
+        cfg = guild_state.config
+        embeds: list[hikari.Embed] = []
 
-        if p.current_week > TOTAL_WEEKS:
-            chart_bytes = chart.render_star_chart(
-                username=ctx.user.username,
-                current_week=p.current_week,
-                week_completed=p.week_completed,
-            )
-            embed = hikari.Embed(
-                title="Where I am Led — Graduated!",
-                description=(
-                    "You've **graduated** from Where I am Led! "
-                    "Congratulations on completing all 52 weeks!"
-                ),
-                color=SOLARIZED_MAGENTA,
-            )
-            embed.set_image(chart_bytes)
+        if own_participant:
+            display_name = ctx.member.display_name if ctx.member else ctx.user.username
+            embeds.append(_own_progress_embed(own_participant, display_name, cfg))
+
+        for sub_uid, sub_p in owned_subs:
+            if len(embeds) >= MAX_EMBEDS_PER_MESSAGE:
+                break
+            embeds.append(_owned_sub_status_embed(sub_uid, sub_p, cfg))
+
+        await ctx.respond(
+            embeds=embeds,
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+
+
+class SubDayOwner(
+    lightbulb.SlashCommand,
+    name="owner",
+    description="Set or clear your owner (they receive copies of your prompts)",
+):
+    user = lightbulb.user("user", "Your owner (leave blank to clear)", default=None)
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        assert ctx.guild_id
+        bot = _get_bot(ctx)
+        guild_state = state.load(int(ctx.guild_id))
+        user_id = int(ctx.user.id)
+
+        if user_id not in guild_state.participants:
             await ctx.respond(
-                embed=embed,
+                "You must be signed up for Where I am Led to use this command. "
+                "Use `/subday signup` to get started!",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
 
-        if p.week_completed:
-            status_text = (
-                f"You've completed **Week {p.current_week}**. "
-                "Your next prompt will arrive on Sunday!"
-            )
-        else:
-            status_text = (
-                f"You're currently on **Week {p.current_week}**. "
-                "Complete it and show a reviewer to move on."
-            )
+        participant = guild_state.participants[user_id]
+        target: hikari.User | None = self.user  # type: ignore[assignment]
 
-        # Show next milestone
-        milestone_roles = guild_state.config.milestone_roles()
-        next_milestone = None
-        for m in sorted(milestone_roles):
-            if m >= p.current_week:
-                next_milestone = m
-                break
-
-        if next_milestone:
-            role_name = milestone_roles[next_milestone]
-            role_label = f" ({role_name})" if role_name else ""
-            weeks_away = next_milestone - p.current_week
-            if weeks_away == 0:
-                milestone_text = f"This is a milestone week!{role_label}"
-            else:
-                milestone_text = (
-                    f"Next milestone: **Week {next_milestone}**"
-                    f"{role_label} — "
-                    f"{weeks_away} week{'s' if weeks_away != 1 else ''} away"
+        # Clear owner
+        if target is None:
+            had_owner = participant.owner_id is not None
+            had_pending = participant.pending_owner_id is not None
+            participant.owner_id = None
+            participant.pending_owner_id = None
+            if had_owner or had_pending:
+                state.save(guild_state)
+                logger.info(
+                    "G=%r U=%r: Cleared owner",
+                    guild_state.guild_name,
+                    ctx.user.username,
                 )
-            status_text += f"\n\n{milestone_text}"
+            await ctx.respond(
+                "Your owner has been cleared.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
 
-        chart_bytes = chart.render_star_chart(
-            username=ctx.user.username,
-            current_week=p.current_week,
-            week_completed=p.week_completed,
+        target_id = int(target.id)
+
+        # Can't set self
+        if target_id == user_id:
+            await ctx.respond(
+                "You can't set yourself as your own owner.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        # Already confirmed owner
+        if participant.owner_id == target_id:
+            await ctx.respond(
+                f"{target.mention} is already your owner.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        # Send approval DM to the target
+        participant.pending_owner_id = target_id
+
+        guild = await bot.rest.fetch_guild(ctx.guild_id)
+        row = bot.rest.build_message_action_row()
+        row.add_interactive_button(
+            hikari.ButtonStyle.SUCCESS,
+            f"{SUBDAY_OWNER_APPROVE_PREFIX}{ctx.guild_id}:{user_id}",
+            label="Accept",
+        )
+        row.add_interactive_button(
+            hikari.ButtonStyle.DANGER,
+            f"{SUBDAY_OWNER_DENY_PREFIX}{ctx.guild_id}:{user_id}",
+            label="Decline",
         )
 
-        embed = hikari.Embed(
-            title="Where I am Led — Your Progress",
-            description=status_text,
-            color=SOLARIZED_VIOLET,
-        )
-        embed.set_image(chart_bytes)
-        embed.add_field(
-            name="Progress",
-            value=f"{p.current_week}/{TOTAL_WEEKS} weeks",
-            inline=True,
-        )
-        embed.add_field(
-            name="Signed up",
-            value=f"<t:{int(p.signup_date.timestamp())}:R>",
-            inline=True,
-        )
+        try:
+            dm = await target.fetch_dm_channel()
+            await dm.send(
+                content=(
+                    f"**{ctx.user.mention}** in **{guild.name}** has asked you to be their "
+                    f"owner for the **Where I am Led** journal program.\n\n"
+                    "As their owner, you'll receive copies of their weekly prompts "
+                    "and can check their progress with `/subday status`."
+                ),
+                component=row,
+            )
+        except (hikari.ForbiddenError, hikari.HTTPError) as exc:
+            participant.pending_owner_id = None
+            state.save(guild_state)
+            logger.warning(
+                "G=%r U=%r: Failed to DM owner request to %r: %s",
+                guild_state.guild_name,
+                ctx.user.username,
+                target.username,
+                exc,
+            )
+            await ctx.respond(
+                f"I couldn't send a DM to {target.mention}. "
+                "They may have DMs disabled. The request was not sent.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
 
+        state.save(guild_state)
+        logger.info(
+            "G=%r U=%r: Sent owner request to %r",
+            guild_state.guild_name,
+            ctx.user.username,
+            target.username,
+        )
         await ctx.respond(
-            embed=embed,
+            f"An owner request has been sent to {target.mention}. "
+            "They'll need to accept it via DM.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
+
+
+async def handle_owner_interaction(interaction: hikari.ComponentInteraction) -> None:
+    """Handle Accept/Decline button clicks for owner requests."""
+    cid = interaction.custom_id
+    owner_user_id = int(interaction.user.id)
+
+    if cid.startswith(SUBDAY_OWNER_APPROVE_PREFIX):
+        parts = cid.removeprefix(SUBDAY_OWNER_APPROVE_PREFIX).split(":")
+        approve = True
+    elif cid.startswith(SUBDAY_OWNER_DENY_PREFIX):
+        parts = cid.removeprefix(SUBDAY_OWNER_DENY_PREFIX).split(":")
+        approve = False
+    else:
+        return
+
+    guild_id = int(parts[0])
+    sub_user_id = int(parts[1])
+
+    guild_state = state.load(guild_id)
+    participant = guild_state.participants.get(sub_user_id)
+
+    if not participant:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="This person is no longer enrolled in the program.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    # Check if this request is still valid
+    if participant.pending_owner_id != owner_user_id:
+        # Double-click case: already approved
+        if participant.owner_id == owner_user_id:
+            await interaction.create_initial_response(
+                response_type=hikari.ResponseType.MESSAGE_CREATE,
+                content="You're already their owner!",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="This request is no longer valid (they may have changed their mind).",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+
+    if approve:
+        # Verify owner is still in the guild
+        try:
+            await bot.rest.fetch_member(
+                hikari.Snowflake(guild_id), hikari.Snowflake(owner_user_id)
+            )
+        except hikari.NotFoundError:
+            participant.pending_owner_id = None
+            state.save(guild_state)
+            await interaction.create_initial_response(
+                response_type=hikari.ResponseType.MESSAGE_CREATE,
+                content="You're no longer in that server, so the request has been cancelled.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        participant.owner_id = owner_user_id
+        participant.pending_owner_id = None
+        state.save(guild_state)
+
+        logger.info(
+            "G=%r: Owner approved — owner=%d sub=%d",
+            guild_state.guild_name,
+            owner_user_id,
+            sub_user_id,
+        )
+
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content=f"You've accepted! You're now the owner for <@{sub_user_id}>.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+
+        # Notify sub
+        try:
+            sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
+            dm = await sub_user.fetch_dm_channel()
+            await dm.send(
+                f"<@{owner_user_id}> has **accepted** your owner request! "
+                "They'll now receive copies of your weekly prompts. 💜"
+            )
+        except hikari.HTTPError:
+            logger.debug("Could not DM sub %d about owner approval", sub_user_id)
+    else:
+        participant.pending_owner_id = None
+        state.save(guild_state)
+
+        logger.info(
+            "G=%r: Owner denied — owner=%d sub=%d",
+            guild_state.guild_name,
+            owner_user_id,
+            sub_user_id,
+        )
+
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="You've declined the request.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+
+        # Notify sub
+        try:
+            sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
+            dm = await sub_user.fetch_dm_channel()
+            await dm.send(f"<@{owner_user_id}> has **declined** your owner request.")
+        except hikari.HTTPError:
+            logger.debug("Could not DM sub %d about owner denial", sub_user_id)
 
 
 class SubDaySignup(
@@ -931,6 +1249,14 @@ class SubDayRemove(
             return
 
         del guild_state.participants[target_id]
+
+        # Clean up owner references pointing to the removed user
+        for p in guild_state.participants.values():
+            if p.owner_id == target_id:
+                p.owner_id = None
+            if p.pending_owner_id == target_id:
+                p.pending_owner_id = None
+
         state.save(guild_state)
 
         await ctx.respond(
@@ -954,7 +1280,9 @@ def _config_embed(cfg: SubDayGuildConfig) -> hikari.Embed:
     )
     embed.add_field(
         name="Enroll role(s)",
-        value=", ".join(f"`{r}`" for r in cfg.enroll_role) if cfg.enroll_role else "_Owner-only_",
+        value=", ".join(f"`{r}`" for r in cfg.enroll_role)
+        if cfg.enroll_role
+        else "_Owner-only_",
         inline=True,
     )
     embed.add_field(
@@ -999,8 +1327,40 @@ def _config_embed(cfg: SubDayGuildConfig) -> hikari.Embed:
     return embed
 
 
-def _config_components(bot: DragonpawBot) -> list[hikari.api.ComponentBuilder]:
-    """Build the action rows for the config message."""
+class _DefaultsActionRow:
+    """Wraps a MessageActionRowBuilder to inject default_values into the payload.
+
+    Hikari's select menu builders don't emit ``default_values`` for
+    auto-populated selects (role/channel).  Discord's API *does* support
+    the field, so we patch it into the built dict.
+    """
+
+    def __init__(
+        self,
+        inner: hikari.api.ComponentBuilder,
+        defaults: list[dict[str, str]],
+    ) -> None:
+        self._inner = inner
+        self._defaults = defaults
+
+    def build(self) -> tuple[dict, list]:  # noqa: ANN401
+        payload, resources = self._inner.build()
+        if self._defaults:
+            payload["components"][0]["default_values"] = self._defaults
+        return payload, resources
+
+
+async def _config_components(
+    bot: DragonpawBot,
+    guild_id: hikari.Snowflakeish,
+    cfg: SubDayGuildConfig,
+) -> list[hikari.api.ComponentBuilder]:
+    """Build the action rows for the config message with current values pre-selected."""
+    roles = await bot.rest.fetch_roles(guild_id)
+    channels = await bot.rest.fetch_guild_channels(guild_id)
+    role_map = {r.name: r.id for r in roles}
+    channel_map = {c.name: c.id for c in channels if hasattr(c, "name")}
+
     rows: list[hikari.api.ComponentBuilder] = []
 
     # Row 1: Enroll role select (multi-select)
@@ -1012,7 +1372,12 @@ def _config_components(bot: DragonpawBot) -> list[hikari.api.ComponentBuilder]:
         min_values=0,
         max_values=25,
     )
-    rows.append(row1)
+    defaults1 = [
+        {"id": str(role_map[name]), "type": "role"}
+        for name in cfg.enroll_role
+        if name in role_map
+    ]
+    rows.append(_DefaultsActionRow(row1, defaults1))
 
     # Row 2: Complete role select
     row2 = bot.rest.build_message_action_row()
@@ -1023,7 +1388,12 @@ def _config_components(bot: DragonpawBot) -> list[hikari.api.ComponentBuilder]:
         min_values=0,
         max_values=1,
     )
-    rows.append(row2)
+    defaults2 = (
+        [{"id": str(role_map[cfg.complete_role]), "type": "role"}]
+        if cfg.complete_role and cfg.complete_role in role_map
+        else []
+    )
+    rows.append(_DefaultsActionRow(row2, defaults2))
 
     # Row 3: Backfill role select
     row3 = bot.rest.build_message_action_row()
@@ -1034,7 +1404,12 @@ def _config_components(bot: DragonpawBot) -> list[hikari.api.ComponentBuilder]:
         min_values=0,
         max_values=1,
     )
-    rows.append(row3)
+    defaults3 = (
+        [{"id": str(role_map[cfg.backfill_role]), "type": "role"}]
+        if cfg.backfill_role and cfg.backfill_role in role_map
+        else []
+    )
+    rows.append(_DefaultsActionRow(row3, defaults3))
 
     # Row 4: Achievements channel select
     row4 = bot.rest.build_message_action_row()
@@ -1045,7 +1420,12 @@ def _config_components(bot: DragonpawBot) -> list[hikari.api.ComponentBuilder]:
         min_values=0,
         max_values=1,
     )
-    rows.append(row4)
+    defaults4 = (
+        [{"id": str(channel_map[cfg.achievements_channel]), "type": "channel"}]
+        if cfg.achievements_channel and cfg.achievements_channel in channel_map
+        else []
+    )
+    rows.append(_DefaultsActionRow(row4, defaults4))
 
     # Row 5: Staff channel select
     row5 = bot.rest.build_message_action_row()
@@ -1056,7 +1436,12 @@ def _config_components(bot: DragonpawBot) -> list[hikari.api.ComponentBuilder]:
         min_values=0,
         max_values=1,
     )
-    rows.append(row5)
+    defaults5 = (
+        [{"id": str(channel_map[cfg.staff_channel]), "type": "channel"}]
+        if cfg.staff_channel and cfg.staff_channel in channel_map
+        else []
+    )
+    rows.append(_DefaultsActionRow(row5, defaults5))
 
     return rows
 
@@ -1096,7 +1481,11 @@ def _resolve_multi_role_value(
     interaction: hikari.ComponentInteraction,
 ) -> list[str]:
     """Extract role names from a multi-select role interaction."""
-    if not interaction.values or not interaction.resolved or not interaction.resolved.roles:
+    if (
+        not interaction.values
+        or not interaction.resolved
+        or not interaction.resolved.roles
+    ):
         return []
     names: list[str] = []
     for val in interaction.values:
@@ -1114,6 +1503,37 @@ def _display_config_value(v: object) -> str:
     return v or "None"  # type: ignore[return-value]
 
 
+async def _reject_missing_perms(
+    interaction: hikari.ComponentInteraction,
+    bot: DragonpawBot,
+    guild_id: hikari.Snowflakeish,
+    guild_state: state.SubDayGuildState,
+    channel_name: str,
+) -> bool:
+    """Check channel perms and send an error response if missing. Returns True if rejected."""
+    channel_id = hikari.Snowflake(interaction.values[0])
+    missing = await utils.check_channel_perms(bot, guild_id, channel_id)
+    if not missing:
+        return False
+    missing_str = ", ".join(f"**{p}**" for p in missing)
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        content=(
+            f"I can't use #{channel_name} — I'm missing these permissions: "
+            f"{missing_str}. Please fix the channel permissions and try again."
+        ),
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+    logger.warning(
+        "G=%r U=%r: SubDay config rejected #%s — missing permissions: %s",
+        guild_state.guild_name,
+        interaction.user.username,
+        channel_name,
+        ", ".join(missing),
+    )
+    return True
+
+
 async def handle_config_interaction(interaction: hikari.ComponentInteraction) -> None:
     """Handle a component interaction from the config or prize-roles message."""
     custom_id = interaction.custom_id
@@ -1121,9 +1541,11 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     if custom_id.startswith(SUBDAY_CFG_ROLE_PREFIX):
         field = custom_id.removeprefix(SUBDAY_CFG_ROLE_PREFIX)
         embed_builder = _prize_roles_embed
+        components_builder = _prize_roles_components
     elif custom_id.startswith(SUBDAY_CONFIG_PREFIX):
         field = custom_id.removeprefix(SUBDAY_CONFIG_PREFIX)
         embed_builder = _config_embed
+        components_builder = _config_components
     else:
         return
 
@@ -1160,25 +1582,9 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     # For channel fields, verify the bot can write to the selected channel
     if new_value and field in ("achievements_channel", "staff_channel"):
-        channel_id = hikari.Snowflake(interaction.values[0])
-        missing = await utils.check_channel_perms(bot, guild_id, channel_id)
-        if missing:
-            missing_str = ", ".join(f"**{p}**" for p in missing)
-            await interaction.create_initial_response(
-                response_type=hikari.ResponseType.MESSAGE_CREATE,
-                content=(
-                    f"I can't use #{new_value} — I'm missing these permissions: "
-                    f"{missing_str}. Please fix the channel permissions and try again."
-                ),
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            logger.warning(
-                "G=%r U=%r: SubDay config rejected #%s — missing permissions: %s",
-                guild_state.guild_name,
-                interaction.user.username,
-                new_value,
-                ", ".join(missing),
-            )
+        if await _reject_missing_perms(
+            interaction, bot, guild_id, guild_state, new_value
+        ):
             return
 
     if new_value == old_value:
@@ -1190,9 +1596,11 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
             new_value,
         )
         embed = embed_builder(cfg)
+        components = await components_builder(bot, guild_id, cfg)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_UPDATE,
             embed=embed,
+            components=components,
         )
         return
 
@@ -1230,9 +1638,11 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     embed = embed_builder(cfg)
     embed.set_footer(text="Settings updated.")
+    components = await components_builder(bot, guild_id, cfg)
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_UPDATE,
         embed=embed,
+        components=components,
     )
 
 
@@ -1249,7 +1659,7 @@ class SubDayConfig(
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _config_embed(cfg)
-        components = _config_components(bot)
+        components = await _config_components(bot, ctx.guild_id, cfg)
         await ctx.respond(
             embed=embed,
             components=components,
@@ -1277,10 +1687,15 @@ def _prize_roles_embed(cfg: SubDayGuildConfig) -> hikari.Embed:
     return embed
 
 
-def _prize_roles_components(
+async def _prize_roles_components(
     bot: DragonpawBot,
+    guild_id: hikari.Snowflakeish,
+    cfg: SubDayGuildConfig,
 ) -> list[hikari.api.ComponentBuilder]:
-    """Build the action rows for the prize-roles message."""
+    """Build the action rows for the prize-roles message with current values pre-selected."""
+    roles = await bot.rest.fetch_roles(guild_id)
+    role_map = {r.name: r.id for r in roles}
+
     rows: list[hikari.api.ComponentBuilder] = []
     for week in MILESTONE_WEEKS:
         row = bot.rest.build_message_action_row()
@@ -1291,7 +1706,13 @@ def _prize_roles_components(
             min_values=0,
             max_values=1,
         )
-        rows.append(row)
+        role_name = getattr(cfg, f"role_{week}")
+        defaults = (
+            [{"id": str(role_map[role_name]), "type": "role"}]
+            if role_name and role_name in role_map
+            else []
+        )
+        rows.append(_DefaultsActionRow(row, defaults))
     return rows
 
 
@@ -1308,7 +1729,7 @@ class SubDayPrizeRoles(
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _prize_roles_embed(cfg)
-        components = _prize_roles_components(bot)
+        components = await _prize_roles_components(bot, ctx.guild_id, cfg)
         await ctx.respond(
             embed=embed,
             components=components,

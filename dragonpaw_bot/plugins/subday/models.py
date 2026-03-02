@@ -11,6 +11,8 @@ class SubDayParticipant(pydantic.BaseModel):
     signup_date: datetime.datetime
     last_completed_date: datetime.datetime | None = None
     week_sent: bool = False
+    owner_id: int | None = None
+    pending_owner_id: int | None = None
 
 
 class SubDayGuildConfig(pydantic.BaseModel):
@@ -24,6 +26,7 @@ class SubDayGuildConfig(pydantic.BaseModel):
         if isinstance(v, str):
             return [v]
         return v  # type: ignore[return-value]
+
     complete_role: str | None = None
     backfill_role: str | None = None
     achievements_channel: str | None = None

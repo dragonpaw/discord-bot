@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import asyncio
 import datetime
 import logging
 import pickle
@@ -20,7 +21,7 @@ from dragonpaw_bot.plugins.role_menus import configure_role_menus
 logging.getLogger("dragonpaw_bot").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-uvloop.install()
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 STATE_DIR = ROOT_DIR / "state"

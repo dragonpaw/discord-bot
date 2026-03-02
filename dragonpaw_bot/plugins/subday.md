@@ -15,14 +15,15 @@ All role permissions, channel names, and prize descriptions are configurable per
 ### Slash Commands (`/subday`)
 
 - **help** — Shows contextual help listing only the commands the user can access based on their roles and permissions.
-- **about** — Displays program info as three color-coded embeds (violet intro, cyan details, yellow rewards). Content is built from guild config (roles, prizes). Includes a "Sign Up" button that runs the same signup logic as `/subday signup`.
-- **status** — Shows the user's own progress: current week, completion status, next milestone, signup date.
+- **about** — Displays program info as three color-coded embeds (violet intro, cyan details, yellow rewards). Content is built from guild config (roles, prizes). Includes a "Sign Up" button that runs the same signup logic as `/subday signup`. Ephemeral like all other subday commands.
+- **status** — Shows the user's own progress: current week, completion status, next milestone, signup date. If the user is an owner, also shows compact status embeds (cyan) for each of their subs.
+- **owner [@user]** — Sets or clears the user's owner. With a user argument: sends a DM to the target with Accept/Decline buttons. Without argument: clears both confirmed and pending owner. Requires enrollment. Ownership requires approval — the sub sends a request, the owner gets a DM. A sub has at most 1 owner; an owner can have many subs.
 - **signup** — Requires any configured `enroll_role` (or owner). Registers user, DMs week 1 prompt + rules. Handles DM failures gracefully with a warning message.
 - **complete @user [week:\<n\>]** — Requires configured `complete_role` (or owner). Marks the user's current week done. Cannot complete yourself. DMs the user a completion embed with their star chart. If `achievements_channel` is set, also posts achievement there. At milestones: assigns role, pings staff (if `staff_channel` is set). Logs all completions to `staff_channel` if configured. With optional `week` parameter: requires `backfill_role` instead, sets the participant to that week and marks it complete in one step. Auto-enrolls the user if they aren't signed up yet.
 - **list** — Requires configured `complete_role` (or owner). Shows all participants + progress with status icons.
 - **remove @user** — Requires configured `complete_role` (or owner). Removes a participant.
-- **config** — Requires Manage Guild. Shows current settings as an embed with interactive role and channel select menus (dropdowns). Select a role/channel to set it; deselect to clear back to None. Changes are saved immediately on each selection. The interaction handler verifies the user is the server owner.
-- **prize-roles** — Requires Manage Guild. Shows current milestone role settings with 4 role select menus (one per milestone week). Select a role to set it; deselect to disable role assignment for that milestone. When `None`, the milestone embed still posts but no role is granted.
+- **config** — Requires Manage Guild. Shows current settings as an embed with interactive role and channel select menus (dropdowns) pre-populated with current values. Select a role/channel to set it; deselect to clear back to None. Changes are saved immediately on each selection. The interaction handler verifies the user is the server owner.
+- **prize-roles** — Requires Manage Guild. Shows current milestone role settings with 4 role select menus (one per milestone week) pre-populated with current values. Select a role to set it; deselect to disable role assignment for that milestone. When `None`, the milestone embed still posts but no role is granted.
 - **prizes** — Requires Manage Guild. Sets milestone prize descriptions via slash command options. All options are optional; with no options shows current prizes.
 
 ### Config Settings (`/subday config`)
@@ -59,10 +60,10 @@ The prize-roles command sends an ephemeral message with 4 role select menus (one
 
 ### Weekly Flow
 
-1. User signs up → gets week 1 prompt DM'd with instructions
+1. User signs up → gets a welcome embed (cyan) + week 1 prompt embed DM'd
 2. User completes the week's writing and shows a reviewer
 3. Reviewer runs `/subday complete @user` → achievement posted, week marked done
-4. On Sunday at 14:00 UTC, the cron task (`__init__.py`) advances completed participants to the next week and DMs the new prompt. Errors are isolated per-guild so one failure doesn't block others.
+4. On Sunday at 14:00 UTC, the cron task (`__init__.py`) advances completed participants to the next week and DMs two embeds: a greeting embed with progress bar and milestone countdown, followed by the prompt embed. If the participant has a confirmed owner, the owner also receives a copy of the prompt (greeting + prompt embed). Errors are isolated per-guild so one failure doesn't block others. The cron also verifies owners are still in the guild and clears `owner_id` on all their subs if they've left.
 5. Participants who haven't completed their week are paused (skipped until completed)
 
 ### Achievement Embeds
@@ -96,6 +97,31 @@ Milestone roles are configurable per server via `/subday prize-roles`. Setting a
 | 26 | SubChallenge: 26wks | Tail plug or $60 equivalent |
 | 39 | SubChallenge: 39wks | Lovense toy or $120 equivalent |
 | 52 | SubChallenge: 52wks | Fantasy dildo or flogger (up to $180) |
+
+### Owner Feature
+
+Submissives can register an owner via `/subday owner @user`. The owner receives copies of the sub's weekly prompts each Sunday and can see their subs' progress via `/subday status`.
+
+**State fields** on `SubDayParticipant`:
+- `owner_id: int | None` — confirmed owner's Discord user ID
+- `pending_owner_id: int | None` — awaiting approval
+
+**Flow:**
+1. Sub runs `/subday owner @user` → bot DMs the target with Accept/Decline buttons
+2. Owner clicks Accept → `owner_id` is set, sub is notified via DM
+3. Owner clicks Decline → `pending_owner_id` is cleared, sub is notified
+
+**Button custom IDs:** `subday_owner_approve:{guild_id}:{sub_user_id}` — guild_id is embedded because buttons are clicked in DMs where `interaction.guild_id` is None.
+
+**Edge cases:**
+- New request while one is pending → overwrites `pending_owner_id`, sends new DM (direct replacement)
+- Request to current confirmed owner → rejected ("already your owner")
+- Owner clicks stale button → `pending_owner_id` won't match → "request no longer valid"
+- Owner clicks Accept twice → idempotent: "you're already their owner"
+- Owner DMs disabled (request) → `ForbiddenError` caught, `pending_owner_id` rolled back
+- Owner DMs disabled (Sunday prompt) → warning logged, sub's prompt unaffected
+- Participant removed → cleanup loop clears `owner_id`/`pending_owner_id` references
+- Owner leaves guild → Sunday cron and approval handler both verify guild membership
 
 ### File Structure
 

@@ -9,3 +9,7 @@ WEEKS_DIR = Path(__file__).parent / "weeks"
 SUBDAY_SIGNUP_ID = "subday_signup"
 SUBDAY_CONFIG_PREFIX = "subday_cfg:"
 SUBDAY_CFG_ROLE_PREFIX = "subday_cfg_role:"
+SUBDAY_OWNER_PREFIX = "subday_owner:"
+SUBDAY_OWNER_APPROVE_PREFIX = "subday_owner_approve:"
+SUBDAY_OWNER_DENY_PREFIX = "subday_owner_deny:"
+MAX_EMBEDS_PER_MESSAGE = 10
