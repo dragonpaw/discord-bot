@@ -372,7 +372,7 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
 
 @bot.listen(hikari.StartingEvent)
 async def on_starting(_: hikari.StartingEvent) -> None:
-    client.register(loader)
+    loader.load(client)
     await client.load_extensions(
         "dragonpaw_bot.plugins.lobby",
         "dragonpaw_bot.plugins.role_menus",

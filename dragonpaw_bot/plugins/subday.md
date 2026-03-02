@@ -10,7 +10,7 @@ All role permissions, channel names, and prize descriptions are configurable per
 
 **Guild owner bypass:** The server owner (guild owner) always passes role permission checks (enroll, complete, backfill), regardless of whether they have the required role.
 
-**Bot owner commands:** The config, prize-roles, and prizes commands are restricted to the bot owner only.
+**Admin commands:** The config, prize-roles, and prizes commands require Manage Guild permission. The config interaction handler additionally checks that the user is the server owner.
 
 ### Slash Commands (`/subday`)
 
@@ -21,9 +21,9 @@ All role permissions, channel names, and prize descriptions are configurable per
 - **complete @user [week:\<n\>]** — Requires configured `complete_role` (or owner). Marks the user's current week done. Cannot complete yourself. DMs the user a completion embed with their star chart. If `achievements_channel` is set, also posts achievement there. At milestones: assigns role, pings staff (if `staff_channel` is set). Logs all completions to `staff_channel` if configured. With optional `week` parameter: requires `backfill_role` instead, sets the participant to that week and marks it complete in one step. Auto-enrolls the user if they aren't signed up yet.
 - **list** — Requires configured `complete_role` (or owner). Shows all participants + progress with status icons.
 - **remove @user** — Requires configured `complete_role` (or owner). Removes a participant.
-- **config** — Bot owner only. Shows current settings as an embed with interactive role and channel select menus (dropdowns). Select a role/channel to set it; deselect to clear back to None. Changes are saved immediately on each selection.
-- **prize-roles** — Bot owner only. Shows current milestone role settings with 4 role select menus (one per milestone week). Select a role to set it; deselect to disable role assignment for that milestone. When `None`, the milestone embed still posts but no role is granted.
-- **prizes** — Bot owner only. Sets milestone prize descriptions via slash command options. All options are optional; with no options shows current prizes.
+- **config** — Requires Manage Guild. Shows current settings as an embed with interactive role and channel select menus (dropdowns). Select a role/channel to set it; deselect to clear back to None. Changes are saved immediately on each selection. The interaction handler verifies the user is the server owner.
+- **prize-roles** — Requires Manage Guild. Shows current milestone role settings with 4 role select menus (one per milestone week). Select a role to set it; deselect to disable role assignment for that milestone. When `None`, the milestone embed still posts but no role is granted.
+- **prizes** — Requires Manage Guild. Sets milestone prize descriptions via slash command options. All options are optional; with no options shows current prizes.
 
 ### Config Settings (`/subday config`)
 
@@ -62,12 +62,12 @@ The prize-roles command sends an ephemeral message with 4 role select menus (one
 1. User signs up → gets week 1 prompt DM'd with instructions
 2. User completes the week's writing and shows a reviewer
 3. Reviewer runs `/subday complete @user` → achievement posted, week marked done
-4. On Sunday at 14:00 UTC, the scheduler advances completed participants to the next week and DMs the new prompt
+4. On Sunday at 14:00 UTC, the cron task (`__init__.py`) advances completed participants to the next week and DMs the new prompt. Errors are isolated per-guild so one failure doesn't block others.
 5. Participants who haven't completed their week are paused (skipped until completed)
 
 ### Achievement Embeds
 
-Controlled by the `achievements_channel` config field. When `None` (default), channel posts are suppressed. DMs, milestone roles, and staff notifications (if `staff_channel` is set) are always sent regardless.
+Controlled by the `achievements_channel` config field. When `None` (default), channel posts are suppressed. DMs, milestone roles, and staff notifications (if `staff_channel` is set) are always sent regardless. Achievement post failures (permissions, deleted channel) are logged as warnings but do not block completion.
 
 - **Regular completion** — Purple embed with star emoji + star chart image
 - **Milestone (13/26/39)** — Gold embed with star and sparkle emoji, role assignment, staff notification + star chart image
@@ -75,7 +75,7 @@ Controlled by the `achievements_channel` config field. When `None` (default), ch
 
 ### Star Chart Image
 
-Achievement embeds and the `/subday status` command include a Pillow-generated star chart PNG that mirrors the physical "Subday Journals" tracking card. Features:
+Achievement embeds and the `/subday status` command include a Pillow-generated star chart PNG (passed directly to `embed.set_image()` as `hikari.Bytes`) that mirrors the physical "Subday Journals" tracking card. Features:
 
 - **Title bar**: "Subday Journals:" in DaxCondensed-Bold + username in hot pink Caveat handwriting font
 - **Grid layout**: 7 columns × 8 rows, divided into 4 sections of 14 cells (13 weeks + 1 prize cell)
@@ -101,19 +101,26 @@ Milestone roles are configurable per server via `/subday prize-roles`. Setting a
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Plugin entry point, load/unload, component interaction listener |
+| `__init__.py` | Extension entry point (lightbulb Loader), component interaction listener with error boundaries, Sunday cron task |
 | `chart.py` | Star chart image generation (Pillow) for achievement/status embeds |
 | `commands.py` | All slash commands, help handler, achievement embeds, milestone logic, config/prizes commands, component interaction handler |
 | `constants.py` | Shared constants: `TOTAL_WEEKS`, `MILESTONE_WEEKS`, `WEEKS_DIR`, interaction ID prefixes |
 | `models.py` | Pydantic models: `SubDayParticipant`, `SubDayGuildConfig`, `SubDayGuildState` |
 | `prompts.py` | Parses weekly markdown files, builds prompt embeds |
-| `scheduler.py` | Sunday background task: advances weeks, DMs prompts |
 | `state.py` | YAML state persistence (load/save/cache) |
 | `weeks/` | 52 weekly prompt files, `rules.md`, `about.md` (mustache template) |
 
 ### State
 
 Persisted as `state/subday_{guild_id}.yaml`, separate from the main guild state. The `config` key stores per-server settings; old files without it get Pydantic defaults automatically.
+
+### Error Handling
+
+- **Interaction listener** (`__init__.py`): Both signup and config interaction handlers are wrapped in try/except. On failure, an ephemeral error message is sent to the user (with a fallback if the interaction already expired).
+- **Config log channel**: The audit message to the guild's log channel is wrapped so a deleted/inaccessible log channel doesn't prevent the config response.
+- **Achievement posts**: Wrapped in try/except so channel permission issues don't crash the completion flow.
+- **Channel permission checks** (`utils.py`): `check_channel_perms` handles both `ForbiddenError` (can't view channel) and `NotFoundError` (channel deleted) gracefully.
+- **Sunday cron task**: Per-guild error isolation — one guild's failure doesn't abort processing for other guilds.
 
 ### Required Discord Setup
 
