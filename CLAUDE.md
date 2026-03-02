@@ -27,7 +27,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **Entry point:** `dragonpaw_bot/__main__.py` → calls `bot.run()` from `bot.py`.
 
-**`bot.py`** — Core module. Defines `DragonpawBot` (subclass of `hikari.GatewayBot`) with state management, plus a `lightbulb.Client` created via `client_from_app()`. The `/config` slash command is defined here as a class-based command. Extensions are loaded asynchronously on `StartingEvent`.
+**`bot.py`** — Core module. Defines `DragonpawBot` (subclass of `hikari.GatewayBot`) with state management, plus a `lightbulb.Client` created via `client_from_app()`. The `/config` and `/logging` slash commands are defined here. Extensions are loaded asynchronously on `StartingEvent`.
 
 **`structs.py`** — All data models using Pydantic v2. Two layers:
 - **Config models** (`GuildConfig`, `LobbyConfig`, `RolesConfig`, etc.) — parsed from TOML config files
@@ -38,11 +38,13 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - **`plugins/lobby.py`** — Handles new member joins: auto-assigns a role, posts welcome messages, and optionally shows server rules with an "I agree" button that removes the lobby role.
 - **`plugins/subday/`** — 52-week guided journal program ("Where I am Led"). See `plugins/subday.md` for details. Multi-file plugin with models, commands, cron scheduler, prompt parser, and state persistence.
 
-**`utils.py`** — Discord helpers: deleting bot messages, looking up channels/roles/emojis by name, checking member roles, error reporting.
+**`utils.py`** — Discord helpers: deleting bot messages, looking up channels/roles/emojis by name, checking member roles, and `log_to_guild()` for sending notifications to a guild's configured log channel.
 
 **`http.py`** — Async HTTP client for fetching TOML configs, with special GitHub Gist URL handling.
 
-**Config flow:** Server admins use the `/config` slash command with a URL to a TOML file. The bot fetches and parses it, sets up role menus and lobby, then persists `GuildState` to disk as YAML.
+**Config flow:** Server admins use the `/config` slash command with a URL to a TOML file. The bot fetches and parses it, sets up role menus and lobby, then persists `GuildState` to disk as YAML. The `/logging` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/config` reloads.
+
+**Guild logging:** `utils.log_to_guild()` sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji.
 
 **State serialization note:** `GuildState.role_emojis` uses tuple keys `(message_id, emoji_name)` which require custom transformation for YAML (converted to nested dicts `{msg_id: {emoji: state}}`).
 
