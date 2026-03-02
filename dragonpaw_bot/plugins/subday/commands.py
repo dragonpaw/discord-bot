@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import datetime
 import logging
-import re
 from typing import TYPE_CHECKING
 
 import hikari
@@ -11,6 +10,7 @@ import lightbulb
 
 from dragonpaw_bot import utils
 from dragonpaw_bot.colors import (
+    SOLARIZED_CYAN,
     SOLARIZED_MAGENTA,
     SOLARIZED_VIOLET,
     SOLARIZED_YELLOW,
@@ -22,7 +22,6 @@ from dragonpaw_bot.plugins.subday.constants import (
     SUBDAY_CONFIG_PREFIX,
     SUBDAY_SIGNUP_ID,
     TOTAL_WEEKS,
-    WEEKS_DIR,
 )
 from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig, SubDayParticipant
 
@@ -464,14 +463,76 @@ class SubDayAbout(
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
+        enroll_role = cfg.enroll_role or "server owner"
 
-        # Build template variables from guild config
+        # -- Embed 1: Introduction (violet) --
+        intro = hikari.Embed(
+            title="Where I am Led — Weekly Journaling",
+            color=SOLARIZED_VIOLET,
+        )
+        intro.add_field(
+            name="📖 What's this all about?",
+            value=(
+                f"For folks with the **{enroll_role}** role "
+                "(with their Owner's permission, if Owned), we invite you to "
+                "participate in our weekly \"Subday\" (Sunday) journaling.\n\n"
+                "It's based on *Where I am Led* by Christina Parker — a set of "
+                "weekly prompts exploring the psychology and mindset of a service "
+                "submissive. We strongly encourage all subs to give it a try."
+            ),
+            inline=False,
+        )
+        intro.add_field(
+            name="✍️ What does it involve?",
+            value=(
+                "Each week has four short prompts. Write as little or as much "
+                "as you like exploring your feelings on D/s and that week's "
+                "topics. We'll reach out to each new sub as you join and help "
+                "get you started."
+            ),
+            inline=False,
+        )
+        intro.add_field(
+            name="🙈 Do I have to write?",
+            value=(
+                "Nope! Paper, a notes app, a text file, DM your answers to "
+                "your Owner — anything goes. Just jot it on a napkin if you "
+                "want.\n\n"
+                "_(If we could, we'd slap every dom who ever assigned lines "
+                "as a punishment and traumatized submissives to think of "
+                "writing as punishment. —Ash)_"
+            ),
+            inline=False,
+        )
+
+        # -- Embed 2: Details (cyan) --
+        details = hikari.Embed(
+            title="The Details",
+            color=SOLARIZED_CYAN,
+        )
+        details.add_field(
+            name="🔒 Will anyone see my answers?",
+            value=(
+                "Your Owner will, if you have one. No one else does. Your Owner "
+                "will check in with staff so they can track your progress for "
+                "rewards. If you're not Owned, check in with a member of staff "
+                "yourself."
+            ),
+            inline=False,
+        )
+        details.add_field(
+            name="⏰ I hate deadlines!",
+            value=(
+                "You're in luck — there aren't any. Each week takes about "
+                "15–30 minutes, but take as long as you need. You just can't "
+                "get the next week until you've completed the current one."
+            ),
+            inline=False,
+        )
+
+        # -- Embed 3: Rewards & signup (yellow) --
         prizes = cfg.milestone_prizes()
         roles = cfg.milestone_roles()
-        template_vars: dict[str, str] = {
-            "enroll_role": cfg.enroll_role or "server owner",
-            "complete_role": cfg.complete_role or "server owner",
-        }
         reward_lines: list[str] = []
         for week in MILESTONE_WEEKS:
             line = f"**{week} weeks:** {prizes[week]}"
@@ -479,42 +540,32 @@ class SubDayAbout(
             if role:
                 line += f" + the **{role}** role"
             reward_lines.append(line)
-            template_vars[f"prize_{week}"] = prizes[week]
-            template_vars[f"role_{week}"] = role or ""
-        template_vars["rewards"] = "\n".join(reward_lines)
 
-        raw = (WEEKS_DIR / "about.md").read_text()
-
-        def _replace_var(m: re.Match[str]) -> str:
-            key = m.group(1)
-            if key not in template_vars:
-                logger.warning(
-                    "G=%r: Unresolved template variable {{%s}} in about.md",
-                    guild_state.guild_name,
-                    key,
-                )
-                return m.group(0)
-            return template_vars[key]
-
-        text = re.sub(r"\{\{(\w+)\}\}", _replace_var, raw)
-
-        title = "Where I am Led"
-        for line in text.splitlines():
-            if line.startswith("# ") and not line.startswith("## "):
-                title = line[2:].strip()
-                break
-
-        sections = prompts.split_sections(text)
-        embed = hikari.Embed(title=title, color=SOLARIZED_VIOLET)
-        for heading, body in sections.items():
-            embed.add_field(name=heading, value=body or "\u200b", inline=False)
+        signup = hikari.Embed(
+            title="Rewards & Getting Started",
+            color=SOLARIZED_YELLOW,
+        )
+        signup.add_field(
+            name="🎁 Rewards",
+            value="\n".join(reward_lines),
+            inline=False,
+        )
+        signup.add_field(
+            name="🚀 How do I start?",
+            value=(
+                "Use the `/subday signup` command, or press the "
+                "**Sign Up** button below! You'll get your first week's "
+                "prompt sent to your DMs automatically."
+            ),
+            inline=False,
+        )
 
         bot = _get_bot(ctx)
         row = bot.rest.build_message_action_row()
         row.add_interactive_button(
             hikari.ButtonStyle.SUCCESS, SUBDAY_SIGNUP_ID, label="Sign Up"
         )
-        await ctx.respond(embed=embed, component=row)
+        await ctx.respond(embeds=[intro, details, signup], component=row)
 
 
 class SubDayStatus(

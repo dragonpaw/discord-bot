@@ -1,18 +1,8 @@
-from http import HTTPStatus
-from typing import Any
-
 import aiohttp
 
 # ---------------------------------------------------------------------------- #
 #                            HTTP utility functions                            #
 # ---------------------------------------------------------------------------- #
-
-
-async def get_json(url: str) -> Any:
-    async with aiohttp.ClientSession(raise_for_status=True) as session:
-        async with session.get(url) as r:
-            if r.status == HTTPStatus.OK:
-                return await r.json()
 
 
 async def get_text(url) -> str:

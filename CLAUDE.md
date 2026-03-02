@@ -73,4 +73,5 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - Shared helpers belong in `utils.py` (e.g. `member_has_role`, `guild_role_by_name`, `guild_channel_by_name`)
 - Plugin-specific docs go in a `.md` file alongside the plugin (e.g. `plugins/subday.md`). When adding, changing, or removing features from a plugin, always update its `.md` file to reflect the current state. The `.md` file is the source of truth for what the plugin does.
 - State is persisted as YAML files in `state/` using `safer` for atomic writes
+- All Python files are UTF-8 (with `# -*- coding: utf-8 -*-` header). Use literal emoji characters (`📖`, `✅`) directly in source, never Unicode escapes (`\U0001f4d6`, `\u2705`).
 - Type checking uses `ty` (not mypy): `uv run ty check dragonpaw_bot/`

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import hikari
-import hikari.messages
 import lightbulb
 import safer
 import uvloop

@@ -15,7 +15,7 @@ All role permissions, channel names, and prize descriptions are configurable per
 ### Slash Commands (`/subday`)
 
 - **help** — Shows contextual help listing only the commands the user can access based on their roles and permissions.
-- **about** — Displays program info from `weeks/about.md` as a rich embed with `{{mustache}}` template substitution from guild config (roles, prizes, rewards). Includes a "Sign Up" button that runs the same signup logic as `/subday signup`.
+- **about** — Displays program info as three color-coded embeds (violet intro, cyan details, yellow rewards). Content is built from guild config (roles, prizes). Includes a "Sign Up" button that runs the same signup logic as `/subday signup`.
 - **status** — Shows the user's own progress: current week, completion status, next milestone, signup date.
 - **signup** — Requires configured `enroll_role` (or owner). Registers user, DMs week 1 prompt + rules. Handles DM failures gracefully with a warning message.
 - **complete @user [week:\<n\>]** — Requires configured `complete_role` (or owner). Marks the user's current week done. Cannot complete yourself. DMs the user a completion embed with their star chart. If `achievements_channel` is set, also posts achievement there. At milestones: assigns role, pings staff (if `staff_channel` is set). Logs all completions to `staff_channel` if configured. With optional `week` parameter: requires `backfill_role` instead, sets the participant to that week and marks it complete in one step. Auto-enrolls the user if they aren't signed up yet.
@@ -108,7 +108,7 @@ Milestone roles are configurable per server via `/subday prize-roles`. Setting a
 | `models.py` | Pydantic models: `SubDayParticipant`, `SubDayGuildConfig`, `SubDayGuildState` |
 | `prompts.py` | Parses weekly markdown files, builds prompt embeds |
 | `state.py` | YAML state persistence (load/save/cache) |
-| `weeks/` | 52 weekly prompt files, `rules.md`, `about.md` (mustache template) |
+| `weeks/` | 52 weekly prompt files, `rules.md` |
 
 ### State
 
