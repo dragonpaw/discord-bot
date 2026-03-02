@@ -338,12 +338,14 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
 # ---------------------------------------------------------------------------- #
 
 
-async def _do_signup(
+def _do_signup(
     bot: DragonpawBot,
     guild_id: hikari.Snowflake,
     user: hikari.User,
-) -> str:
-    """Run signup logic. Returns a response message string."""
+) -> str | None:
+    """Register a user for SubDay. Returns None if already enrolled, or a
+    response message. Caller must respond first, then call _do_signup_async().
+    """
     guild_state = state.load(int(guild_id))
     user_id = int(user.id)
 
@@ -353,17 +355,35 @@ async def _do_signup(
             guild_state.guild_name,
             user.username,
         )
-        return "You are already signed up! Use `/subday status` to check your progress."
+        return None
 
     participant = SubDayParticipant(
         user_id=user_id,
         signup_date=datetime.datetime.now(tz=datetime.UTC),
     )
     guild_state.participants[user_id] = participant
+    state.save(guild_state)
+
+    return (
+        "You've been signed up for **Where I am Led**! "
+        "Check your DMs for your first prompt."
+    )
+
+
+async def _do_signup_async(
+    bot: DragonpawBot,
+    guild_id: hikari.Snowflake,
+    user: hikari.User,
+) -> None:
+    """Send welcome DM and log to guild. Call after responding to the interaction."""
+    guild_state = state.load(int(guild_id))
+    user_id = int(user.id)
+    participant = guild_state.participants.get(user_id)
+    if not participant:
+        return
 
     guild = await bot.rest.fetch_guild(guild_id)
     guild_state.guild_name = guild.name
-    state.save(guild_state)
 
     # DM week 1
     rules_text = prompts.load_rules()
@@ -388,22 +408,12 @@ async def _do_signup(
         await dm.send(embeds=[welcome_embed, prompt_embed])
         participant.week_sent = True
         state.save(guild_state)
-        msg = (
-            "You've been signed up for **Where I am Led**! "
-            "Check your DMs for your first prompt."
-        )
     except hikari.HTTPError as exc:
         logger.warning(
             "G=%r U=%r: Cannot DM user for subday signup: %s",
             guild.name,
             user.username,
             exc,
-        )
-        msg = (
-            "You've been signed up for **Where I am Led**! "
-            "However, I couldn't DM you your first prompt. "
-            "Please enable DMs from server members and ask "
-            "staff to have your prompt re-sent."
         )
     logger.info(
         "G=%r U=%r: Signed up for SubDay",
@@ -413,7 +423,6 @@ async def _do_signup(
     await utils.log_to_guild(
         bot, guild_id, f"📝 {user.mention} signed up for **Where I am Led**."
     )
-    return msg
 
 
 async def handle_signup_interaction(interaction: hikari.ComponentInteraction) -> None:
@@ -457,12 +466,15 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
         )
         return
 
-    msg = await _do_signup(bot, guild_id, interaction.user)
+    msg = _do_signup(bot, guild_id, interaction.user)
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
-        content=msg,
+        content=msg
+        or "You are already signed up! Use `/subday status` to check your progress.",
         flags=hikari.MessageFlag.EPHEMERAL,
     )
+    if msg:
+        await _do_signup_async(bot, guild_id, interaction.user)
 
 
 # ---------------------------------------------------------------------------- #
@@ -1092,8 +1104,15 @@ class SubDaySignup(
         if not await _check_permission(ctx, guild, cfg.enroll_role, "signup"):
             return
 
-        msg = await _do_signup(bot, ctx.guild_id, ctx.user)
+        msg = _do_signup(bot, ctx.guild_id, ctx.user)
+        if msg is None:
+            await ctx.respond(
+                "You are already signed up! Use `/subday status` to check your progress.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
         await ctx.respond(msg, flags=hikari.MessageFlag.EPHEMERAL)
+        await _do_signup_async(bot, ctx.guild_id, ctx.user)
 
 
 def _prepare_backfill(
@@ -1206,6 +1225,17 @@ class SubDayComplete(
         participant.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
         state.save(guild_state)
 
+        # Respond first to avoid interaction timeout, then do async work
+        if auto_enrolled:
+            response = (
+                f"Enrolled {target.mention} and completed "
+                f"**Week {week}** of Where I am Led."
+            )
+        else:
+            response = f"Marked {target.mention} as complete for **Week {week}**."
+
+        await ctx.respond(response, flags=hikari.MessageFlag.EPHEMERAL)
+
         await _post_achievement(
             bot, ctx.guild_id, ctx.member, target, week, cfg, guild_state.guild_name
         )
@@ -1225,16 +1255,6 @@ class SubDayComplete(
                     f"complete for **Week {week}**."
                 )
             await utils.log_to_guild(bot, ctx.guild_id, staff_msg)
-
-        if auto_enrolled:
-            response = (
-                f"Enrolled {target.mention} and completed "
-                f"**Week {week}** of Where I am Led."
-            )
-        else:
-            response = f"Marked {target.mention} as complete for **Week {week}**."
-
-        await ctx.respond(response, flags=hikari.MessageFlag.EPHEMERAL)
         logger.info(
             "G=%r U=%r: Completed SubDay week %d (marked by %s%s)",
             guild_state.guild_name,
