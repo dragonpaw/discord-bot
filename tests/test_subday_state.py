@@ -2,8 +2,12 @@ import datetime
 
 import yaml
 
-from dragonpaw_bot.plugins.subday import MILESTONE_ROLES, state
-from dragonpaw_bot.plugins.subday.models import SubDayGuildState, SubDayParticipant
+from dragonpaw_bot.plugins.subday import MILESTONE_WEEKS, state
+from dragonpaw_bot.plugins.subday.models import (
+    SubDayGuildConfig,
+    SubDayGuildState,
+    SubDayParticipant,
+)
 
 
 def _sample_participant(**kwargs) -> SubDayParticipant:
@@ -83,11 +87,23 @@ def test_advance_week_logic():
 
 
 def test_milestone_detection():
-    assert 13 in MILESTONE_ROLES
-    assert 26 in MILESTONE_ROLES
-    assert 39 in MILESTONE_ROLES
-    assert 52 in MILESTONE_ROLES
-    assert 1 not in MILESTONE_ROLES
+    assert 13 in MILESTONE_WEEKS
+    assert 26 in MILESTONE_WEEKS
+    assert 39 in MILESTONE_WEEKS
+    assert 52 in MILESTONE_WEEKS
+    assert 1 not in MILESTONE_WEEKS
+
+
+def test_milestone_roles_from_config():
+    cfg = SubDayGuildConfig()
+    roles = cfg.milestone_roles()
+    assert roles[13] == "SubChallenge: 13wks"
+    assert roles[52] == "SubChallenge: 52wks"
+
+    cfg_custom = SubDayGuildConfig(role_13="Custom Role", role_26=None)
+    roles2 = cfg_custom.milestone_roles()
+    assert roles2[13] == "Custom Role"
+    assert roles2[26] is None
 
 
 def test_paused_participant_not_advanced():

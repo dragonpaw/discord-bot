@@ -1,7 +1,7 @@
 # Weekly Subday (Sunday) Journaling Class
 
 ## What's this all about?
-Here on OGL, we focus on training. And for the <@&665629632996966412>  and <@&761822555207237642> folks (with their Owner's permission, if Owned) we invite you to participate in our weekly "Subday" (Sunday) journaling.
+For folks with the **{{enroll_role}}** role (with their Owner's permission, if Owned) we invite you to participate in our weekly "Subday" (Sunday) journaling.
 
 There's a book, "Where I am Led" by Christina Parker. It is a set of weekly journaling prompts. It's focused on exploring the psychology and mindset of a service submissive, who either lives, or wants to live, a 24/7 D/s lifestyle, living with their Owner. We strongly encourage all subs to give it a try.
 
@@ -23,10 +23,7 @@ You're in luck, there isn't one. Take as little or as long as you need for each 
 ## Wait... Rewards?
 As a means of motivating folks, we offer rewards at various intervals of the Subday Journaling project.
 
-**13 weeks:**  You'll receive a $25 gift card to the online shop of your choice.
-**26 weeks:** A tailplug toy of your choice (if you're into petplay) or an equivalent toy.
-**39 weeks:** A Lush or Hush toy from Lovense.
-**52 weeks:** If you complete the full class, you'll be given a nice flogger or a Bad Dragon dildo, of your choice, to add to your toy collection.
+{{rewards}}
 
 ## How do I start?
 Use the `/subday signup` command right here in Discord! You'll get your first week's prompt sent to your DMs automatically.

@@ -19,10 +19,17 @@ class SubDayGuildConfig(pydantic.BaseModel):
     backfill_role: str | None = None
     achievements_channel: str | None = None
     staff_channel: str | None = None
+    role_13: str | None = "SubChallenge: 13wks"
+    role_26: str | None = "SubChallenge: 26wks"
+    role_39: str | None = "SubChallenge: 39wks"
+    role_52: str | None = "SubChallenge: 52wks"
     prize_13: str = "a $25 gift card"
     prize_26: str = "a tail plug or $60 equivalent"
     prize_39: str = "a Lovense toy or $120 equivalent"
     prize_52: str = "a fantasy dildo or flogger (up to $180)"
+
+    def milestone_roles(self) -> dict[int, str | None]:
+        return {13: self.role_13, 26: self.role_26, 39: self.role_39, 52: self.role_52}
 
     def milestone_prizes(self) -> dict[int, str]:
         return {

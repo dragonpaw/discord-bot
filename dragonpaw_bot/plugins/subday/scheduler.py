@@ -140,9 +140,16 @@ async def _send_weekly_prompts(bot: DragonpawBot) -> None:
                     )
                 except hikari.ForbiddenError:
                     logger.warning(
-                        "G=%r U=%r: Cannot DM user for SubDay prompt",
+                        "G=%r U=%r: Cannot DM user for SubDay prompt (DMs disabled)",
                         guild.name,
                         member.username,
+                    )
+                except hikari.HTTPError as exc:
+                    logger.error(
+                        "G=%r U=%r: Failed to DM SubDay prompt: %s",
+                        guild.name,
+                        member.username,
+                        exc,
                     )
 
             await asyncio.sleep(1)  # rate limit courtesy

@@ -95,6 +95,87 @@ def member_has_role(member: hikari.Member, role_name: str) -> bool:
     return False
 
 
+def has_permission(
+    guild: hikari.Guild | hikari.RESTGuild,
+    member: hikari.Member,
+    role_name: str | None,
+) -> bool:
+    """Check if member has the named role, or is the server (guild) owner.
+
+    When role_name is None, only the guild owner passes (owner-only access).
+    """
+    if member.id == guild.owner_id:
+        return True
+    if role_name:
+        return member_has_role(member, role_name)
+    return False
+
+
+PERM_LABELS: dict[hikari.Permissions, str] = {
+    hikari.Permissions.SEND_MESSAGES: "Send Messages",
+    hikari.Permissions.EMBED_LINKS: "Embed Links",
+    hikari.Permissions.ATTACH_FILES: "Attach Files",
+}
+
+
+async def check_channel_perms(
+    bot: DragonpawBot, guild_id: hikari.Snowflake, channel_id: hikari.Snowflake
+) -> list[str]:
+    """Return a list of missing permission names for the bot in the given channel."""
+    logger.debug(
+        "Checking bot permissions in channel %r (guild %r)", channel_id, guild_id
+    )
+    assert bot.user_id
+    me = await bot.rest.fetch_member(guild_id, bot.user_id)
+    roles = await bot.rest.fetch_roles(guild_id)
+    role_map = {r.id: r for r in roles}
+
+    # Start with @everyone permissions
+    everyone_role = role_map.get(guild_id)
+    perms = everyone_role.permissions if everyone_role else hikari.Permissions.NONE
+
+    # Add permissions from member's roles
+    for role_id in me.role_ids:
+        role = role_map.get(role_id)
+        if role:
+            perms |= role.permissions
+
+    # Administrator bypasses everything
+    if perms & hikari.Permissions.ADMINISTRATOR:
+        return []
+
+    # Apply channel permission overwrites
+    channel = await bot.rest.fetch_channel(channel_id)
+    if isinstance(channel, hikari.PermissibleGuildChannel):
+        overwrites = channel.permission_overwrites
+        # @everyone overwrite
+        if guild_id in overwrites:
+            ow = overwrites[guild_id]
+            perms &= ~ow.deny
+            perms |= ow.allow
+        # Role overwrites
+        allow = hikari.Permissions.NONE
+        deny = hikari.Permissions.NONE
+        for role_id in me.role_ids:
+            if role_id in overwrites:
+                ow = overwrites[role_id]
+                allow |= ow.allow
+                deny |= ow.deny
+        perms &= ~deny
+        perms |= allow
+        # Member-specific overwrite
+        if me.id in overwrites:
+            ow = overwrites[me.id]
+            perms &= ~ow.deny
+            perms |= ow.allow
+
+    missing = []
+    for perm, label in PERM_LABELS.items():
+        if not (perms & perm):
+            missing.append(label)
+    return missing
+
+
 async def report_errors(
     bot: DragonpawBot,
     guild_id: hikari.Snowflake,

@@ -7,9 +7,9 @@ import hikari
 import lightbulb
 
 from dragonpaw_bot.plugins.subday import commands, scheduler
-from dragonpaw_bot.plugins.subday.commands import MILESTONE_ROLES, TOTAL_WEEKS
+from dragonpaw_bot.plugins.subday.commands import MILESTONE_WEEKS, TOTAL_WEEKS
 
-__all__ = ["MILESTONE_ROLES", "TOTAL_WEEKS"]
+__all__ = ["MILESTONE_WEEKS", "TOTAL_WEEKS"]
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,14 @@ def unload(bot: lightbulb.BotApp) -> None:
 @plugin.command
 @lightbulb.command("subday", "Where I am Led — 52-week guided journal")
 @lightbulb.implements(lightbulb.SlashCommandGroup)
-async def subday_group(ctx: lightbulb.Context) -> None:
+async def subday_group(_ctx: lightbulb.Context) -> None:
+    pass
+
+
+@subday_group.child
+@lightbulb.command("help", "Show available SubDay commands")
+@lightbulb.implements(lightbulb.SlashSubCommand)
+async def subday_help(ctx: lightbulb.Context) -> None:
     await commands.help_handler(ctx)
 
 
@@ -40,7 +47,14 @@ commands.register(subday_group)
 async def on_interaction(event: hikari.InteractionCreateEvent) -> None:
     if not isinstance(event.interaction, hikari.ComponentInteraction):
         return
-    if not event.interaction.custom_id.startswith(commands.SUBDAY_CONFIG_PREFIX):
+    cid = event.interaction.custom_id
+    if cid == commands.SUBDAY_SIGNUP_ID:
+        await commands.handle_signup_interaction(event.interaction)
+        return
+    if not (
+        cid.startswith(commands.SUBDAY_CONFIG_PREFIX)
+        or cid.startswith(commands.SUBDAY_CFG_ROLE_PREFIX)
+    ):
         return
     await commands.handle_config_interaction(event.interaction)
 

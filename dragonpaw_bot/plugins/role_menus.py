@@ -82,11 +82,21 @@ async def configure_role_menus(
         for o in menu.options:
             e = emoji_map.get(o.emoji)
             if not e:
-                logger.error("G=%r Menu=%r: Emoji %r doesn't exist.", guild.name, menu.name, o.emoji)
+                logger.error(
+                    "G=%r Menu=%r: Emoji %r doesn't exist.",
+                    guild.name,
+                    menu.name,
+                    o.emoji,
+                )
                 errors.append(f"Emoji '{o.emoji}' doesn't seem to exist.")
                 continue
             if o.role not in role_map:
-                logger.error("G=%r Menu=%r: Role %r doesn't exist.", guild.name, menu.name, o.role)
+                logger.error(
+                    "G=%r Menu=%r: Role %r doesn't exist.",
+                    guild.name,
+                    menu.name,
+                    o.role,
+                )
                 errors.append(f"Role '{o.role}' doesn't seem to exist.")
                 continue
             embed.add_field(

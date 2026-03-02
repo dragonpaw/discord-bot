@@ -23,7 +23,7 @@ class WeekPrompt:
     assignment_body: str
 
 
-def _split_sections(text: str) -> dict[str, str]:
+def split_sections(text: str) -> dict[str, str]:
     """Split markdown into {heading: body} by ## headers."""
     sections: dict[str, str] = {}
     current_heading = ""
@@ -46,7 +46,7 @@ def _split_sections(text: str) -> dict[str, str]:
 
 def _parse_file(text: str, week: int) -> WeekPrompt:
     """Parse a week markdown file into a WeekPrompt."""
-    sections = _split_sections(text)
+    sections = split_sections(text)
 
     # Each file has exactly 4 sections with consistent headers
     guidepost_heading = next(h for h in sections if h.startswith("Guidepost:"))

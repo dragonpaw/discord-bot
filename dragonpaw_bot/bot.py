@@ -58,6 +58,7 @@ if "TEST_GUILDS" in environ:
     TEST_GUILDS = [int(x) for x in environ["TEST_GUILDS"].split(",")]
 else:
     TEST_GUILDS = []
+logger.info("TEST_GUILDS=%r", TEST_GUILDS)
 
 
 class DragonpawBot(lightbulb.BotApp):
