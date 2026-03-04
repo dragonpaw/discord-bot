@@ -77,13 +77,21 @@ async def _require_guild_owner(
 async def _check_permission(
     ctx: lightbulb.Context,
     guild: hikari.Guild | hikari.RESTGuild,
-    role_name: str | None,
+    role_name: str | list[str] | None,
     action: str,
 ) -> bool:
     """Check permission and respond with denial if lacking. Returns True if allowed."""
     assert ctx.member
-    allowed = utils.has_permission(guild, ctx.member, role_name)
-    label = f"**{role_name}** role" if role_name else "server owner status"
+    if isinstance(role_name, list):
+        allowed = utils.has_any_role_permission(guild, ctx.member, role_name)
+        label = (
+            "one of the **" + "**, **".join(role_name) + "** roles"
+            if role_name
+            else "server owner status"
+        )
+    else:
+        allowed = utils.has_permission(guild, ctx.member, role_name)
+        label = f"**{role_name}** role" if role_name else "server owner status"
     if allowed:
         return True
     logger.warning(
@@ -173,7 +181,12 @@ class BirthdayStatus(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
+        bot = _get_bot(ctx)
+        guild = await utils.get_guild(ctx, bot)
         guild_state = state.load(int(ctx.guild_id))
+        cfg = guild_state.config
+        if not await _check_permission(ctx, guild, cfg.register_role, "status"):
+            return
         uid = int(ctx.user.id)
         entry = guild_state.birthdays.get(uid)
 
@@ -218,12 +231,18 @@ class BirthdaySet(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
+        bot = _get_bot(ctx)
+        guild = await utils.get_guild(ctx, bot)
+        guild_state = state.load(int(ctx.guild_id))
+        cfg = guild_state.config
+        if not await _check_permission(ctx, guild, cfg.register_role, "set"):
+            return
+
         error = _validate_date(self.month, self.day)
         if error:
             await ctx.respond(error, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
-        guild_state = state.load(int(ctx.guild_id))
         uid = int(ctx.user.id)
         existing = guild_state.birthdays.get(uid)
 
@@ -235,10 +254,7 @@ class BirthdaySet(
             or (existing.wishlist_url if existing else None),
         )
         guild_state.birthdays[uid] = entry
-        bot = _get_bot(ctx)
-        guild = bot.cache.get_guild(ctx.guild_id)
-        if guild:
-            guild_state.guild_name = guild.name
+        guild_state.guild_name = guild.name
         state.save(guild_state)
 
         action = "updated" if existing else "registered"
@@ -273,7 +289,13 @@ class BirthdayWishlist(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
+        bot = _get_bot(ctx)
+        guild = await utils.get_guild(ctx, bot)
         guild_state = state.load(int(ctx.guild_id))
+        cfg = guild_state.config
+        if not await _check_permission(ctx, guild, cfg.register_role, "wishlist"):
+            return
+
         uid = int(ctx.user.id)
         entry = guild_state.birthdays.get(uid)
 
@@ -376,7 +398,13 @@ class BirthdayRemove(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
+        bot = _get_bot(ctx)
+        guild = await utils.get_guild(ctx, bot)
         guild_state = state.load(int(ctx.guild_id))
+        cfg = guild_state.config
+        if not await _check_permission(ctx, guild, cfg.register_role, "remove"):
+            return
+
         uid = int(ctx.user.id)
 
         if uid not in guild_state.birthdays:
@@ -394,7 +422,6 @@ class BirthdayRemove(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
-        bot = _get_bot(ctx)
         logger.info(
             "G=%r U=%r: Removed own birthday",
             guild_state.guild_name,
@@ -514,6 +541,13 @@ def _config_embed(cfg: BirthdayGuildConfig) -> hikari.Embed:
         color=SOLARIZED_ORANGE,
     )
     embed.add_field(
+        name="Register role(s)",
+        value=", ".join(f"`{r}`" for r in cfg.register_role)
+        if cfg.register_role
+        else "_Owner-only_",
+        inline=True,
+    )
+    embed.add_field(
         name="Manage role",
         value=f"`{cfg.manage_role}`" if cfg.manage_role else "_Owner-only_",
         inline=True,
@@ -565,7 +599,8 @@ class _DefaultsActionRow:
         return payload, resources
 
 
-ROLE_FIELDS = {"manage_role", "list_role", "birthday_role"}
+ROLE_FIELDS = {"register_role", "manage_role", "list_role", "birthday_role"}
+MULTI_ROLE_FIELDS = {"register_role"}
 
 
 async def _config_components(
@@ -581,69 +616,85 @@ async def _config_components(
 
     rows: list[Any] = []
 
-    # Row 1: Manage role select
-    row1 = bot.rest.build_message_action_row()
-    row1.add_select_menu(
+    # Register role select (multi-select)
+    row = bot.rest.build_message_action_row()
+    row.add_select_menu(
+        hikari.ComponentType.ROLE_SELECT_MENU,
+        f"{BIRTHDAY_CONFIG_PREFIX}register_role",
+        placeholder="Register role(s) (who can self-register)",
+        min_values=0,
+        max_values=25,
+    )
+    defaults = [
+        {"id": str(role_map[name]), "type": "role"}
+        for name in cfg.register_role
+        if name in role_map
+    ]
+    rows.append(_DefaultsActionRow(row, defaults))
+
+    # Manage role select
+    row = bot.rest.build_message_action_row()
+    row.add_select_menu(
         hikari.ComponentType.ROLE_SELECT_MENU,
         f"{BIRTHDAY_CONFIG_PREFIX}manage_role",
         placeholder="Manage role (who can set/remove for others)",
         min_values=0,
         max_values=1,
     )
-    defaults1 = (
+    defaults = (
         [{"id": str(role_map[cfg.manage_role]), "type": "role"}]
         if cfg.manage_role and cfg.manage_role in role_map
         else []
     )
-    rows.append(_DefaultsActionRow(row1, defaults1))
+    rows.append(_DefaultsActionRow(row, defaults))
 
-    # Row 2: List role select
-    row2 = bot.rest.build_message_action_row()
-    row2.add_select_menu(
+    # List role select
+    row = bot.rest.build_message_action_row()
+    row.add_select_menu(
         hikari.ComponentType.ROLE_SELECT_MENU,
         f"{BIRTHDAY_CONFIG_PREFIX}list_role",
         placeholder="List role (who can list all birthdays)",
         min_values=0,
         max_values=1,
     )
-    defaults2 = (
+    defaults = (
         [{"id": str(role_map[cfg.list_role]), "type": "role"}]
         if cfg.list_role and cfg.list_role in role_map
         else []
     )
-    rows.append(_DefaultsActionRow(row2, defaults2))
+    rows.append(_DefaultsActionRow(row, defaults))
 
-    # Row 3: Announcement channel select
-    row3 = bot.rest.build_message_action_row()
-    row3.add_channel_menu(
+    # Announcement channel select
+    row = bot.rest.build_message_action_row()
+    row.add_channel_menu(
         f"{BIRTHDAY_CONFIG_PREFIX}announcement_channel",
         channel_types=[hikari.ChannelType.GUILD_TEXT],
         placeholder="Announcement channel (birthday posts)",
         min_values=0,
         max_values=1,
     )
-    defaults3 = (
+    defaults = (
         [{"id": str(channel_map[cfg.announcement_channel]), "type": "channel"}]
         if cfg.announcement_channel and cfg.announcement_channel in channel_map
         else []
     )
-    rows.append(_DefaultsActionRow(row3, defaults3))
+    rows.append(_DefaultsActionRow(row, defaults))
 
-    # Row 4: Birthday role select
-    row4 = bot.rest.build_message_action_row()
-    row4.add_select_menu(
+    # Birthday role select
+    row = bot.rest.build_message_action_row()
+    row.add_select_menu(
         hikari.ComponentType.ROLE_SELECT_MENU,
         f"{BIRTHDAY_CONFIG_PREFIX}birthday_role",
         placeholder="Birthday role (auto-assigned on birthday)",
         min_values=0,
         max_values=1,
     )
-    defaults4 = (
+    defaults = (
         [{"id": str(role_map[cfg.birthday_role]), "type": "role"}]
         if cfg.birthday_role and cfg.birthday_role in role_map
         else []
     )
-    rows.append(_DefaultsActionRow(row4, defaults4))
+    rows.append(_DefaultsActionRow(row, defaults))
 
     return rows
 
@@ -663,6 +714,32 @@ def _resolve_select_value(
         return role.name if role else None
     channel = resolved.channels.get(snowflake) if resolved.channels else None
     return channel.name if channel else None
+
+
+def _resolve_multi_role_value(
+    interaction: hikari.ComponentInteraction,
+) -> list[str]:
+    """Extract role names from a multi-select role interaction."""
+    if (
+        not interaction.values
+        or not interaction.resolved
+        or not interaction.resolved.roles
+    ):
+        return []
+    names: list[str] = []
+    for val in interaction.values:
+        snowflake = hikari.Snowflake(val)
+        role = interaction.resolved.roles.get(snowflake)
+        if role:
+            names.append(role.name)
+    return names
+
+
+def _display_config_value(v: object) -> str:
+    """Format a config value for display in log/audit messages."""
+    if isinstance(v, list):
+        return ", ".join(v) if v else "None"  # type: ignore[arg-type]
+    return v or "None"  # type: ignore[return-value]
 
 
 async def handle_config_interaction(interaction: hikari.ComponentInteraction) -> None:
@@ -698,7 +775,11 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     cfg = guild_state.config
     old_value = getattr(cfg, field)
 
-    new_value = _resolve_select_value(interaction, field)
+    # Multi-role fields use a separate resolver
+    if field in MULTI_ROLE_FIELDS:
+        new_value = _resolve_multi_role_value(interaction)
+    else:
+        new_value = _resolve_select_value(interaction, field)
 
     # For channel fields, verify the bot can write to the selected channel
     if new_value and field == "announcement_channel":
@@ -756,8 +837,8 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     # Then do slow work: save state and log
     state.save(guild_state)
-    display_old = old_value or "None"
-    display_new = new_value or "None"
+    display_old = _display_config_value(old_value)
+    display_new = _display_config_value(new_value)
     logger.info(
         "G=%r U=%r: Birthday setting changed: %s = %r (was %r)",
         guild.name,

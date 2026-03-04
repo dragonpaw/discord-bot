@@ -12,17 +12,18 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 
 ### Slash Commands (`/birthday`)
 
-- **status** — Shows your registered birthday, wishlist URL, and days until your next birthday. Ephemeral.
-- **set [month] [day] [wishlist_url]** — Register or update your own birthday (month/day only, no year). Optionally include a wishlist URL.
-- **wishlist [url]** — Update just your wishlist URL. With no argument, shows your current wishlist.
+- **status** — Shows your registered birthday, wishlist URL, and days until your next birthday. Requires `register_role`. Ephemeral.
+- **set [month] [day] [wishlist_url]** — Register or update your own birthday (month/day only, no year). Requires `register_role`. Optionally include a wishlist URL.
+- **wishlist [url]** — Update just your wishlist URL. Requires `register_role`. With no argument, shows your current wishlist.
 - **set-for @user [month] [day] [wishlist_url]** — Requires `manage_role`. Register or update a birthday for another user.
-- **remove** — Remove your own birthday entry.
+- **remove** — Remove your own birthday entry. Requires `register_role`.
 - **remove-for @user** — Requires `manage_role`. Remove another user's birthday entry.
 - **list** — Requires `list_role`. Shows all registered birthdays grouped by month, sorted by day. Includes wishlist links where set.
 - **config** — Owner only. Shows current settings with interactive select menus. Each menu displays the current configured value (not None/blank) as its default selection. Changes save immediately on each selection.
 
 ### Config Settings (`/birthday config`)
 
+- **Register role(s)** (role multi-select, default: _None/owner-only_) — Role(s) allowed to self-register, view status, update wishlist, and remove own birthday
 - **Manage role** (role select, default: _None/owner-only_) — Role allowed to set/remove birthdays for others
 - **List role** (role select, default: _None/owner-only_) — Role allowed to list all birthdays
 - **Announcement channel** (channel select, default: _None/disabled_) — Channel where birthday announcements are posted
