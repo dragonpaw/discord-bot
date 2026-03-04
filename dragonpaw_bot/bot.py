@@ -17,8 +17,6 @@ import yaml
 from dragonpaw_bot import http, structs, utils
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
-from dragonpaw_bot.plugins.lobby import INTERACTION_HANDLERS as lobby_handlers
-from dragonpaw_bot.plugins.lobby import configure_lobby
 from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
 from dragonpaw_bot.plugins.role_menus import configure_role_menus
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
@@ -31,7 +29,6 @@ logger = logging.getLogger(__name__)
 # Sorted longest-prefix-first so "subday_cfg_role:" matches before "subday_cfg:".
 _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
     [
-        *((p, h, "processing your agreement") for p, h in lobby_handlers.items()),
         *((p, h, "processing your request") for p, h in subday_handlers.items()),
         *((p, h, "processing your request") for p, h in birthday_handlers.items()),
         *((p, h, "updating your roles") for p, h in role_menu_handlers.items()),
@@ -409,20 +406,7 @@ async def configure_guild(
     else:
         logger.debug("No roles menus")
 
-    if config.lobby:
-        errors = await configure_lobby(
-            bot=bot,
-            guild=guild,
-            config=config.lobby,
-            state=state,
-            role_map=role_map,
-        )
-        for err in errors:
-            logger.error("Error setting up lobby: %r", err)
-            await utils.log_to_guild(bot, guild.id, f"🤯 **Lobby error:** {err}")
-        all_errors.extend(errors)
-    else:
-        logger.debug("No lobby.")
+    # TODO: Lobby module disabled pending redesign
 
     bot.state_update(state)
     logger.info("G=%r Configured guild.", guild.name)
@@ -503,7 +487,7 @@ async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None
 async def on_starting(_: hikari.StartingEvent) -> None:
     await loader.add_to_client(client)
     await client.load_extensions(
-        "dragonpaw_bot.plugins.lobby",
+        # "dragonpaw_bot.plugins.lobby",  # TODO: disabled pending redesign
         "dragonpaw_bot.plugins.role_menus",
         "dragonpaw_bot.plugins.subday",
         "dragonpaw_bot.plugins.birthdays",
