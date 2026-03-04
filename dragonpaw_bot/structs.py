@@ -3,8 +3,6 @@ import datetime
 import hikari
 import pydantic
 
-from dragonpaw_bot.plugins.role_menus.models import RolesConfig
-
 
 # ---------------------------------------------------------------------------- #
 #             Configs: The format that we get from the config file.            #
@@ -20,7 +18,6 @@ class LobbyConfig(pydantic.BaseModel):
 
 class GuildConfig(pydantic.BaseModel):
     lobby: LobbyConfig | None = None
-    roles: RolesConfig | None = None
 
 
 # ---------------------------------------------------------------------------- #

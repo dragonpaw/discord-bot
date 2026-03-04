@@ -3,7 +3,6 @@ import asyncio
 import datetime
 import logging
 import pickle
-import tomllib
 from os import environ
 from pathlib import Path
 from typing import Any
@@ -14,11 +13,10 @@ import safer
 import uvloop
 import yaml
 
-from dragonpaw_bot import http, structs, utils
+from dragonpaw_bot import structs
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
 from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
-from dragonpaw_bot.plugins.role_menus import configure_role_menus
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
 from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
@@ -257,44 +255,6 @@ async def on_guild_join(event: hikari.GuildJoinEvent):
 loader = lightbulb.Loader()
 
 
-roles_group = lightbulb.Group("roles", "Role menu management")
-loader.command(roles_group)
-
-
-@roles_group.register
-class RolesConfig(
-    lightbulb.SlashCommand,
-    name="config",
-    description="Configure Dragonpaw Bot via a url to a TOML file.",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_ROLES)],
-):
-    url = lightbulb.string("url", "Link to the config you wish to use")
-
-    @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:
-        if not ctx.guild_id:
-            logger.error("Interaction without a guild?!: %r", ctx)
-            return
-
-        await ctx.respond("Config loading now...", flags=hikari.MessageFlag.EPHEMERAL)
-
-        g = await bot.rest.fetch_guild(guild=ctx.guild_id)
-        logger.info("G=%r Setting up guild with file %r", g.name, self.url)
-        errors = await configure_guild(bot=bot, guild=g, url=self.url)
-
-        if errors:
-            error_lines = "\n".join(f"- {e}" for e in errors)
-            await ctx.respond(
-                f"⚠️ **Config loaded with warnings:**\n{error_lines}",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-        else:
-            await ctx.respond(
-                "✅ Config loaded successfully.",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-
-
 @loader.command
 class Logging(
     lightbulb.SlashCommand,
@@ -346,71 +306,6 @@ class Logging(
             await ctx.respond(
                 "Log channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
             )
-
-
-# ---------------------------------------------------------------------------- #
-#                                Config handling                               #
-# ---------------------------------------------------------------------------- #
-
-
-def config_parse_toml(guild: hikari.Guild, text: str) -> structs.GuildConfig:
-    logger.info("G=%r Loading TOML config for guild: %r", guild.name, guild)
-
-    data = tomllib.loads(text)
-    return structs.GuildConfig.model_validate(data)
-
-
-async def configure_guild(
-    bot: DragonpawBot, guild: hikari.Guild, url: str
-) -> list[str]:
-    """Load the config for a guild and start setting up everything there.
-
-    Returns a list of warning/error messages for the caller to display.
-    """
-    all_errors: list[str] = []
-
-    if url.startswith("https://gist.github.com"):
-        config_text = await http.get_gist(url)
-    else:
-        config_text = await http.get_text(url)
-    try:
-        config = config_parse_toml(guild=guild, text=config_text)
-    except tomllib.TOMLDecodeError as e:
-        logger.error("Error parsing TOML file: %s", e)
-        await utils.log_to_guild(bot, guild.id, f"🤯 **Config error:** {e}")
-        return [f"Config error: {e}"]
-
-    role_map = await utils.guild_roles(bot=bot, guild=guild)
-
-    old_state = bot.state(guild.id)
-    state = structs.GuildState(
-        id=guild.id,
-        name=guild.name,
-        config_url=url,
-        config_last=datetime.datetime.now(),
-        log_channel_id=old_state.log_channel_id if old_state else None,
-    )
-
-    # Start setting up the guild
-    if config.roles:
-        errors = await configure_role_menus(
-            bot=bot,
-            guild=guild,
-            config=config.roles,
-            role_map=role_map,
-        )
-        for err in errors:
-            logger.error("Error setting up role menus: %r", err)
-            await utils.log_to_guild(bot, guild.id, f"🤯 **Role menu error:** {err}")
-        all_errors.extend(errors)
-    else:
-        logger.debug("No roles menus")
-
-    # TODO: Lobby module disabled pending redesign
-
-    bot.state_update(state)
-    logger.info("G=%r Configured guild.", guild.name)
-    return all_errors
 
 
 async def _respond_interaction_error(

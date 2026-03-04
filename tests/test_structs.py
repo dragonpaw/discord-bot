@@ -4,7 +4,6 @@ import hikari
 import pydantic
 import pytest
 
-from dragonpaw_bot.plugins.role_menus.models import RolesConfig
 from dragonpaw_bot.structs import (
     GuildConfig,
     GuildState,
@@ -14,9 +13,8 @@ from dragonpaw_bot.structs import (
 
 def test_guild_config_minimal():
     """Nullable fields can be explicitly set to None."""
-    config = GuildConfig.model_validate({"lobby": None, "roles": None})
+    config = GuildConfig.model_validate({"lobby": None})
     assert config.lobby is None
-    assert config.roles is None
 
 
 def test_guild_config_full():
@@ -29,18 +27,6 @@ def test_guild_config_full():
             "welcome_message": "Hello {user}!",
             "click_for_rules": True,
         },
-        "roles": {
-            "channel": "role-select",
-            "menu": [
-                {
-                    "name": "Colors",
-                    "description": "Pick a color",
-                    "options": [
-                        {"role": "Red", "description": "Red role"},
-                    ],
-                }
-            ],
-        },
     }
     config = GuildConfig.model_validate(data)
 
@@ -48,12 +34,6 @@ def test_guild_config_full():
     assert config.lobby.channel == "welcome"
     assert config.lobby.kick_after_days == 7
     assert config.lobby.click_for_rules is True
-
-    assert isinstance(config.roles, RolesConfig)
-    assert config.roles.channel == "role-select"
-    assert len(config.roles.menu) == 1
-    assert config.roles.menu[0].name == "Colors"
-    assert len(config.roles.menu[0].options) == 1
 
 
 def test_guild_config_invalid_field():

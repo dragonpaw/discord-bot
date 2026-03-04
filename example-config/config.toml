@@ -1,54 +1,34 @@
-[lobby]
-channel = "intro"
-click_for_rules = true
-kick_after_days = 10
-role = "Newb"
-welcome_message = "Welcome to our server {name}!"
-
-[roles]
 channel = "roles"
 
 # --------------------------------------------------------------------------
-#                                   Gender                                  
+#                                   Gender
 # --------------------------------------------------------------------------
-[[roles.menu]]
+[[menu]]
 name = "Gender"
 single = true
-[[roles.menu.options]]
-description = "Please use 'he/him' when referring to me."
-emoji = "male_sign"
-role = "Male"
-[[roles.menu.options]]
-description = "Please use 'she/her' when referring to me."
-emoji = "female_sign"
-role = "Female"
-[[roles.menu.options]]
-description = "Please use 'they/them' when referring to me."
-emoji = "no_entry_sign"
-role = "Nonbinary"
+options = [
+  { role = "Male", description = "Please use 'he/him' when referring to me.", emoji = "male_sign" },
+  { role = "Female", description = "Please use 'she/her' when referring to me.", emoji = "female_sign" },
+  { role = "Nonbinary", description = "Please use 'they/them' when referring to me.", emoji = "no_entry_sign" },
+]
 
 # --------------------------------------------------------------------------
-#                                    Trans                                  
+#                                    Trans
 # --------------------------------------------------------------------------
-[[roles.menu]]
-description = "You may use this role, if you wish, to let people know that you are trans. This is a **completely optional thing**. (If you feel that trans people should be required to 'warn' you that they are trans, please leave this server.)"
+[[menu]]
 name = "Transitional"
-[[roles.menu.options]]
-description = "I'm trans. Deal with it."
-emoji = "+1"
-role = "Trans"
+description = "You may use this role, if you wish, to let people know that you are trans. This is a **completely optional thing**. (If you feel that trans people should be required to 'warn' you that they are trans, please leave this server.)"
+options = [
+  { role = "Trans", description = "I'm trans. Deal with it.", emoji = "+1" },
+]
 
 # --------------------------------------------------------------------------
-#                              Direct Messaging                             
+#                              Direct Messaging
 # --------------------------------------------------------------------------
-[[roles.menu]]
+[[menu]]
 name = "DM Permission"
 single = true
-[[roles.menu.options]]
-description = "Feel free to DM me any time, no need to ask."
-emoji = "white_check_mark"
-role = "DM: Open"
-[[roles.menu.options]]
-description = "Please ask publicly first. (If I am Owned, please ask the person who Owns me.)"
-emoji = "question"
-role = "DM: Ask"
+options = [
+  { role = "DM: Open", description = "Feel free to DM me any time, no need to ask.", emoji = "white_check_mark" },
+  { role = "DM: Ask", description = "Please ask publicly first. (If I am Owned, please ask the person who Owns me.)", emoji = "question" },
+]

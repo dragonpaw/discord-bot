@@ -1,29 +1,38 @@
 ## Role Menus Plugin
 
-Provides role selection using Discord's text select menus (dropdowns). Server admins configure role menus via TOML config files loaded through `/config`. Each menu appears as an embed with a dropdown in a designated channel.
+Provides role selection using Discord's text select menus (dropdowns). Server admins configure role menus via TOML config files loaded through `/roles config`. Each menu appears as an embed with a dropdown in a designated channel.
 
 ### How It Works
 
-1. Admin provides a TOML config via `/config` with a `[roles]` section
-2. Bot deletes old messages in the role channel and posts new embeds with select menus
-3. Members pick roles from dropdowns; the bot adds/removes roles accordingly
-4. Single-select menus allow only one choice; multi-select menus allow picking many
+1. Admin provides a TOML config URL via `/roles config`
+2. Bot parses the flat TOML format directly into a `RolesConfig`
+3. Bot deletes old messages in the role channel and posts new embeds with select menus
+4. Members pick roles from dropdowns; the bot adds/removes roles accordingly
+5. Single-select menus allow only one choice; multi-select menus allow picking many
 
 ### TOML Configuration
 
+The role menu config is a standalone TOML file (not nested under `[roles]`):
+
 ```toml
-[roles]
 channel = "role-select"
 
-[[roles.menu]]
+[[menu]]
 name = "Colors"
 description = "Pick your color"
 single = false
+options = [
+  { role = "Red", emoji = "red_circle", description = "Red role" },
+  { role = "Blue", description = "Blue role" },
+]
 
-[[roles.menu.options]]
-role = "Red"
-emoji = "red_circle"    # Optional — decorative on dropdown
-description = "Red role"
+[[menu]]
+name = "DM Permission"
+single = true
+options = [
+  { role = "DM: Open", description = "Feel free to DM me", emoji = "white_check_mark" },
+  { role = "DM: Ask", description = "Please ask first", emoji = "question" },
+]
 ```
 
 ### Select Menu Behavior
@@ -45,8 +54,8 @@ Persisted as `state/role_menus_{guild_id}.yaml`, separate from the main guild st
 
 ### File Structure
 
-- **`__init__.py`** — Extension entry point (lightbulb Loader), `INTERACTION_HANDLERS` export
-- **`commands.py`** — Embed building, select menu building, `configure_role_menus()`, `handle_role_menu_interaction()`
+- **`__init__.py`** — Extension entry point (lightbulb Loader), `INTERACTION_HANDLERS` and `parse_role_config` exports
+- **`commands.py`** — `parse_role_config()`, embed building, select menu building, `configure_role_menus()`, `handle_role_menu_interaction()`
 - **`models.py`** — Pydantic models: config (`RoleMenuOptionConfig`, `RoleMenuConfig`, `RolesConfig`) and state (`RoleMenuState`, `RoleMenuGuildState`)
 - **`state.py`** — YAML state persistence (load/save) with in-memory cache
 - **`constants.py`** — `ROLE_MENU_PREFIX` interaction ID prefix

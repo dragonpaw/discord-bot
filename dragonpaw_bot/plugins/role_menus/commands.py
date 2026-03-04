@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import datetime
 import logging
+import tomllib
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import hikari
+import pydantic
 
-from dragonpaw_bot import utils
+from dragonpaw_bot import http, structs, utils
 from dragonpaw_bot.colors import rainbow
 from dragonpaw_bot.plugins.role_menus import state
 from dragonpaw_bot.plugins.role_menus.constants import ROLE_MENU_PREFIX
@@ -24,6 +27,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 SINGLE_ROLE_NOTE = "You can only pick one option from this menu."
+
+
+def parse_role_config(text: str) -> RolesConfig:
+    """Parse a TOML string in the flat role menu format into a RolesConfig."""
+    data = tomllib.loads(text)
+    return RolesConfig.model_validate(data)
 
 
 def build_menu_embed(menu: RoleMenuConfig, color: tuple[int, int, int]) -> hikari.Embed:
@@ -351,3 +360,56 @@ async def handle_role_menu_interaction(
             added or None,
             removed or None,
         )
+
+
+async def configure_guild(
+    bot: DragonpawBot, guild: hikari.Guild, url: str
+) -> list[str]:
+    """Load a role menu config for a guild and set up role menus.
+
+    Returns a list of warning/error messages for the caller to display.
+    """
+    all_errors: list[str] = []
+
+    if url.startswith("https://gist.github.com"):
+        config_text = await http.get_gist(url)
+    else:
+        config_text = await http.get_text(url)
+    try:
+        config = parse_role_config(config_text)
+    except tomllib.TOMLDecodeError as e:
+        logger.error("Error parsing TOML file: %s", e)
+        await utils.log_to_guild(bot, guild.id, f"🤯 **Config error:** {e}")
+        return [f"Config error: {e}"]
+    except pydantic.ValidationError as e:
+        logger.error("Config validation error: %s", e)
+        await utils.log_to_guild(
+            bot, guild.id, f"🤯 **Config validation error:** {e}"
+        )
+        return [f"Config validation error: {e}"]
+
+    role_map = await utils.guild_roles(bot=bot, guild=guild)
+
+    old_state = bot.state(guild.id)
+    guild_state = structs.GuildState(
+        id=guild.id,
+        name=guild.name,
+        config_url=url,
+        config_last=datetime.datetime.now(),
+        log_channel_id=old_state.log_channel_id if old_state else None,
+    )
+
+    errors = await configure_role_menus(
+        bot=bot,
+        guild=guild,
+        config=config,
+        role_map=role_map,
+    )
+    for err in errors:
+        logger.error("Error setting up role menus: %r", err)
+        await utils.log_to_guild(bot, guild.id, f"🤯 **Role menu error:** {err}")
+    all_errors.extend(errors)
+
+    bot.state_update(guild_state)
+    logger.info("G=%r Configured guild.", guild.name)
+    return all_errors

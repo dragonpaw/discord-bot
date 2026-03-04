@@ -2,10 +2,10 @@ import datetime
 import logging
 import tomllib
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import hikari
+import pydantic
 import pytest
 import yaml
 
@@ -15,13 +15,13 @@ from dragonpaw_bot.bot import (
     _state_to_yaml_dict,
     _yaml_dict_to_state,
     client,
-    config_parse_toml,
     loader,
     on_component_interaction,
     state_load_yaml,
     state_path,
     state_save_yaml,
 )
+from dragonpaw_bot.plugins.role_menus.commands import parse_role_config
 from dragonpaw_bot.structs import GuildState
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -47,40 +47,59 @@ def test_state_path_custom_extension():
     assert p.name == "42.yaml"
 
 
-def test_config_parse_toml_valid():
+def test_parse_role_config_valid():
     toml_text = """
-[lobby]
-channel = "welcome"
-kick_after_days = 3
-role = "New Member"
-rules = "Be nice"
-welcome_message = "Hello!"
-
-[roles]
 channel = "role-select"
 
-[[roles.menu]]
+[[menu]]
 name = "Colors"
 description = "Pick your color"
+options = [
+  { role = "Red", emoji = "red_circle", description = "Red role" },
+]
+"""
+    config = parse_role_config(toml_text)
+    assert config.channel == "role-select"
+    assert len(config.menu) == 1
+    assert config.menu[0].name == "Colors"
+    assert config.menu[0].options[0].role == "Red"
+
+
+def test_parse_role_config_bad_toml():
+    with pytest.raises(tomllib.TOMLDecodeError):
+        parse_role_config("[invalid toml ===")
+
+
+def test_parse_role_config_missing_channel():
+    toml_text = """
+[[menu]]
+name = "Test"
+options = [{ role = "X", description = "Y" }]
+"""
+    with pytest.raises(pydantic.ValidationError):
+        parse_role_config(toml_text)
+
+
+def test_parse_role_config_missing_menu():
+    with pytest.raises(pydantic.ValidationError):
+        parse_role_config('channel = "roles"\n')
+
+
+def test_parse_role_config_rejects_old_nested_format():
+    """The old [roles]-nested format should not parse as the new flat format."""
+    old_format = """
+[roles]
+channel = "roles"
+
+[[roles.menu]]
+name = "Test"
 
 [[roles.menu.options]]
-role = "Red"
-emoji = "red_circle"
-description = "Red role"
+role = "X"
+description = "Y"
 """
-    guild = SimpleNamespace(name="TestGuild", id=hikari.Snowflake(1))
-    config = config_parse_toml(guild=guild, text=toml_text)
-    assert config.lobby is not None
-    assert config.lobby.channel == "welcome"
-    assert config.lobby.kick_after_days == 3
-    assert config.roles is not None
-    assert config.roles.channel == "role-select"
-
-
-def test_config_parse_toml_bad_toml():
-    guild = SimpleNamespace(name="TestGuild", id=hikari.Snowflake(1))
-    with pytest.raises(tomllib.TOMLDecodeError):
-        config_parse_toml(guild=guild, text="[invalid toml ===")
+    with pytest.raises(pydantic.ValidationError):
+        parse_role_config(old_format)
 
 
 def test_state_to_yaml_dict():
@@ -148,26 +167,16 @@ def test_yaml_load_strips_legacy_role_fields(state_dir):
     assert not hasattr(loaded, "role_channel_id")
 
 
-def test_config_parse_dragonpaw_gist():
+def test_parse_role_config_dragonpaw_gist():
     """Parse the real-world config from the dragonpaw gist."""
     toml_text = (FIXTURES_DIR / "dragonpaw_gist.toml").read_text()
-    guild = SimpleNamespace(name="TestGuild", id=hikari.Snowflake(1))
-    config = config_parse_toml(guild=guild, text=toml_text)
+    config = parse_role_config(toml_text)
 
-    # Lobby
-    assert config.lobby is not None
-    assert config.lobby.channel == "unverified"
-    assert config.lobby.kick_after_days == 10
-    assert config.lobby.role == "Unverified"
-    assert "{name}" in config.lobby.welcome_message
-
-    # Roles
-    assert config.roles is not None
-    assert config.roles.channel == "roles"
-    assert len(config.roles.menu) == 6
+    assert config.channel == "roles"
+    assert len(config.menu) == 6
 
     # Check each menu by name
-    menus = {m.name: m for m in config.roles.menu}
+    menus = {m.name: m for m in config.menu}
 
     ds = menus["D/s roles"]
     assert ds.single is True
@@ -192,7 +201,7 @@ def test_config_parse_dragonpaw_gist():
 
     pings = menus["Pings"]
     assert pings.single is False
-    assert len(pings.options) == 8
+    assert len(pings.options) == 9
 
 
 async def test_bot_startup_loads_extensions():

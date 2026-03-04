@@ -26,7 +26,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **Entry point:** `dragonpaw_bot/__main__.py` → calls `bot.run()` from `bot.py`.
 
-**`bot.py`** — Core module. Defines `DragonpawBot` (subclass of `hikari.GatewayBot`) with state management, plus a `lightbulb.Client` created via `client_from_app()`. The `/config` and `/logging` slash commands are defined here. Extensions are loaded asynchronously on `StartingEvent`.
+**`bot.py`** — Core module. Defines `DragonpawBot` (subclass of `hikari.GatewayBot`) with state management, plus a `lightbulb.Client` created via `client_from_app()`. The `/roles config` and `/logging` slash commands are defined here. Extensions are loaded asynchronously on `StartingEvent`.
 
 **`structs.py`** — All data models using Pydantic v2. Two layers:
 
@@ -46,7 +46,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **`colors.py`** — Solarized color constants and a `rainbow()` helper using `palettable` for generating embed color palettes.
 
-**Config flow:** Server admins use the `/config` slash command with a URL to a TOML file. The bot fetches and parses it, sets up role menus and lobby, then persists `GuildState` to disk as YAML. The `/logging` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/config` reloads.
+**Config flow:** Server admins use the `/roles config` slash command with a URL to a role-menu TOML file. The bot fetches and parses it directly into a `RolesConfig`, sets up role menus, then persists `GuildState` to disk as YAML. The `/logging` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/roles config` reloads.
 
 **Guild logging:** `utils.log_to_guild()` sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji.
 
