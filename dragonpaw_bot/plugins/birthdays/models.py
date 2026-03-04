@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import datetime
+
 import pydantic
 
 
@@ -7,6 +9,8 @@ class BirthdayEntry(pydantic.BaseModel):
     month: int  # 1-12
     day: int  # 1-31
     wishlist_url: str | None = None
+    timezone: str | None = None  # IANA timezone (e.g. "America/New_York"), None = UTC
+    last_announced: datetime.date | None = None  # Date of last public announcement
 
 
 class BirthdayGuildConfig(pydantic.BaseModel):

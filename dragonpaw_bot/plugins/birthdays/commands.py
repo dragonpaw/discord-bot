@@ -4,6 +4,7 @@ from __future__ import annotations
 import calendar
 import datetime
 import logging
+import zoneinfo
 from typing import TYPE_CHECKING, Any
 
 import hikari
@@ -126,9 +127,12 @@ def _feb29_date(year: int) -> datetime.date:
         return datetime.date(year, _MAR, 1)
 
 
-def _days_until_birthday(month: int, day: int) -> int:
+def _days_until_birthday(
+    month: int, day: int, today: datetime.date | None = None
+) -> int:
     """Calculate days until next occurrence of this birthday."""
-    today = datetime.date.today()
+    if today is None:
+        today = datetime.date.today()
     if month == _FEB and day == _LEAP_DAY:
         this_year = _feb29_date(today.year)
     else:
@@ -156,6 +160,32 @@ def _is_birthday_on_date(entry: BirthdayEntry, date: datetime.date) -> bool:
     return False
 
 
+def _validate_timezone(tz_str: str) -> zoneinfo.ZoneInfo | None:
+    """Validate and return a ZoneInfo, or None if invalid."""
+    try:
+        return zoneinfo.ZoneInfo(tz_str)
+    except (KeyError, zoneinfo.ZoneInfoNotFoundError):
+        return None
+
+
+def _user_local_date(entry: BirthdayEntry) -> datetime.date:
+    """Return today's date in the user's configured timezone (default UTC)."""
+    tz = zoneinfo.ZoneInfo(entry.timezone) if entry.timezone else datetime.UTC
+    return datetime.datetime.now(tz).date()
+
+
+def _user_local_hour(entry: BirthdayEntry) -> int:
+    """Return the current hour in the user's configured timezone (default UTC)."""
+    tz = zoneinfo.ZoneInfo(entry.timezone) if entry.timezone else datetime.UTC
+    return datetime.datetime.now(tz).hour
+
+
+def _user_local_date_offset(entry: BirthdayEntry, *, days: int) -> datetime.date:
+    """Return today + offset days in the user's configured timezone."""
+    tz = zoneinfo.ZoneInfo(entry.timezone) if entry.timezone else datetime.UTC
+    return (datetime.datetime.now(tz) + datetime.timedelta(days=days)).date()
+
+
 # ---------------------------------------------------------------------------- #
 #                                  Commands                                    #
 # ---------------------------------------------------------------------------- #
@@ -166,6 +196,7 @@ def register(birthday_group: lightbulb.Group) -> None:
     birthday_group.register(BirthdayStatus)
     birthday_group.register(BirthdaySet)
     birthday_group.register(BirthdayWishlist)
+    birthday_group.register(BirthdayTimezone)
     birthday_group.register(BirthdaySetFor)
     birthday_group.register(BirthdayRemove)
     birthday_group.register(BirthdayRemoveFor)
@@ -197,7 +228,8 @@ class BirthdayStatus(
             )
             return
 
-        days = _days_until_birthday(entry.month, entry.day)
+        local_today = _user_local_date(entry)
+        days = _days_until_birthday(entry.month, entry.day, today=local_today)
         day_str = (
             "today! 🎂" if days == 0 else f"in **{days}** day{'s' if days != 1 else ''}"
         )
@@ -206,12 +238,14 @@ class BirthdayStatus(
             if entry.wishlist_url
             else "_No wishlist set_"
         )
+        tz_display = entry.timezone or "UTC"
 
         embed = hikari.Embed(
             title="🎂 Your Birthday",
             description=(
                 f"**Date:** {MONTH_NAMES[entry.month]} {entry.day}\n"
                 f"**Next birthday:** {day_str}\n"
+                f"**Timezone:** {tz_display}\n"
                 f"**Wishlist:** {wishlist}"
             ),
             color=SOLARIZED_ORANGE,
@@ -227,6 +261,9 @@ class BirthdaySet(
     month = lightbulb.integer("month", "Birth month (1-12)")
     day = lightbulb.integer("day", "Birth day (1-31)")
     wishlist_url = lightbulb.string("wishlist_url", "Wishlist URL", default=None)
+    timezone = lightbulb.string(
+        "timezone", "IANA timezone (e.g. America/New_York)", default=None
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
@@ -243,6 +280,14 @@ class BirthdaySet(
             await ctx.respond(error, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
+        if self.timezone is not None and _validate_timezone(self.timezone) is None:
+            await ctx.respond(
+                f"Unknown timezone `{self.timezone}`. Use an IANA timezone like "
+                "`America/New_York`, `Europe/London`, or `Asia/Tokyo`.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
         uid = int(ctx.user.id)
         existing = guild_state.birthdays.get(uid)
 
@@ -252,6 +297,7 @@ class BirthdaySet(
             day=self.day,
             wishlist_url=self.wishlist_url
             or (existing.wishlist_url if existing else None),
+            timezone=self.timezone or (existing.timezone if existing else None),
         )
         guild_state.birthdays[uid] = entry
         guild_state.guild_name = guild.name
@@ -324,6 +370,68 @@ class BirthdayWishlist(
             "G=%r U=%r: Updated wishlist URL",
             guild_state.guild_name,
             ctx.user.username,
+        )
+
+
+class BirthdayTimezone(
+    lightbulb.SlashCommand,
+    name="timezone",
+    description="Set your timezone for birthday announcements",
+):
+    timezone = lightbulb.string(
+        "timezone",
+        "IANA timezone (e.g. America/New_York). Omit to view current.",
+        default=None,
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        assert ctx.guild_id
+        bot = _get_bot(ctx)
+        guild = await utils.get_guild(ctx, bot)
+        guild_state = state.load(int(ctx.guild_id))
+        cfg = guild_state.config
+        if not await _check_permission(ctx, guild, cfg.register_role, "timezone"):
+            return
+
+        uid = int(ctx.user.id)
+        entry = guild_state.birthdays.get(uid)
+
+        if not entry:
+            await ctx.respond(
+                "You don't have a birthday registered yet. Use `/birthday set` first.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        if self.timezone is None:
+            current = entry.timezone or "UTC (default)"
+            await ctx.respond(
+                f"Your current timezone: **{current}**",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        if _validate_timezone(self.timezone) is None:
+            await ctx.respond(
+                f"Unknown timezone `{self.timezone}`. Use an IANA timezone like "
+                "`America/New_York`, `Europe/London`, or `Asia/Tokyo`.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        entry.timezone = self.timezone
+        state.save(guild_state)
+        await ctx.respond(
+            f"Timezone updated to **{self.timezone}**. Your birthday will be "
+            f"announced at midnight in your local time.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        logger.info(
+            "G=%r U=%r: Updated timezone to %s",
+            guild_state.guild_name,
+            ctx.user.username,
+            self.timezone,
         )
 
 
@@ -617,84 +725,86 @@ async def _config_components(
     rows: list[Any] = []
 
     # Register role select (multi-select)
-    row = bot.rest.build_message_action_row()
-    row.add_select_menu(
-        hikari.ComponentType.ROLE_SELECT_MENU,
-        f"{BIRTHDAY_CONFIG_PREFIX}register_role",
-        placeholder="Register role(s) (who can self-register)",
-        min_values=0,
-        max_values=25,
+    rows.append(
+        _DefaultsActionRow(
+            bot.rest.build_message_action_row().add_select_menu(
+                hikari.ComponentType.ROLE_SELECT_MENU,
+                f"{BIRTHDAY_CONFIG_PREFIX}register_role",
+                placeholder="Register role(s) (who can self-register)",
+                min_values=0,
+                max_values=25,
+            ),
+            [
+                {"id": str(role_map[name]), "type": "role"}
+                for name in cfg.register_role
+                if name in role_map
+            ],
+        )
     )
-    defaults = [
-        {"id": str(role_map[name]), "type": "role"}
-        for name in cfg.register_role
-        if name in role_map
-    ]
-    rows.append(_DefaultsActionRow(row, defaults))
 
     # Manage role select
-    row = bot.rest.build_message_action_row()
-    row.add_select_menu(
-        hikari.ComponentType.ROLE_SELECT_MENU,
-        f"{BIRTHDAY_CONFIG_PREFIX}manage_role",
-        placeholder="Manage role (who can set/remove for others)",
-        min_values=0,
-        max_values=1,
+    rows.append(
+        _DefaultsActionRow(
+            bot.rest.build_message_action_row().add_select_menu(
+                hikari.ComponentType.ROLE_SELECT_MENU,
+                f"{BIRTHDAY_CONFIG_PREFIX}manage_role",
+                placeholder="Manage role (who can set/remove for others)",
+                min_values=0,
+                max_values=1,
+            ),
+            [{"id": str(role_map[cfg.manage_role]), "type": "role"}]
+            if cfg.manage_role and cfg.manage_role in role_map
+            else [],
+        )
     )
-    defaults = (
-        [{"id": str(role_map[cfg.manage_role]), "type": "role"}]
-        if cfg.manage_role and cfg.manage_role in role_map
-        else []
-    )
-    rows.append(_DefaultsActionRow(row, defaults))
 
     # List role select
-    row = bot.rest.build_message_action_row()
-    row.add_select_menu(
-        hikari.ComponentType.ROLE_SELECT_MENU,
-        f"{BIRTHDAY_CONFIG_PREFIX}list_role",
-        placeholder="List role (who can list all birthdays)",
-        min_values=0,
-        max_values=1,
+    rows.append(
+        _DefaultsActionRow(
+            bot.rest.build_message_action_row().add_select_menu(
+                hikari.ComponentType.ROLE_SELECT_MENU,
+                f"{BIRTHDAY_CONFIG_PREFIX}list_role",
+                placeholder="List role (who can list all birthdays)",
+                min_values=0,
+                max_values=1,
+            ),
+            [{"id": str(role_map[cfg.list_role]), "type": "role"}]
+            if cfg.list_role and cfg.list_role in role_map
+            else [],
+        )
     )
-    defaults = (
-        [{"id": str(role_map[cfg.list_role]), "type": "role"}]
-        if cfg.list_role and cfg.list_role in role_map
-        else []
-    )
-    rows.append(_DefaultsActionRow(row, defaults))
 
     # Announcement channel select
-    row = bot.rest.build_message_action_row()
-    row.add_channel_menu(
-        f"{BIRTHDAY_CONFIG_PREFIX}announcement_channel",
-        channel_types=[hikari.ChannelType.GUILD_TEXT],
-        placeholder="Announcement channel (birthday posts)",
-        min_values=0,
-        max_values=1,
+    rows.append(
+        _DefaultsActionRow(
+            bot.rest.build_message_action_row().add_channel_menu(
+                f"{BIRTHDAY_CONFIG_PREFIX}announcement_channel",
+                channel_types=[hikari.ChannelType.GUILD_TEXT],
+                placeholder="Announcement channel (birthday posts)",
+                min_values=0,
+                max_values=1,
+            ),
+            [{"id": str(channel_map[cfg.announcement_channel]), "type": "channel"}]
+            if cfg.announcement_channel and cfg.announcement_channel in channel_map
+            else [],
+        )
     )
-    defaults = (
-        [{"id": str(channel_map[cfg.announcement_channel]), "type": "channel"}]
-        if cfg.announcement_channel and cfg.announcement_channel in channel_map
-        else []
-    )
-    rows.append(_DefaultsActionRow(row, defaults))
 
     # Birthday role select
-    row = bot.rest.build_message_action_row()
-    row.add_select_menu(
-        hikari.ComponentType.ROLE_SELECT_MENU,
-        f"{BIRTHDAY_CONFIG_PREFIX}birthday_role",
-        placeholder="Birthday role (auto-assigned on birthday)",
-        min_values=0,
-        max_values=1,
+    rows.append(
+        _DefaultsActionRow(
+            bot.rest.build_message_action_row().add_select_menu(
+                hikari.ComponentType.ROLE_SELECT_MENU,
+                f"{BIRTHDAY_CONFIG_PREFIX}birthday_role",
+                placeholder="Birthday role (auto-assigned on birthday)",
+                min_values=0,
+                max_values=1,
+            ),
+            [{"id": str(role_map[cfg.birthday_role]), "type": "role"}]
+            if cfg.birthday_role and cfg.birthday_role in role_map
+            else [],
+        )
     )
-    defaults = (
-        [{"id": str(role_map[cfg.birthday_role]), "type": "role"}]
-        if cfg.birthday_role and cfg.birthday_role in role_map
-        else []
-    )
-    rows.append(_DefaultsActionRow(row, defaults))
 
     return rows
 

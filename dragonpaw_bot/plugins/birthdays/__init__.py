@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
 import logging
 from typing import TYPE_CHECKING
 
@@ -192,7 +191,11 @@ async def _send_week_ahead_dm(
 
 
 async def _process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> None:
-    """Process birthday announcements, role cleanup, and reminders for one guild."""
+    """Process birthday announcements, role cleanup, and reminders for one guild.
+
+    Runs hourly. For each user, computes "today" in their local timezone and only
+    processes events during the user's midnight hour (hour 0).
+    """
     guild_id = int(guild.id)
     guild_state = state.load(guild_id)
 
@@ -202,19 +205,32 @@ async def _process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> No
 
     guild_state.guild_name = guild.name
     cfg = guild_state.config
-    today = datetime.date.today()
-    yesterday = today - datetime.timedelta(days=1)
-    week_ahead = today + datetime.timedelta(days=7)
 
-    logger.info(
-        "G=%r: Processing %d birthday entry(ies)",
+    logger.debug(
+        "G=%r: Hourly birthday check for %d entry(ies)",
         guild.name,
         len(guild_state.birthdays),
     )
 
+    changed = False
     for uid, entry in list(guild_state.birthdays.items()):
+        local_hour = commands._user_local_hour(entry)
+        if local_hour != 0:
+            continue
+
+        local_today = commands._user_local_date(entry)
+        local_yesterday = commands._user_local_date_offset(entry, days=-1)
+        local_week_ahead = commands._user_local_date_offset(entry, days=7)
+
         # Birthday announcements
-        if commands._is_birthday_on_date(entry, today):
+        if commands._is_birthday_on_date(entry, local_today):
+            if entry.last_announced == local_today:
+                logger.debug(
+                    "G=%r U=%d: Already announced today, skipping",
+                    guild.name,
+                    uid,
+                )
+                continue
             try:
                 member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
             except hikari.NotFoundError:
@@ -227,10 +243,14 @@ async def _process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> No
                 state.save(guild_state)
                 continue
             await _announce_birthday(bot, guild, member, entry, cfg)
+            entry.last_announced = local_today
+            changed = True
             await asyncio.sleep(1)
 
         # Role cleanup for yesterday's birthdays
-        elif commands._is_birthday_on_date(entry, yesterday):
+        elif cfg.birthday_role and commands._is_birthday_on_date(
+            entry, local_yesterday
+        ):
             try:
                 member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
             except hikari.NotFoundError:
@@ -238,17 +258,20 @@ async def _process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> No
             await _cleanup_birthday_role(bot, guild, member, cfg)
 
         # Week-ahead DM reminder
-        if commands._is_birthday_on_date(entry, week_ahead):
+        if commands._is_birthday_on_date(entry, local_week_ahead):
             await _send_week_ahead_dm(bot, guild, guild_state, uid, entry)
             await asyncio.sleep(1)
 
+    if changed:
+        state.save(guild_state)
 
-@loader.task(lightbulb.crontrigger("0 10 * * *"))
-async def daily_birthdays(bot: hikari.GatewayBot) -> None:
-    """Daily task: announce birthdays, clean up roles, send reminders."""
+
+@loader.task(lightbulb.crontrigger("0 * * * *"))
+async def hourly_birthdays(bot: hikari.GatewayBot) -> None:
+    """Hourly task: announce birthdays at each user's local midnight."""
     assert isinstance(bot, DragonpawBot)
     guilds = list(bot.cache.get_guilds_view().values())
-    logger.info("Birthday daily run: processing %d guild(s)", len(guilds))
+    logger.debug("Birthday hourly run: processing %d guild(s)", len(guilds))
     for guild in guilds:
         try:
             await _process_guild_birthdays(bot, guild)

@@ -13,8 +13,9 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 ### Slash Commands (`/birthday`)
 
 - **status** — Shows your registered birthday, wishlist URL, and days until your next birthday. Requires `register_role`. Ephemeral.
-- **set [month] [day] [wishlist_url]** — Register or update your own birthday (month/day only, no year). Requires `register_role`. Optionally include a wishlist URL.
+- **set [month] [day] [wishlist_url] [timezone]** — Register or update your own birthday (month/day only, no year). Requires `register_role`. Optionally include a wishlist URL and/or IANA timezone (e.g. `America/New_York`).
 - **wishlist [url]** — Update just your wishlist URL. Requires `register_role`. With no argument, shows your current wishlist.
+- **timezone [timezone]** — Set your IANA timezone for birthday announcements (e.g. `America/New_York`). Requires `register_role`. With no argument, shows your current timezone.
 - **set-for @user [month] [day] [wishlist_url]** — Requires `manage_role`. Register or update a birthday for another user.
 - **remove** — Remove your own birthday entry. Requires `register_role`.
 - **remove-for @user** — Requires `manage_role`. Remove another user's birthday entry.
@@ -37,16 +38,18 @@ Each entry stores:
 - `month` — Birth month (1–12)
 - `day` — Birth day (1–31)
 - `wishlist_url` — Optional wishlist link (string or None)
+- `timezone` — Optional IANA timezone string (e.g. `America/New_York`), defaults to UTC
+- `last_announced` — Date of last public announcement (prevents double-posting)
 
 No birth year is collected or stored.
 
-### Daily Cron Task
+### Hourly Cron Task
 
-Runs once daily (e.g. 10:00 UTC). Per guild, with per-guild error isolation:
+Runs every hour (`0 * * * *`). Per guild, with per-guild error isolation. For each user, computes the current date and hour in their configured timezone (defaulting to UTC). Only processes events when the user's local hour is 0 (midnight):
 
-1. **Birthday announcements:** For each member whose birthday is today, post a themed embed in the announcement channel (if configured). The embed mentions the user and includes their wishlist link if set. Assign the birthday role (if configured).
-2. **Birthday role cleanup:** Remove the birthday role from any member whose birthday was yesterday (i.e., their birthday is over).
-3. **Week-ahead DM reminder:** For each member whose birthday is 7 days away, verify they are still in the guild (remove their entry and skip if not). DM them a reminder that their birthday is coming up. Show their current wishlist URL (if set) or note that none is set. Prompt them to review and update it before the day using `/birthday wishlist <url>`. Handle DM failures gracefully (log warning, don't crash).
+1. **Birthday announcements:** If it's the user's birthday in their local timezone and `last_announced` doesn't match today, post a themed embed in the announcement channel (if configured). Assign the birthday role (if configured). Update `last_announced` to prevent double-posting.
+2. **Birthday role cleanup:** If the user's birthday was yesterday in their local timezone and a birthday role is configured, remove the role.
+3. **Week-ahead DM reminder:** If the user's birthday is 7 days away in their local timezone, verify they are still in the guild (remove their entry and skip if not). DM them a reminder with their current wishlist URL. Handle DM failures gracefully.
 
 ### Member Leave Cleanup
 
@@ -70,7 +73,7 @@ Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild sta
 
 ### File Structure
 
-- **`__init__.py`** — Extension entry point (lightbulb Loader), daily cron task, member leave listener
+- **`__init__.py`** — Extension entry point (lightbulb Loader), hourly cron task, member leave listener
 - **`commands.py`** — All slash commands, config interaction handlers, announcement embeds
 - **`models.py`** — Pydantic models: `BirthdayEntry`, `BirthdayGuildConfig`, `BirthdayGuildState`
 - **`state.py`** — YAML state persistence (load/save)
@@ -82,7 +85,7 @@ Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild sta
 - **Guild log channel:** All notifications use `utils.log_to_guild()`, which silently skips if no log channel is configured.
 - **Announcement channel:** Post failures are logged as warnings but don't crash the cron.
 - **Birthday role:** Role assignment/removal failures are caught and logged.
-- **Daily cron:** Per-guild error isolation — one guild's failure doesn't abort processing for other guilds.
+- **Hourly cron:** Per-guild error isolation — one guild's failure doesn't abort processing for other guilds.
 
 ### Logging
 

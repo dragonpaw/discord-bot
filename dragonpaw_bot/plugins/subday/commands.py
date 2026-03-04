@@ -1470,69 +1470,71 @@ async def _config_components(
 
     rows: list[hikari.api.ComponentBuilder] = []
 
-    # Row 1: Enroll role select (multi-select)
-    row1 = bot.rest.build_message_action_row()
-    row1.add_select_menu(
-        hikari.ComponentType.ROLE_SELECT_MENU,
-        f"{SUBDAY_CONFIG_PREFIX}enroll_role",
-        placeholder="Enroll role(s) (who can sign up)",
-        min_values=0,
-        max_values=25,
+    # Enroll role select (multi-select)
+    rows.append(
+        _DefaultsActionRow(
+            bot.rest.build_message_action_row().add_select_menu(
+                hikari.ComponentType.ROLE_SELECT_MENU,
+                f"{SUBDAY_CONFIG_PREFIX}enroll_role",
+                placeholder="Enroll role(s) (who can sign up)",
+                min_values=0,
+                max_values=25,
+            ),
+            [
+                {"id": str(role_map[name]), "type": "role"}
+                for name in cfg.enroll_role
+                if name in role_map
+            ],
+        )
     )
-    defaults1 = [
-        {"id": str(role_map[name]), "type": "role"}
-        for name in cfg.enroll_role
-        if name in role_map
-    ]
-    rows.append(_DefaultsActionRow(row1, defaults1))
 
-    # Row 2: Complete role select
-    row2 = bot.rest.build_message_action_row()
-    row2.add_select_menu(
-        hikari.ComponentType.ROLE_SELECT_MENU,
-        f"{SUBDAY_CONFIG_PREFIX}complete_role",
-        placeholder="Complete role (who can complete/list/remove)",
-        min_values=0,
-        max_values=1,
+    # Complete role select
+    rows.append(
+        _DefaultsActionRow(
+            bot.rest.build_message_action_row().add_select_menu(
+                hikari.ComponentType.ROLE_SELECT_MENU,
+                f"{SUBDAY_CONFIG_PREFIX}complete_role",
+                placeholder="Complete role (who can complete/list/remove)",
+                min_values=0,
+                max_values=1,
+            ),
+            [{"id": str(role_map[cfg.complete_role]), "type": "role"}]
+            if cfg.complete_role and cfg.complete_role in role_map
+            else [],
+        )
     )
-    defaults2 = (
-        [{"id": str(role_map[cfg.complete_role]), "type": "role"}]
-        if cfg.complete_role and cfg.complete_role in role_map
-        else []
-    )
-    rows.append(_DefaultsActionRow(row2, defaults2))
 
-    # Row 3: Backfill role select
-    row3 = bot.rest.build_message_action_row()
-    row3.add_select_menu(
-        hikari.ComponentType.ROLE_SELECT_MENU,
-        f"{SUBDAY_CONFIG_PREFIX}backfill_role",
-        placeholder="Backfill role (who can backfill weeks)",
-        min_values=0,
-        max_values=1,
+    # Backfill role select
+    rows.append(
+        _DefaultsActionRow(
+            bot.rest.build_message_action_row().add_select_menu(
+                hikari.ComponentType.ROLE_SELECT_MENU,
+                f"{SUBDAY_CONFIG_PREFIX}backfill_role",
+                placeholder="Backfill role (who can backfill weeks)",
+                min_values=0,
+                max_values=1,
+            ),
+            [{"id": str(role_map[cfg.backfill_role]), "type": "role"}]
+            if cfg.backfill_role and cfg.backfill_role in role_map
+            else [],
+        )
     )
-    defaults3 = (
-        [{"id": str(role_map[cfg.backfill_role]), "type": "role"}]
-        if cfg.backfill_role and cfg.backfill_role in role_map
-        else []
-    )
-    rows.append(_DefaultsActionRow(row3, defaults3))
 
-    # Row 4: Achievements channel select
-    row4 = bot.rest.build_message_action_row()
-    row4.add_channel_menu(
-        f"{SUBDAY_CONFIG_PREFIX}achievements_channel",
-        channel_types=[hikari.ChannelType.GUILD_TEXT],
-        placeholder="Achievements channel (public posts)",
-        min_values=0,
-        max_values=1,
+    # Achievements channel select
+    rows.append(
+        _DefaultsActionRow(
+            bot.rest.build_message_action_row().add_channel_menu(
+                f"{SUBDAY_CONFIG_PREFIX}achievements_channel",
+                channel_types=[hikari.ChannelType.GUILD_TEXT],
+                placeholder="Achievements channel (public posts)",
+                min_values=0,
+                max_values=1,
+            ),
+            [{"id": str(channel_map[cfg.achievements_channel]), "type": "channel"}]
+            if cfg.achievements_channel and cfg.achievements_channel in channel_map
+            else [],
+        )
     )
-    defaults4 = (
-        [{"id": str(channel_map[cfg.achievements_channel]), "type": "channel"}]
-        if cfg.achievements_channel and cfg.achievements_channel in channel_map
-        else []
-    )
-    rows.append(_DefaultsActionRow(row4, defaults4))
 
     return rows
 
@@ -1781,21 +1783,21 @@ async def _prize_roles_components(
 
     rows: list[hikari.api.ComponentBuilder] = []
     for week in MILESTONE_WEEKS:
-        row = bot.rest.build_message_action_row()
-        row.add_select_menu(
-            hikari.ComponentType.ROLE_SELECT_MENU,
-            f"{SUBDAY_CFG_ROLE_PREFIX}role_{week}",
-            placeholder=f"Week {week} milestone role",
-            min_values=0,
-            max_values=1,
-        )
         role_name = getattr(cfg, f"role_{week}")
-        defaults = (
-            [{"id": str(role_map[role_name]), "type": "role"}]
-            if role_name and role_name in role_map
-            else []
+        rows.append(
+            _DefaultsActionRow(
+                bot.rest.build_message_action_row().add_select_menu(
+                    hikari.ComponentType.ROLE_SELECT_MENU,
+                    f"{SUBDAY_CFG_ROLE_PREFIX}role_{week}",
+                    placeholder=f"Week {week} milestone role",
+                    min_values=0,
+                    max_values=1,
+                ),
+                [{"id": str(role_map[role_name]), "type": "role"}]
+                if role_name and role_name in role_map
+                else [],
+            )
         )
-        rows.append(_DefaultsActionRow(row, defaults))
     return rows
 
 
