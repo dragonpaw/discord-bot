@@ -31,6 +31,7 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 ### Birthday Entry
 
 Each entry stores:
+
 - `user_id` — Discord user ID
 - `month` — Birth month (1–12)
 - `day` — Birth day (1–31)
@@ -53,6 +54,7 @@ Listen for `hikari.MemberDeleteEvent`. When a member leaves a guild, automatical
 ### Announcement Embed
 
 Posted in the configured announcement channel on the member's birthday:
+
 - Themed embed (festive color)
 - Mentions the birthday user
 - Shows wishlist link as a clickable hyperlink if set
@@ -61,16 +63,17 @@ Posted in the configured announcement channel on the member's birthday:
 ### State
 
 Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild state. Contains:
+
 - `config` — `BirthdayGuildConfig` with role/channel IDs
 - `birthdays` — Dict mapping user ID to `BirthdayEntry`
 
 ### File Structure
 
-- **`birthdays/`** — Plugin package directory
 - **`__init__.py`** — Extension entry point (lightbulb Loader), daily cron task, member leave listener
 - **`commands.py`** — All slash commands, config interaction handlers, announcement embeds
 - **`models.py`** — Pydantic models: `BirthdayEntry`, `BirthdayGuildConfig`, `BirthdayGuildState`
 - **`state.py`** — YAML state persistence (load/save)
+- **`constants.py`** — Configuration prefixes and constants
 
 ### Error Handling
 

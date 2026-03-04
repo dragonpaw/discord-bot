@@ -22,7 +22,6 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - `CLIENT_ID` — Discord application client ID
 - `TEST_GUILDS` (optional) — Comma-separated guild IDs for slash command testing
 
-
 ## Architecture
 
 **Entry point:** `dragonpaw_bot/__main__.py` → calls `bot.run()` from `bot.py`.
@@ -30,10 +29,12 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 **`bot.py`** — Core module. Defines `DragonpawBot` (subclass of `hikari.GatewayBot`) with state management, plus a `lightbulb.Client` created via `client_from_app()`. The `/config` and `/logging` slash commands are defined here. Extensions are loaded asynchronously on `StartingEvent`.
 
 **`structs.py`** — All data models using Pydantic v2. Two layers:
+
 - **Config models** (`GuildConfig`, `LobbyConfig`, `RolesConfig`, etc.) — parsed from TOML config files
 - **State models** (`GuildState`, `RoleMenuOptionState`) — runtime state persisted as YAML files
 
 **Extensions** (loaded via `client.load_extensions` during `StartingEvent`):
+
 - **`plugins/role_menus.py`** — Posts embed menus with emoji reactions in a designated channel. Listens for reaction add/remove events to assign/remove Discord roles. Supports single-select menus (picking one removes others).
 - **`plugins/lobby.py`** — Handles new member joins: auto-assigns a role, posts welcome messages, and optionally shows server rules with an "I agree" button that removes the lobby role.
 - **`plugins/subday/`** — 52-week guided journal program ("Where I am Led"). See `plugins/subday.md` for details. Multi-file plugin with models, commands, cron scheduler, prompt parser, and state persistence.
@@ -76,8 +77,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
   - **Warning**: missing resources (channels, roles), DM failures, corrupt state
   - All commands should log permission denials
 - Shared helpers belong in `utils.py` (e.g. `member_has_role`, `guild_role_by_name`, `guild_channel_by_name`)
-- Plugin-specific docs go in a `.md` file alongside the plugin (e.g. `plugins/subday.md`). When adding, changing, or removing features from a plugin, always update its `.md` file to reflect the current state. The `.md` file is the source of truth for what the plugin does.
-- Existing plugin docs: `plugins/lobby.md`, `plugins/role_menus.md`, `plugins/subday.md`. `plugins/birthdays.md` is a planning doc for a future feature.
+- Plugin-specific docs: Each plugin includes a `CLAUDE.md` file in its directory describing functionality, architecture, and configuration. This is the single source of truth for what the plugin does. When adding, changing, or removing features from a plugin, always update its CLAUDE.md file to reflect the current state.
 - State is persisted as YAML files in `state/` using `safer` for atomic writes
 - All Python files are UTF-8 (with `# -*- coding: utf-8 -*-` header). Use literal emoji characters (`📖`, `✅`) directly in source, never Unicode escapes (`\U0001f4d6`, `\u2705`).
 - Type checking uses `ty` (not mypy): `uv run ty check dragonpaw_bot/`

@@ -91,10 +91,12 @@ Achievement embeds and `/subday status` include a Pillow-generated star chart PN
 Submissives can register an owner via `/subday owner @user`. The owner receives copies of the sub's weekly prompts each Sunday and can see their subs' progress via `/subday status`.
 
 **State fields** on `SubDayParticipant`:
+
 - `owner_id: int | None` — confirmed owner's Discord user ID
 - `pending_owner_id: int | None` — awaiting approval
 
 **Flow:**
+
 1. Sub runs `/subday owner @user` → bot DMs the target with Accept/Decline buttons
 2. Owner clicks Accept → `owner_id` is set, sub is notified via DM
 3. Owner clicks Decline → `pending_owner_id` is cleared, sub is notified
@@ -102,6 +104,7 @@ Submissives can register an owner via `/subday owner @user`. The owner receives 
 **Button custom IDs:** `subday_owner_request:approve|deny:{guild_id}:{sub_user_id}` — guild_id is embedded because buttons are clicked in DMs where `interaction.guild_id` is None.
 
 **Edge cases:**
+
 - New request while one is pending → overwrites `pending_owner_id`, sends new DM
 - Target not a member of this guild → rejected ("not a member of this server")
 - Request to current confirmed owner → rejected ("already your owner")
