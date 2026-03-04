@@ -38,3 +38,6 @@ state/
 IMG_4477.jpg
 /samples/
 sample_charts/
+
+# Claude Code local settings
+.claude.local.md

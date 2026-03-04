@@ -15,6 +15,7 @@ import uvloop
 import yaml
 
 from dragonpaw_bot import http, structs, utils
+from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.lobby import INTERACTION_HANDLERS as lobby_handlers
 from dragonpaw_bot.plugins.lobby import configure_lobby
 from dragonpaw_bot.plugins.role_menus import configure_role_menus
@@ -30,6 +31,7 @@ _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
     [
         *((p, h, "processing your agreement") for p, h in lobby_handlers.items()),
         *((p, h, "processing your request") for p, h in subday_handlers.items()),
+        *((p, h, "processing your request") for p, h in birthday_handlers.items()),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -501,5 +503,6 @@ async def on_starting(_: hikari.StartingEvent) -> None:
         "dragonpaw_bot.plugins.lobby",
         "dragonpaw_bot.plugins.role_menus",
         "dragonpaw_bot.plugins.subday",
+        "dragonpaw_bot.plugins.birthdays",
     )
     await client.start()

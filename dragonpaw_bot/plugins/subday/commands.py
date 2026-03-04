@@ -857,6 +857,16 @@ class SubDayOwner(
             )
             return
 
+        # Target must be a member of this guild
+        try:
+            await bot.rest.fetch_member(ctx.guild_id, target_id)
+        except hikari.NotFoundError:
+            await ctx.respond(
+                f"{target.mention} is not a member of this server.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
         # Send approval DM to the target
         participant.pending_owner_id = target_id
 

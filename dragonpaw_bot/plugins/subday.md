@@ -103,6 +103,7 @@ Submissives can register an owner via `/subday owner @user`. The owner receives 
 
 **Edge cases:**
 - New request while one is pending → overwrites `pending_owner_id`, sends new DM
+- Target not a member of this guild → rejected ("not a member of this server")
 - Request to current confirmed owner → rejected ("already your owner")
 - Owner clicks stale button → `pending_owner_id` won't match → "request no longer valid"
 - Owner clicks Accept twice → idempotent: "you're already their owner"

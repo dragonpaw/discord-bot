@@ -42,6 +42,8 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **`http.py`** — Async HTTP client for fetching TOML configs, with special GitHub Gist URL handling.
 
+**`colors.py`** — Solarized color constants and a `rainbow()` helper using `palettable` for generating embed color palettes.
+
 **Config flow:** Server admins use the `/config` slash command with a URL to a TOML file. The bot fetches and parses it, sets up role menus and lobby, then persists `GuildState` to disk as YAML. The `/logging` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/config` reloads.
 
 **Guild logging:** `utils.log_to_guild()` sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji.
@@ -75,6 +77,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
   - All commands should log permission denials
 - Shared helpers belong in `utils.py` (e.g. `member_has_role`, `guild_role_by_name`, `guild_channel_by_name`)
 - Plugin-specific docs go in a `.md` file alongside the plugin (e.g. `plugins/subday.md`). When adding, changing, or removing features from a plugin, always update its `.md` file to reflect the current state. The `.md` file is the source of truth for what the plugin does.
+- Existing plugin docs: `plugins/lobby.md`, `plugins/role_menus.md`, `plugins/subday.md`. `plugins/birthdays.md` is a planning doc for a future feature.
 - State is persisted as YAML files in `state/` using `safer` for atomic writes
 - All Python files are UTF-8 (with `# -*- coding: utf-8 -*-` header). Use literal emoji characters (`📖`, `✅`) directly in source, never Unicode escapes (`\U0001f4d6`, `\u2705`).
 - Type checking uses `ty` (not mypy): `uv run ty check dragonpaw_bot/`
