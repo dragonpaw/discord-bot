@@ -13,7 +13,7 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 ### Slash Commands (`/birthday`)
 
 - **status** — Shows your registered birthday, wishlist URL, and days until your next birthday. Requires `register_role`. Ephemeral.
-- **set** — Register or update your own birthday via a multi-step interactive flow: month (select menu) → day (text input modal) → region (select menu) → timezone (select menu). No year collected. Requires `register_role`. Preserves existing wishlist URL on update.
+- **set** — Register or update your own birthday via a multi-step interactive flow: month (select menu) → day + wishlist URL (text input modal) → region (select menu) → timezone (select menu). No year collected. Requires `register_role`. Wishlist URL is pre-filled from existing entry when updating.
 - **wishlist [url]** — View or update your wishlist URL. Requires `register_role`. With no argument, shows your current wishlist.
 - **set-for @user [month] [day] [wishlist_url]** — Requires `manage_role`. Register or update a birthday for another user.
 - **remove** — Remove your own birthday entry. Requires `register_role`.

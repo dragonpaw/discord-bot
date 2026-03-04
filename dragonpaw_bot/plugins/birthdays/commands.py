@@ -33,6 +33,10 @@ _LEAP_DAY = 29
 _MAR = 3
 _MONTHS_IN_YEAR = 12
 
+# Temporary storage for wishlist URLs during the multi-step set flow.
+# Keyed by (guild_id, user_id), cleared after the final save step.
+_pending_wishlists: dict[tuple[int, int], str | None] = {}
+
 MONTH_NAMES = [
     "",
     "January",
@@ -283,11 +287,13 @@ def _month_select_row() -> hikari.api.ComponentBuilder:
 # TODO: Once hikari merges PR #2489 (https://github.com/hikari-py/hikari/pull/2489),
 # refactor the entire birthday set flow into a single modal with select menus for
 # month, day, region, and timezone instead of the current multi-step message flow.
-def _day_modal_row(month: int) -> hikari.api.ComponentBuilder:
-    """Build a modal action row with a text input for the birth day."""
+def _day_modal_rows(
+    month: int, existing_wishlist: str | None = None
+) -> list[hikari.api.ComponentBuilder]:
+    """Build modal action rows for birth day and wishlist URL."""
     max_day = _LEAP_DAY if month == _FEB else calendar.monthrange(2000, month)[1]
-    row = hikari.impl.ModalActionRowBuilder()
-    row.add_text_input(
+    day_row = hikari.impl.ModalActionRowBuilder()
+    day_row.add_text_input(
         "day",
         f"Birth day (1–{max_day})",
         placeholder=f"Enter a number from 1 to {max_day}",
@@ -295,7 +301,17 @@ def _day_modal_row(month: int) -> hikari.api.ComponentBuilder:
         max_length=2,
         required=True,
     )
-    return row
+    wishlist_row = hikari.impl.ModalActionRowBuilder()
+    wishlist_row.add_text_input(
+        "wishlist",
+        "Wishlist URL (optional)",
+        placeholder="https://example.com/my-wishlist",
+        required=False,
+        min_length=0,
+        max_length=500,
+        value=existing_wishlist or "",
+    )
+    return [day_row, wishlist_row]
 
 
 class BirthdaySet(
@@ -409,11 +425,26 @@ async def _handle_set_month(interaction: hikari.ComponentInteraction) -> None:
             components=[],
         )
         return
+    # Pre-fill wishlist URL from existing entry if updating
+    existing_wishlist: str | None = None
+    if interaction.guild_id:
+        guild_state = state.load(int(interaction.guild_id))
+        existing = guild_state.birthdays.get(int(interaction.user.id))
+        if existing:
+            existing_wishlist = existing.wishlist_url
+
     await interaction.create_modal_response(
-        title=f"🎂 Enter your birth day ({MONTH_NAMES[month]})",
+        title=f"🎂 Birthday — {MONTH_NAMES[month]}",
         custom_id=f"{BIRTHDAY_PREFIX}day:{month}",
-        component=_day_modal_row(month),
+        components=_day_modal_rows(month, existing_wishlist),
     )
+    # Clear the month select menu from the original message
+    if interaction.message:
+        await interaction.edit_message(
+            interaction.message,
+            content=f"🎂 Month: **{MONTH_NAMES[month]}** — complete the popup to continue.",
+            components=[],
+        )
 
 
 def _extract_modal_text_input(
@@ -431,9 +462,10 @@ def _extract_modal_text_input(
 
 
 async def _handle_set_day(interaction: hikari.ModalInteraction, field: str) -> None:
-    """Step 2: Day submitted via modal → show region picker."""
+    """Step 2: Day and wishlist submitted via modal → show region picker."""
     month_str = field.removeprefix("day:")
     day_str = _extract_modal_text_input(interaction, "day")
+    wishlist_url = _extract_modal_text_input(interaction, "wishlist")
     if not month_str.isdigit() or not day_str or not day_str.strip().isdigit():
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
@@ -451,6 +483,14 @@ async def _handle_set_day(interaction: hikari.ModalInteraction, field: str) -> N
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
+
+    # Stash wishlist URL for the final save step
+    if interaction.guild_id:
+        key = (int(interaction.guild_id), int(interaction.user.id))
+        _pending_wishlists[key] = (
+            wishlist_url.strip() if wishlist_url and wishlist_url.strip() else None
+        )
+
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
         content=f"🎂 **Set Your Birthday**\n"
@@ -530,12 +570,19 @@ async def _handle_set_timezone(
     guild_state = state.load(int(guild_id))
     uid = int(interaction.user.id)
     existing = guild_state.birthdays.get(uid)
+
+    # Use wishlist from the modal if provided, otherwise preserve existing
+    key = (int(guild_id), uid)
+    wishlist_url = _pending_wishlists.pop(
+        key, existing.wishlist_url if existing else None
+    )
+
     entry = BirthdayEntry(
         user_id=uid,
         month=month,
         day=day,
         timezone=tz_id,
-        wishlist_url=existing.wishlist_url if existing else None,
+        wishlist_url=wishlist_url,
     )
     guild_state.birthdays[uid] = entry
     guild = bot.cache.get_guild(guild_id)
