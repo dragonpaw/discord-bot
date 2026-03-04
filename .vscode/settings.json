@@ -23,8 +23,9 @@
     "aiohttp",
     "dotenv",
     "Dragonpaw",
-    "lightbulb",
     "hikari",
+    "lightbulb",
+    "subday",
     "uvloop"
   ],
   "[markdown]": {
