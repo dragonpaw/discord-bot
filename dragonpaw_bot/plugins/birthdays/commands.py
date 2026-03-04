@@ -280,6 +280,9 @@ def _month_select_row() -> hikari.api.ComponentBuilder:
     return row
 
 
+# TODO: Once hikari merges PR #2489 (https://github.com/hikari-py/hikari/pull/2489),
+# refactor the entire birthday set flow into a single modal with select menus for
+# month, day, region, and timezone instead of the current multi-step message flow.
 def _day_modal_row(month: int) -> hikari.api.ComponentBuilder:
     """Build a modal action row with a text input for the birth day."""
     max_day = _LEAP_DAY if month == _FEB else calendar.monthrange(2000, month)[1]
