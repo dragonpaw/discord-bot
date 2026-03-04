@@ -133,7 +133,7 @@ async def configure_role_menus(
         valid_options: list[tuple[str, str, str | None]] = []
         for o in menu.options:
             if o.role not in role_map:
-                logger.error(
+                logger.warning(
                     "G=%r Menu=%r: Role %r doesn't exist.",
                     guild.name,
                     menu.name,
@@ -410,7 +410,7 @@ async def configure_guild(
         role_map=role_map,
     )
     for err in errors:
-        logger.error("Error setting up role menus: %r", err)
+        logger.warning("Error setting up role menus: %r", err)
         await utils.log_to_guild(bot, guild.id, f"🤯 **Role menu error:** {err}")
     all_errors.extend(errors)
 
