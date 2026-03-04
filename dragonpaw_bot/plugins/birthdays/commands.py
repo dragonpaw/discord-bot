@@ -554,6 +554,10 @@ class _DefaultsActionRow:
         self._inner = inner
         self._defaults = defaults
 
+    def __getattr__(self, name: str) -> Any:
+        """Delegate attribute access to the inner builder."""
+        return getattr(self._inner, name)
+
     def build(self) -> tuple[Any, Any]:
         payload, resources = self._inner.build()
         if self._defaults:
