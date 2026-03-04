@@ -287,7 +287,7 @@ async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> Non
         state.save(guild_state)
 
 
-@loader.task(lightbulb.crontrigger("0 * * * *"))
+@loader.task(lightbulb.crontrigger("5 * * * *"))
 async def hourly_birthdays(bot: hikari.GatewayBot) -> None:
     """Hourly task: announce birthdays at each user's local midnight."""
     assert isinstance(bot, DragonpawBot)
