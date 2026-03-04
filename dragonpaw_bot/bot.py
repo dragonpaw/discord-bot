@@ -260,8 +260,12 @@ async def on_guild_join(event: hikari.GuildJoinEvent):
 loader = lightbulb.Loader()
 
 
-@loader.command
-class Config(
+roles_group = lightbulb.Group("roles", "Role menu management")
+loader.command(roles_group)
+
+
+@roles_group.register
+class RolesConfig(
     lightbulb.SlashCommand,
     name="config",
     description="Configure Dragonpaw Bot via a url to a TOML file.",
