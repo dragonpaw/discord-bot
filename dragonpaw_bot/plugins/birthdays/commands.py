@@ -15,7 +15,7 @@ from dragonpaw_bot.colors import SOLARIZED_ORANGE, SOLARIZED_YELLOW
 from dragonpaw_bot.plugins.birthdays import state
 from dragonpaw_bot.plugins.birthdays.constants import (
     BIRTHDAY_CONFIG_PREFIX,
-    BIRTHDAY_TZ_PREFIX,
+    BIRTHDAY_PREFIX,
     TIMEZONE_REGIONS,
 )
 from dragonpaw_bot.plugins.birthdays.models import (
@@ -273,22 +273,44 @@ class BirthdayStatus(
 def _month_select_row() -> hikari.api.ComponentBuilder:
     """Build a month select menu."""
     row = hikari.impl.MessageActionRowBuilder()
-    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}month")
+    select = row.add_text_menu(f"{BIRTHDAY_PREFIX}month")
     for i in range(1, _MONTHS_IN_YEAR + 1):
         select.add_option(MONTH_NAMES[i], str(i))
     select.set_placeholder("Choose your birth month")
     return row
 
 
-def _day_select_row(month: int) -> hikari.api.ComponentBuilder:
-    """Build a day select menu with the correct range for the given month."""
+def _day_select_rows(month: int) -> list[hikari.api.ComponentBuilder]:
+    """Build day select menu(s) for the given month.
+
+    Discord limits select menus to 25 options, so months with more than
+    25 days need two rows.
+    """
     max_day = _LEAP_DAY if month == _FEB else calendar.monthrange(2000, month)[1]
-    row = hikari.impl.MessageActionRowBuilder()
-    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}day:{month}")
-    for d in range(1, max_day + 1):
-        select.add_option(str(d), str(d))
-    select.set_placeholder(f"Choose your birth day ({MONTH_NAMES[month]})")
-    return row
+    _MAX_OPTIONS = 25
+    if max_day <= _MAX_OPTIONS:
+        row = hikari.impl.MessageActionRowBuilder()
+        select = row.add_text_menu(f"{BIRTHDAY_PREFIX}day:{month}")
+        for d in range(1, max_day + 1):
+            select.add_option(str(d), str(d))
+        select.set_placeholder(f"Choose your birth day ({MONTH_NAMES[month]})")
+        return [row]
+
+    # Split into two rows: 1-15 and 16-max
+    split = 15
+    row1 = hikari.impl.MessageActionRowBuilder()
+    select1 = row1.add_text_menu(f"{BIRTHDAY_PREFIX}day:{month}")
+    for d in range(1, split + 1):
+        select1.add_option(str(d), str(d))
+    select1.set_placeholder(f"Day 1–{split} ({MONTH_NAMES[month]})")
+
+    row2 = hikari.impl.MessageActionRowBuilder()
+    select2 = row2.add_text_menu(f"{BIRTHDAY_PREFIX}day2:{month}")
+    for d in range(split + 1, max_day + 1):
+        select2.add_option(str(d), str(d))
+    select2.set_placeholder(f"Day {split + 1}–{max_day} ({MONTH_NAMES[month]})")
+
+    return [row1, row2]
 
 
 class BirthdaySet(
@@ -364,7 +386,7 @@ class BirthdayWishlist(
 def _region_select_row(month: int, day: int) -> hikari.api.ComponentBuilder:
     """Build the region select menu, encoding month:day in the custom_id."""
     row = hikari.impl.MessageActionRowBuilder()
-    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}region:{month}:{day}")
+    select = row.add_text_menu(f"{BIRTHDAY_PREFIX}region:{month}:{day}")
     for region_name in TIMEZONE_REGIONS:
         select.add_option(region_name, region_name)
     select.set_placeholder("Choose your region")
@@ -374,7 +396,7 @@ def _region_select_row(month: int, day: int) -> hikari.api.ComponentBuilder:
 def _timezone_select_row(month_day: str, region: str) -> hikari.api.ComponentBuilder:
     """Build the timezone select menu, encoding month:day in the custom_id."""
     row = hikari.impl.MessageActionRowBuilder()
-    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}tz:{month_day}")
+    select = row.add_text_menu(f"{BIRTHDAY_PREFIX}tz:{month_day}")
     for tz_id, label in TIMEZONE_REGIONS[region]:
         select.add_option(f"{label} — {tz_id}", tz_id)
     select.set_placeholder(f"Choose your timezone ({region})")
@@ -407,13 +429,13 @@ async def _handle_set_month(interaction: hikari.ComponentInteraction) -> None:
         content=f"🎂 **Set Your Birthday**\n"
         f"Month: **{MONTH_NAMES[month]}**\n"
         f"Step 2 of 3: Choose your birth day:",
-        components=[_day_select_row(month)],
+        components=_day_select_rows(month),
     )
 
 
 async def _handle_set_day(interaction: hikari.ComponentInteraction, field: str) -> None:
     """Step 2: Day selected → show region picker."""
-    month_str = field.removeprefix("day:")
+    month_str = field.removeprefix("day2:").removeprefix("day:")
     day_str = interaction.values[0] if interaction.values else None
     if not month_str.isdigit() or not day_str or not day_str.isdigit():
         await interaction.create_initial_response(
@@ -551,7 +573,7 @@ async def _handle_set_timezone(
 async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> None:
     """Handle the multi-step birthday set flow: month → day → region → timezone."""
     custom_id = interaction.custom_id
-    field = custom_id.removeprefix(BIRTHDAY_TZ_PREFIX)
+    field = custom_id.removeprefix(BIRTHDAY_PREFIX)
 
     if not interaction.guild_id:
         await interaction.create_initial_response(
@@ -563,7 +585,7 @@ async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> Non
 
     if field == "month":
         await _handle_set_month(interaction)
-    elif field.startswith("day:"):
+    elif field.startswith("day:") or field.startswith("day2:"):
         await _handle_set_day(interaction, field)
     elif field.startswith("region:"):
         await _handle_set_region(interaction, field)

@@ -20,10 +20,9 @@ from dragonpaw_bot.bot import (
     on_component_interaction,
     state_load_yaml,
     state_path,
-    state_save_pickle,
     state_save_yaml,
 )
-from dragonpaw_bot.structs import GuildState, RoleMenuOptionState
+from dragonpaw_bot.structs import GuildState
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -34,17 +33,6 @@ def _sample_state() -> GuildState:
         name="Test Guild",
         config_url="https://example.com/config.toml",
         config_last=datetime.datetime(2025, 6, 1, 0, 0, 0),
-        role_emojis={
-            (hikari.Snowflake(10), "⭐"): RoleMenuOptionState(
-                add_role_id=hikari.Snowflake(20),
-                remove_role_ids=[],
-            ),
-            (hikari.Snowflake(10), "🔥"): RoleMenuOptionState(
-                add_role_id=hikari.Snowflake(30),
-                remove_role_ids=[hikari.Snowflake(20)],
-            ),
-        },
-        role_names={hikari.Snowflake(20): "Star", hikari.Snowflake(30): "Fire"},
     )
 
 
@@ -95,21 +83,11 @@ def test_config_parse_toml_bad_toml():
         config_parse_toml(guild=guild, text="[invalid toml ===")
 
 
-def test_state_to_yaml_dict_nested_structure():
+def test_state_to_yaml_dict():
     state = _sample_state()
     data = _state_to_yaml_dict(state)
-
-    # role_emojis should be nested: {msg_id: {emoji: opt_state}}
-    assert 10 in data["role_emojis"]
-    assert "⭐" in data["role_emojis"][10]
-    assert "🔥" in data["role_emojis"][10]
-    assert data["role_emojis"][10]["⭐"]["add_role_id"] == 20
-    assert data["role_emojis"][10]["🔥"]["add_role_id"] == 30
-    assert data["role_emojis"][10]["🔥"]["remove_role_ids"] == [20]
-
-    # role_names keys should be int
-    assert 20 in data["role_names"]
-    assert 30 in data["role_names"]
+    assert data["name"] == "Test Guild"
+    assert data["config_url"] == "https://example.com/config.toml"
 
 
 def test_yaml_dict_round_trip():
@@ -119,8 +97,6 @@ def test_yaml_dict_round_trip():
 
     assert restored.id == state.id
     assert restored.name == state.name
-    assert restored.role_emojis == state.role_emojis
-    assert restored.role_names == state.role_names
 
 
 def test_yaml_round_trip(state_dir):
@@ -135,14 +111,11 @@ def test_yaml_round_trip(state_dir):
     with open(expected_file) as f:
         raw = yaml.safe_load(f)
     assert raw["name"] == "Test Guild"
-    assert 10 in raw["role_emojis"]
 
     loaded = state_load_yaml(hikari.Snowflake(99))
     assert loaded is not None
     assert loaded.id == state.id
     assert loaded.name == state.name
-    assert loaded.role_emojis == state.role_emojis
-    assert loaded.role_names == state.role_names
 
 
 def test_yaml_load_missing_file(state_dir):
@@ -150,26 +123,29 @@ def test_yaml_load_missing_file(state_dir):
     assert result is None
 
 
-def test_auto_migration_from_pickle(state_dir):
-    state = _sample_state()
+def test_yaml_load_strips_legacy_role_fields(state_dir):
+    """Old YAML files with role_emojis/role_names/role_channel_id should load fine."""
+    legacy_data = {
+        "id": 99,
+        "name": "Legacy Guild",
+        "config_url": "https://example.com/config.toml",
+        "config_last": "2025-06-01T00:00:00",
+        "role_emojis": {10: {"⭐": {"add_role_id": 20, "remove_role_ids": []}}},
+        "role_names": {20: "Star"},
+        "role_channel_id": 333,
+    }
+    yaml_file = state_dir / "99.yaml"
+    with open(yaml_file, "w") as f:
+        yaml.dump(legacy_data, f)
 
-    # Save as pickle (old format)
-    state_save_pickle(state)
-    pickle_file = state_dir / "99.pickle"
-    assert pickle_file.exists()
-
-    # Load via YAML loader — should auto-migrate
     loaded = state_load_yaml(hikari.Snowflake(99))
     assert loaded is not None
-    assert loaded.id == state.id
-    assert loaded.name == state.name
-    assert loaded.role_emojis == state.role_emojis
-    assert loaded.role_names == state.role_names
-
-    # Pickle should be deleted, YAML should exist
-    assert not pickle_file.exists()
-    yaml_file = state_dir / "99.yaml"
-    assert yaml_file.exists()
+    assert loaded.id == hikari.Snowflake(99)
+    assert loaded.name == "Legacy Guild"
+    # Legacy fields should not be present
+    assert not hasattr(loaded, "role_emojis")
+    assert not hasattr(loaded, "role_names")
+    assert not hasattr(loaded, "role_channel_id")
 
 
 def test_config_parse_dragonpaw_gist():
@@ -217,58 +193,6 @@ def test_config_parse_dragonpaw_gist():
     pings = menus["Pings"]
     assert pings.single is False
     assert len(pings.options) == 8
-
-
-def test_yaml_round_trip_with_unicode_emoji(state_dir):
-    """YAML save/load with hikari.UnicodeEmoji keys (matching real bot behavior)."""
-    state = GuildState(
-        id=hikari.Snowflake(42),
-        name="Emoji Guild",
-        config_url="https://example.com/config.toml",
-        config_last=datetime.datetime(2025, 6, 1, 0, 0, 0),
-        lobby_role_id=hikari.Snowflake(100),
-        lobby_channel_id=hikari.Snowflake(200),
-        lobby_welcome_message="Welcome {name}!",
-        role_emojis={
-            (hikari.Snowflake(10), hikari.UnicodeEmoji("⭐")): RoleMenuOptionState(
-                add_role_id=hikari.Snowflake(20),
-                remove_role_ids=[],
-            ),
-            (hikari.Snowflake(10), hikari.UnicodeEmoji("🔥")): RoleMenuOptionState(
-                add_role_id=hikari.Snowflake(30),
-                remove_role_ids=[hikari.Snowflake(20)],
-            ),
-        },
-        role_names={hikari.Snowflake(20): "Star", hikari.Snowflake(30): "Fire"},
-    )
-
-    state_save_yaml(state)
-
-    # Verify safe_load can read it (no Python-tagged objects)
-    yaml_file = state_dir / "42.yaml"
-    assert yaml_file.exists()
-    with open(yaml_file) as f:
-        raw = yaml.safe_load(f)
-    assert isinstance(raw["role_emojis"][10]["⭐"], dict)
-
-    loaded = state_load_yaml(hikari.Snowflake(42))
-    assert loaded is not None
-    assert loaded.id == state.id
-    assert loaded.name == state.name
-    assert loaded.role_names == state.role_names
-    assert loaded.lobby_role_id == state.lobby_role_id
-    assert loaded.lobby_channel_id == state.lobby_channel_id
-    assert loaded.lobby_welcome_message == state.lobby_welcome_message
-
-    # Verify role_emojis round-tripped correctly (keys become plain strings)
-    assert len(loaded.role_emojis) == 2
-    key_star = (hikari.Snowflake(10), "⭐")
-    key_fire = (hikari.Snowflake(10), "🔥")
-    assert key_star in loaded.role_emojis
-    assert key_fire in loaded.role_emojis
-    assert loaded.role_emojis[key_star].add_role_id == hikari.Snowflake(20)
-    assert loaded.role_emojis[key_fire].add_role_id == hikari.Snowflake(30)
-    assert loaded.role_emojis[key_fire].remove_role_ids == [hikari.Snowflake(20)]
 
 
 async def test_bot_startup_loads_extensions():

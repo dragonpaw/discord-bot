@@ -12,7 +12,7 @@ from dragonpaw_bot import utils
 from dragonpaw_bot.plugins.birthdays import commands, state
 from dragonpaw_bot.plugins.birthdays.constants import (
     BIRTHDAY_CONFIG_PREFIX,
-    BIRTHDAY_TZ_PREFIX,
+    BIRTHDAY_PREFIX,
 )
 from dragonpaw_bot.plugins.birthdays.models import (
     BirthdayEntry,
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     BIRTHDAY_CONFIG_PREFIX: commands.handle_config_interaction,
-    BIRTHDAY_TZ_PREFIX: commands.handle_tz_interaction,
+    BIRTHDAY_PREFIX: commands.handle_tz_interaction,
 }
 
 loader = lightbulb.Loader()

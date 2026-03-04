@@ -2,7 +2,8 @@ import datetime
 
 import hikari
 import pydantic
-from pydantic import ConfigDict
+
+from dragonpaw_bot.plugins.role_menus.models import RolesConfig
 
 
 # ---------------------------------------------------------------------------- #
@@ -17,47 +18,21 @@ class LobbyConfig(pydantic.BaseModel):
     welcome_message: str | None = None
 
 
-class RoleMenuOptionConfig(pydantic.BaseModel):
-    role: str
-    emoji: str
-    description: str
-
-
-class RoleMenuConfig(pydantic.BaseModel):
-    name: str
-    single: bool = False
-    description: str | None = None
-    options: list[RoleMenuOptionConfig]
-
-
-class RolesConfig(pydantic.BaseModel):
-    channel: str
-    menu: list[RoleMenuConfig]
-
-
 class GuildConfig(pydantic.BaseModel):
     lobby: LobbyConfig | None = None
     roles: RolesConfig | None = None
 
 
 # ---------------------------------------------------------------------------- #
-#              States: The thing we keep after seting up the Guild             #
+#              States: The thing we keep after setting up the Guild            #
 # ---------------------------------------------------------------------------- #
-class RoleMenuOptionState(pydantic.BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    add_role_id: hikari.Snowflake
-    remove_role_ids: list[hikari.Snowflake]
-
-
 class GuildState(pydantic.BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     id: hikari.Snowflake
     name: str
 
     config_url: str
-    # config_size: int
     config_last: datetime.datetime
 
     lobby_role_id: hikari.Snowflake | None = None
@@ -67,11 +42,5 @@ class GuildState(pydantic.BaseModel):
     lobby_kick_days: int = 0
     lobby_rules: str = ""
     lobby_rules_message_id: hikari.Snowflake | None = None
-
-    # Role management
-    role_channel_id: hikari.Snowflake | None = None
-    # Key is (meddage.id,emoji)
-    role_emojis: dict[tuple[hikari.Snowflake, str], RoleMenuOptionState]
-    role_names: dict[hikari.Snowflake, str]
 
     log_channel_id: hikari.Snowflake | None = None

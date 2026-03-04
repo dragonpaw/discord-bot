@@ -2,7 +2,7 @@
 
 # Component interaction custom IDs
 BIRTHDAY_CONFIG_PREFIX = "birthday_cfg:"
-BIRTHDAY_TZ_PREFIX = "birthday_tz:"
+BIRTHDAY_PREFIX = "birthday:"
 
 # Region → list of (IANA timezone, display label)
 TIMEZONE_REGIONS: dict[str, list[tuple[str, str]]] = {

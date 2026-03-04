@@ -142,22 +142,38 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
     if not guild_state.lobby_role_id:
         return
 
-    logger.info(
-        "G=%r U=%r: Agreed to the rules, they are %s no more.",
-        guild_state.name,
-        interaction.user.username,
-        guild_state.role_names[guild_state.lobby_role_id],
-    )
-    await bot.rest.remove_role_from_member(
-        guild=interaction.guild_id,
-        user=interaction.user.id,
-        role=guild_state.lobby_role_id,
-    )
+    # Respond immediately per Discord 3-second timeout rule
     await interaction.create_initial_response(
-        content=f"Thank you. Removing your {guild_state.role_names[guild_state.lobby_role_id]} role.",
+        content="Thank you. Removing your lobby role now.",
         response_type=hikari.ResponseType.MESSAGE_CREATE,
         flags=hikari.MessageFlag.EPHEMERAL,
     )
+
+    logger.info(
+        "G=%r U=%r: Agreed to the rules.",
+        guild_state.name,
+        interaction.user.username,
+    )
+
+    try:
+        await bot.rest.remove_role_from_member(
+            guild=interaction.guild_id,
+            user=interaction.user.id,
+            role=guild_state.lobby_role_id,
+        )
+    except hikari.ForbiddenError:
+        logger.error(
+            "G=%r U=%r: Cannot remove lobby role %r — forbidden",
+            guild_state.name,
+            interaction.user.username,
+            guild_state.lobby_role_id,
+        )
+        await utils.log_to_guild(
+            bot,
+            interaction.guild_id,
+            f"🤯 Unable to remove lobby role from **{interaction.user.username}**. "
+            "Check bot role hierarchy permissions.",
+        )
 
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {

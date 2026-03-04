@@ -18,6 +18,7 @@ from dragonpaw_bot import http, structs, utils
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.lobby import INTERACTION_HANDLERS as lobby_handlers
 from dragonpaw_bot.plugins.lobby import configure_lobby
+from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
 from dragonpaw_bot.plugins.role_menus import configure_role_menus
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
 from dragonpaw_bot.utils import InteractionHandler
@@ -32,6 +33,7 @@ _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
         *((p, h, "processing your agreement") for p, h in lobby_handlers.items()),
         *((p, h, "processing your request") for p, h in subday_handlers.items()),
         *((p, h, "processing your request") for p, h in birthday_handlers.items()),
+        *((p, h, "updating your roles") for p, h in role_menu_handlers.items()),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -42,18 +44,10 @@ asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 ROOT_DIR = Path(__file__).resolve().parent.parent
 STATE_DIR = ROOT_DIR / "state"
 
-# ACTIVITY = "Doing bot things, thinking bot thoughts..."
-VALIDATION_ERROR = (
-    "The config for this server failed to pass validation. Below are the errors. "
-    "(Please be aware, programmers start counting at 0, so `menus.1.description` "
-    "means the description of your **2nd** menu!"
-)
 OAUTH_PERMISSIONS = (
     hikari.Permissions.SEND_MESSAGES
     | hikari.Permissions.MANAGE_ROLES
-    # | hikari.Permissions.MANAGE_MESSAGES
     | hikari.Permissions.READ_MESSAGE_HISTORY  # Needed to find own old messages
-    | hikari.Permissions.ADD_REACTIONS
     | hikari.Permissions.KICK_MEMBERS
     | hikari.Permissions.USE_APPLICATION_COMMANDS
 ).value
@@ -61,7 +55,6 @@ CLIENT_ID = environ["CLIENT_ID"]
 OAUTH_URL = "https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&permissions={OAUTH_PERMISSIONS}&scope=applications.commands%20bot"
 INTENTS = (
     hikari.Intents.GUILD_MESSAGES
-    | hikari.Intents.GUILD_MESSAGE_REACTIONS
     | hikari.Intents.GUILDS
     | hikari.Intents.GUILD_MEMBERS
     | hikari.Intents.GUILD_EMOJIS
@@ -142,52 +135,22 @@ def state_load_pickle(guild_id: hikari.Snowflake) -> structs.GuildState | None:
 
 def _state_to_yaml_dict(state: structs.GuildState) -> dict[str, Any]:
     """Convert a GuildState to a plain dict suitable for YAML serialization."""
-    data = state.model_dump(mode="json")
-
-    # Convert role_emojis from tuple-keyed dict to nested {msg_id: {emoji: state}}
-    data.pop("role_emojis", None)
-    nested: dict[int, dict[str, Any]] = {}
-    for (msg_id, emoji), opt_state in state.role_emojis.items():
-        mid = int(msg_id)
-        if mid not in nested:
-            nested[mid] = {}
-        nested[mid][str(emoji)] = opt_state.model_dump(mode="json")
-    data["role_emojis"] = nested
-
-    # Coerce role_names keys to int (Pydantic JSON mode turns Snowflake to str)
-    data["role_names"] = {int(k): v for k, v in data["role_names"].items()}
-
-    return data
+    return state.model_dump(mode="json")
 
 
 def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
     """Convert a YAML-loaded dict back into a GuildState."""
-    # Reconstruct role_emojis as tuple-keyed dict
-    nested_emojis = data.pop("role_emojis", {})
-    role_emojis: dict[tuple[hikari.Snowflake, str], structs.RoleMenuOptionState] = {}
-    for msg_id_str, emoji_map in nested_emojis.items():
-        msg_id = hikari.Snowflake(msg_id_str)
-        for emoji, opt_data in emoji_map.items():
-            opt_data["add_role_id"] = hikari.Snowflake(opt_data["add_role_id"])
-            opt_data["remove_role_ids"] = [
-                hikari.Snowflake(r) for r in opt_data["remove_role_ids"]
-            ]
-            role_emojis[(msg_id, emoji)] = structs.RoleMenuOptionState.model_validate(
-                opt_data
-            )
-    data["role_emojis"] = role_emojis
+    # Strip legacy role menu fields that now live in per-guild role_menus state
+    data.pop("role_emojis", None)
+    data.pop("role_names", None)
+    data.pop("role_channel_id", None)
 
-    # Reconstruct Snowflake types for role_names keys and scalar ID fields
-    data["role_names"] = {
-        hikari.Snowflake(k): v for k, v in data.get("role_names", {}).items()
-    }
     data["id"] = hikari.Snowflake(data["id"])
 
     for field in (
         "lobby_role_id",
         "lobby_channel_id",
         "lobby_rules_message_id",
-        "role_channel_id",
         "log_channel_id",
     ):
         if data.get(field) is not None:
@@ -332,8 +295,6 @@ class Logging(
                 name=guild.name,
                 config_url="",
                 config_last=datetime.datetime.now(),
-                role_emojis={},
-                role_names={},
             )
 
         if self.channel is not None:
@@ -396,8 +357,6 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
         name=guild.name,
         config_url=url,
         config_last=datetime.datetime.now(),
-        role_names={r.id: r.name for r in role_map.values()},
-        role_emojis={},
         log_channel_id=old_state.log_channel_id if old_state else None,
     )
 
@@ -407,7 +366,6 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
             bot=bot,
             guild=guild,
             config=config.roles,
-            state=state,
             role_map=role_map,
         )
         for err in errors:
@@ -430,7 +388,6 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
     else:
         logger.debug("No lobby.")
 
-    # logger.debug("Final state: %r", state)
     bot.state_update(state)
     logger.info("G=%r Configured guild.", guild.name)
 

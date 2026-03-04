@@ -4,12 +4,11 @@ import hikari
 import pydantic
 import pytest
 
+from dragonpaw_bot.plugins.role_menus.models import RolesConfig
 from dragonpaw_bot.structs import (
     GuildConfig,
     GuildState,
     LobbyConfig,
-    RoleMenuOptionState,
-    RolesConfig,
 )
 
 
@@ -37,7 +36,7 @@ def test_guild_config_full():
                     "name": "Colors",
                     "description": "Pick a color",
                     "options": [
-                        {"role": "Red", "emoji": "🔴", "description": "Red role"},
+                        {"role": "Red", "description": "Red role"},
                     ],
                 }
             ],
@@ -77,14 +76,6 @@ def test_guild_state_round_trip():
         lobby_click_for_rules=True,
         lobby_kick_days=7,
         lobby_rules="Be nice.",
-        role_channel_id=hikari.Snowflake(333),
-        role_emojis={
-            (hikari.Snowflake(444), "🔴"): RoleMenuOptionState(
-                add_role_id=hikari.Snowflake(555),
-                remove_role_ids=[hikari.Snowflake(666)],
-            ),
-        },
-        role_names={hikari.Snowflake(555): "Red"},
         log_channel_id=hikari.Snowflake(777),
     )
 
@@ -97,5 +88,3 @@ def test_guild_state_round_trip():
     assert restored.config_last == state.config_last
     assert restored.lobby_role_id == state.lobby_role_id
     assert restored.lobby_click_for_rules is True
-    assert restored.role_emojis == state.role_emojis
-    assert restored.role_names == state.role_names
