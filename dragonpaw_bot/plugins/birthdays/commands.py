@@ -214,7 +214,6 @@ def register(birthday_group: lightbulb.Group) -> None:
     birthday_group.register(BirthdayStatus)
     birthday_group.register(BirthdaySet)
     birthday_group.register(BirthdayWishlist)
-    birthday_group.register(BirthdayTimezone)
     birthday_group.register(BirthdaySetFor)
     birthday_group.register(BirthdayRemove)
     birthday_group.register(BirthdayRemoveFor)
@@ -271,15 +270,32 @@ class BirthdayStatus(
         await ctx.respond(embed=embed, flags=hikari.MessageFlag.EPHEMERAL)
 
 
+def _month_select_row() -> hikari.api.ComponentBuilder:
+    """Build a month select menu."""
+    row = hikari.impl.MessageActionRowBuilder()
+    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}month")
+    for i in range(1, _MONTHS_IN_YEAR + 1):
+        select.add_option(MONTH_NAMES[i], str(i))
+    select.set_placeholder("Choose your birth month")
+    return row
+
+
+def _day_select_row(month: int) -> hikari.api.ComponentBuilder:
+    """Build a day select menu with the correct range for the given month."""
+    max_day = _LEAP_DAY if month == _FEB else calendar.monthrange(2000, month)[1]
+    row = hikari.impl.MessageActionRowBuilder()
+    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}day:{month}")
+    for d in range(1, max_day + 1):
+        select.add_option(str(d), str(d))
+    select.set_placeholder(f"Choose your birth day ({MONTH_NAMES[month]})")
+    return row
+
+
 class BirthdaySet(
     lightbulb.SlashCommand,
     name="set",
     description="Register or update your birthday",
 ):
-    month = lightbulb.integer("month", "Birth month (1-12)")
-    day = lightbulb.integer("day", "Birth day (1-31)")
-    wishlist_url = lightbulb.string("wishlist_url", "Wishlist URL", default=None)
-
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
@@ -290,55 +306,10 @@ class BirthdaySet(
         if not await _check_permission(ctx, guild, cfg.register_role, "set"):
             return
 
-        error = _validate_date(self.month, self.day)
-        if error:
-            await ctx.respond(error, flags=hikari.MessageFlag.EPHEMERAL)
-            return
-
-        uid = int(ctx.user.id)
-        existing = guild_state.birthdays.get(uid)
-
-        existing_tz = existing.timezone if existing else None
-        entry = BirthdayEntry(
-            user_id=uid,
-            month=self.month,
-            day=self.day,
-            wishlist_url=self.wishlist_url
-            or (existing.wishlist_url if existing else None),
-            timezone=existing_tz,
-        )
-        guild_state.birthdays[uid] = entry
-        guild_state.guild_name = guild.name
-        state.save(guild_state)
-
-        action = "updated" if existing else "registered"
-
-        if existing_tz:
-            await ctx.respond(
-                f"🎂 Birthday {action}: **{MONTH_NAMES[self.month]} {self.day}**",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-        else:
-            await ctx.respond(
-                f"🎂 Birthday {action}: **{MONTH_NAMES[self.month]} {self.day}**\n\n"
-                f"Now select your timezone so announcements happen at your local midnight:",
-                components=[region_select_row()],
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-
-        logger.info(
-            "G=%r U=%r: Birthday %s to %s %d",
-            guild_state.guild_name,
-            ctx.user.username,
-            action,
-            MONTH_NAMES[self.month],
-            self.day,
-        )
-        await utils.log_to_guild(
-            bot,
-            ctx.guild_id,
-            f"🎂 {ctx.user.mention} {action} their birthday: "
-            f"{MONTH_NAMES[self.month]} {self.day}",
+        await ctx.respond(
+            "🎂 **Set Your Birthday**\nStep 1 of 3: Choose your birth month:",
+            components=[_month_select_row()],
+            flags=hikari.MessageFlag.EPHEMERAL,
         )
 
 
@@ -390,33 +361,199 @@ class BirthdayWishlist(
         )
 
 
-def region_select_row() -> hikari.api.ComponentBuilder:
-    """Build the region select menu for timezone selection."""
+def _region_select_row(month: int, day: int) -> hikari.api.ComponentBuilder:
+    """Build the region select menu, encoding month:day in the custom_id."""
     row = hikari.impl.MessageActionRowBuilder()
-    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}region")
+    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}region:{month}:{day}")
     for region_name in TIMEZONE_REGIONS:
         select.add_option(region_name, region_name)
     select.set_placeholder("Choose your region")
     return row
 
 
-def timezone_select_row(region: str) -> hikari.api.ComponentBuilder:
-    """Build the timezone select menu for a given region."""
+def _timezone_select_row(month_day: str, region: str) -> hikari.api.ComponentBuilder:
+    """Build the timezone select menu, encoding month:day in the custom_id."""
     row = hikari.impl.MessageActionRowBuilder()
-    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}tz")
+    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}tz:{month_day}")
     for tz_id, label in TIMEZONE_REGIONS[region]:
         select.add_option(f"{label} — {tz_id}", tz_id)
     select.set_placeholder(f"Choose your timezone ({region})")
     return row
 
 
+_RETRY_MSG = "Please try `/birthday set` again."
+
+
+async def _handle_set_month(interaction: hikari.ComponentInteraction) -> None:
+    """Step 1: Month selected → show day picker."""
+    month_str = interaction.values[0] if interaction.values else None
+    if not month_str or not month_str.isdigit():
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=f"Invalid month. {_RETRY_MSG}",
+            components=[],
+        )
+        return
+    month = int(month_str)
+    if month < 1 or month > _MONTHS_IN_YEAR:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=f"Invalid month. {_RETRY_MSG}",
+            components=[],
+        )
+        return
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_UPDATE,
+        content=f"🎂 **Set Your Birthday**\n"
+        f"Month: **{MONTH_NAMES[month]}**\n"
+        f"Step 2 of 3: Choose your birth day:",
+        components=[_day_select_row(month)],
+    )
+
+
+async def _handle_set_day(interaction: hikari.ComponentInteraction, field: str) -> None:
+    """Step 2: Day selected → show region picker."""
+    month_str = field.removeprefix("day:")
+    day_str = interaction.values[0] if interaction.values else None
+    if not month_str.isdigit() or not day_str or not day_str.isdigit():
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=f"Invalid selection. {_RETRY_MSG}",
+            components=[],
+        )
+        return
+    month = int(month_str)
+    day = int(day_str)
+    error = _validate_date(month, day)
+    if error:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=f"{error} {_RETRY_MSG}",
+            components=[],
+        )
+        return
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_UPDATE,
+        content=f"🎂 **Set Your Birthday**\n"
+        f"Date: **{MONTH_NAMES[month]} {day}**\n"
+        f"Step 3 of 3: Choose your region:",
+        components=[_region_select_row(month, day)],
+    )
+
+
+async def _handle_set_region(
+    interaction: hikari.ComponentInteraction, field: str
+) -> None:
+    """Step 3: Region selected → show timezone picker."""
+    params = field.removeprefix("region:")
+    region = interaction.values[0] if interaction.values else None
+    if not region or region not in TIMEZONE_REGIONS:
+        logger.warning(
+            "G=%s U=%r: Invalid timezone region selection: %r",
+            interaction.guild_id,
+            interaction.user.username,
+            region,
+        )
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=f"Invalid region. {_RETRY_MSG}",
+            components=[],
+        )
+        return
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_UPDATE,
+        content=f"🎂 **Set Your Birthday**\n"
+        f"Region: **{region}**\n"
+        f"Now pick your timezone:",
+        components=[_timezone_select_row(params, region)],
+    )
+
+
+async def _handle_set_timezone(
+    interaction: hikari.ComponentInteraction, field: str
+) -> None:
+    """Step 4: Timezone selected → save birthday entry."""
+    params = field.removeprefix("tz:")
+    parts = params.split(":", 1)
+    _expected_parts = 2
+    if (
+        len(parts) != _expected_parts
+        or not parts[0].isdigit()
+        or not parts[1].isdigit()
+    ):
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=f"Something went wrong. {_RETRY_MSG}",
+            components=[],
+        )
+        return
+    month = int(parts[0])
+    day = int(parts[1])
+    tz_id = interaction.values[0] if interaction.values else None
+    if not tz_id or _validate_timezone(tz_id) is None:
+        logger.warning(
+            "G=%s U=%r: Invalid timezone selection: %r",
+            interaction.guild_id,
+            interaction.user.username,
+            tz_id,
+        )
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=f"Invalid timezone. {_RETRY_MSG}",
+            components=[],
+        )
+        return
+
+    guild_id = interaction.guild_id
+    assert guild_id
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    guild_state = state.load(int(guild_id))
+    uid = int(interaction.user.id)
+    existing = guild_state.birthdays.get(uid)
+    entry = BirthdayEntry(
+        user_id=uid,
+        month=month,
+        day=day,
+        timezone=tz_id,
+        wishlist_url=existing.wishlist_url if existing else None,
+    )
+    guild_state.birthdays[uid] = entry
+    guild = bot.cache.get_guild(guild_id)
+    guild_name = guild.name if guild else str(guild_id)
+    guild_state.guild_name = guild_name
+    state.save(guild_state)
+
+    action = "updated" if existing else "registered"
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_UPDATE,
+        content=f"🎂 Birthday {action}! **{MONTH_NAMES[month]} {day}** "
+        f"(timezone: **{tz_id}**)\n"
+        f"Your birthday will be announced at midnight in your local time.",
+        components=[],
+    )
+    logger.info(
+        "G=%r U=%r: Birthday %s to %s %d (tz=%s)",
+        guild_name,
+        interaction.user.username,
+        action,
+        MONTH_NAMES[month],
+        day,
+        tz_id,
+    )
+    await utils.log_to_guild(
+        bot,
+        guild_id,
+        f"🎂 {interaction.user.mention} {action} their birthday: "
+        f"{MONTH_NAMES[month]} {day}",
+    )
+
+
 async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> None:
-    """Handle timezone region/timezone select menu interactions."""
+    """Handle the multi-step birthday set flow: month → day → region → timezone."""
     custom_id = interaction.custom_id
     field = custom_id.removeprefix(BIRTHDAY_TZ_PREFIX)
 
-    guild_id = interaction.guild_id
-    if not guild_id:
+    if not interaction.guild_id:
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="This command must be used in a server.",
@@ -424,116 +561,24 @@ async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> Non
         )
         return
 
-    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
-    guild_state = state.load(int(guild_id))
-    uid = int(interaction.user.id)
-    entry = guild_state.birthdays.get(uid)
-
-    if not entry:
+    if field == "month":
+        await _handle_set_month(interaction)
+    elif field.startswith("day:"):
+        await _handle_set_day(interaction, field)
+    elif field.startswith("region:"):
+        await _handle_set_region(interaction, field)
+    elif field.startswith("tz:"):
+        await _handle_set_timezone(interaction, field)
+    else:
+        logger.warning(
+            "G=%s U=%r: Unknown birthday interaction field: %r",
+            interaction.guild_id,
+            interaction.user.username,
+            field,
+        )
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="You don't have a birthday registered yet. Use `/birthday set` first.",
-            flags=hikari.MessageFlag.EPHEMERAL,
-        )
-        return
-
-    if field == "region":
-        region = interaction.values[0] if interaction.values else None
-        if not region or region not in TIMEZONE_REGIONS:
-            logger.warning(
-                "G=%s U=%r: Invalid timezone region selection: %r",
-                guild_id,
-                interaction.user.username,
-                region,
-            )
-            await interaction.create_initial_response(
-                response_type=hikari.ResponseType.MESSAGE_UPDATE,
-                content="Invalid region selected. Please try `/birthday timezone` again.",
-                components=[],
-            )
-            return
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_UPDATE,
-            content=f"**Region:** {region}\nNow pick your timezone:",
-            components=[timezone_select_row(region)],
-        )
-        return
-
-    if field == "tz":
-        tz_id = interaction.values[0] if interaction.values else None
-        if not tz_id or _validate_timezone(tz_id) is None:
-            logger.warning(
-                "G=%s U=%r: Invalid timezone selection: %r",
-                guild_id,
-                interaction.user.username,
-                tz_id,
-            )
-            await interaction.create_initial_response(
-                response_type=hikari.ResponseType.MESSAGE_UPDATE,
-                content="Invalid timezone selected. Please try `/birthday timezone` again.",
-                components=[],
-            )
-            return
-        entry.timezone = tz_id
-        state.save(guild_state)
-        guild = bot.cache.get_guild(guild_id)
-        guild_name = guild.name if guild else str(guild_id)
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_UPDATE,
-            content=f"Timezone set to **{tz_id}**. Your birthday will be "
-            f"announced at midnight in your local time.",
-            components=[],
-        )
-        logger.info(
-            "G=%r U=%r: Updated timezone to %s",
-            guild_name,
-            interaction.user.username,
-            tz_id,
-        )
-        return
-
-    logger.warning(
-        "G=%s U=%r: Unknown birthday timezone interaction field: %r",
-        guild_id,
-        interaction.user.username,
-        field,
-    )
-    await interaction.create_initial_response(
-        response_type=hikari.ResponseType.MESSAGE_CREATE,
-        content="Something went wrong. Please try again.",
-        flags=hikari.MessageFlag.EPHEMERAL,
-    )
-
-
-class BirthdayTimezone(
-    lightbulb.SlashCommand,
-    name="timezone",
-    description="Set your timezone for birthday announcements",
-):
-    @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:
-        assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
-        guild_state = state.load(int(ctx.guild_id))
-        cfg = guild_state.config
-        if not await _check_permission(ctx, guild, cfg.register_role, "timezone"):
-            return
-
-        uid = int(ctx.user.id)
-        entry = guild_state.birthdays.get(uid)
-
-        if not entry:
-            await ctx.respond(
-                "You don't have a birthday registered yet. Use `/birthday set` first.",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            return
-
-        current = entry.timezone or "UTC (default)"
-        await ctx.respond(
-            f"Your current timezone: **{current}**\nSelect a region to change it:",
-            components=[region_select_row()],
+            content="Something went wrong. Please try again.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 

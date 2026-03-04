@@ -13,9 +13,8 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 ### Slash Commands (`/birthday`)
 
 - **status** — Shows your registered birthday, wishlist URL, and days until your next birthday. Requires `register_role`. Ephemeral.
-- **set [month] [day] [wishlist_url]** — Register or update your own birthday (month/day only, no year). Requires `register_role`. Optionally include a wishlist URL. If no timezone is set, prompts with an interactive region/timezone select menu.
+- **set** — Register or update your own birthday via a 3-step interactive select menu flow: month → day → region → timezone. No year collected. Requires `register_role`. Preserves existing wishlist URL on update.
 - **wishlist [url]** — View or update your wishlist URL. Requires `register_role`. With no argument, shows your current wishlist.
-- **timezone** — Set your timezone for birthday announcements via a two-step interactive select menu (region → timezone). Requires `register_role`. Shows your current timezone and a region selector to change it.
 - **set-for @user [month] [day] [wishlist_url]** — Requires `manage_role`. Register or update a birthday for another user.
 - **remove** — Remove your own birthday entry. Requires `register_role`.
 - **remove-for @user** — Requires `manage_role`. Remove another user's birthday entry.
@@ -77,7 +76,7 @@ Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild sta
 - **`commands.py`** — All slash commands, config interaction handlers, announcement embeds
 - **`models.py`** — Pydantic models: `BirthdayEntry`, `BirthdayGuildConfig`, `BirthdayGuildState`
 - **`state.py`** — YAML state persistence (load/save)
-- **`constants.py`** — Configuration prefixes and constants
+- **`constants.py`** — Interaction ID prefixes and timezone region data
 
 ### Error Handling
 
