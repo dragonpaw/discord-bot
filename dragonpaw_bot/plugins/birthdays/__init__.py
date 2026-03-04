@@ -10,7 +10,10 @@ import lightbulb
 
 from dragonpaw_bot import utils
 from dragonpaw_bot.plugins.birthdays import commands, state
-from dragonpaw_bot.plugins.birthdays.constants import BIRTHDAY_CONFIG_PREFIX
+from dragonpaw_bot.plugins.birthdays.constants import (
+    BIRTHDAY_CONFIG_PREFIX,
+    BIRTHDAY_TZ_PREFIX,
+)
 from dragonpaw_bot.plugins.birthdays.models import (
     BirthdayEntry,
     BirthdayGuildConfig,
@@ -26,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     BIRTHDAY_CONFIG_PREFIX: commands.handle_config_interaction,
+    BIRTHDAY_TZ_PREFIX: commands.handle_tz_interaction,
 }
 
 loader = lightbulb.Loader()
@@ -41,7 +45,7 @@ loader.command(birthday_group)
 # ---------------------------------------------------------------------------- #
 
 
-async def _announce_birthday(
+async def announce_birthday(
     bot: DragonpawBot,
     guild: hikari.Guild,
     member: hikari.Member,
@@ -115,7 +119,7 @@ async def _announce_birthday(
     )
 
 
-async def _cleanup_birthday_role(
+async def cleanup_birthday_role(
     bot: DragonpawBot,
     guild: hikari.Guild,
     member: hikari.Member,
@@ -143,7 +147,7 @@ async def _cleanup_birthday_role(
         )
 
 
-async def _send_week_ahead_dm(
+async def send_week_ahead_dm(
     bot: DragonpawBot,
     guild: hikari.Guild,
     guild_state: state.BirthdayGuildState,
@@ -195,7 +199,7 @@ async def _send_week_ahead_dm(
         )
 
 
-async def _process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> None:
+async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> None:
     """Process birthday announcements, role cleanup, and reminders for one guild.
 
     Runs hourly. For each user, computes "today" in their local timezone and only
@@ -219,16 +223,19 @@ async def _process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> No
 
     changed = False
     for uid, entry in list(guild_state.birthdays.items()):
-        local_hour = commands._user_local_hour(entry)
+        if not entry.timezone:
+            continue
+
+        local_hour = commands.user_local_hour(entry)
         if local_hour != 0:
             continue
 
-        local_today = commands._user_local_date(entry)
-        local_yesterday = commands._user_local_date_offset(entry, days=-1)
-        local_week_ahead = commands._user_local_date_offset(entry, days=7)
+        local_today = commands.user_local_date(entry)
+        local_yesterday = commands.user_local_date_offset(entry, days=-1)
+        local_week_ahead = commands.user_local_date_offset(entry, days=7)
 
         # Birthday announcements
-        if commands._is_birthday_on_date(entry, local_today):
+        if commands.is_birthday_on_date(entry, local_today):
             if entry.last_announced == local_today:
                 logger.debug(
                     "G=%r U=%d: Already announced today, skipping",
@@ -247,24 +254,29 @@ async def _process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> No
                 del guild_state.birthdays[uid]
                 state.save(guild_state)
                 continue
-            await _announce_birthday(bot, guild, member, entry, cfg)
+            await announce_birthday(bot, guild, member, entry, cfg)
             entry.last_announced = local_today
             changed = True
             await asyncio.sleep(1)
 
         # Role cleanup for yesterday's birthdays
-        elif cfg.birthday_role and commands._is_birthday_on_date(
-            entry, local_yesterday
-        ):
+        elif cfg.birthday_role and commands.is_birthday_on_date(entry, local_yesterday):
             try:
                 member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
             except hikari.NotFoundError:
+                logger.warning(
+                    "G=%r U=%d: Member left guild during role cleanup, removing entry",
+                    guild.name,
+                    uid,
+                )
+                del guild_state.birthdays[uid]
+                changed = True
                 continue
-            await _cleanup_birthday_role(bot, guild, member, cfg)
+            await cleanup_birthday_role(bot, guild, member, cfg)
 
         # Week-ahead DM reminder
-        if commands._is_birthday_on_date(entry, local_week_ahead):
-            await _send_week_ahead_dm(bot, guild, guild_state, uid, entry)
+        if commands.is_birthday_on_date(entry, local_week_ahead):
+            await send_week_ahead_dm(bot, guild, guild_state, uid, entry)
             await asyncio.sleep(1)
 
     if changed:
@@ -279,7 +291,7 @@ async def hourly_birthdays(bot: hikari.GatewayBot) -> None:
     logger.debug("Birthday hourly run: processing %d guild(s)", len(guilds))
     for guild in guilds:
         try:
-            await _process_guild_birthdays(bot, guild)
+            await process_guild_birthdays(bot, guild)
         except Exception:
             logger.exception("Error processing birthdays for guild %r", guild.name)
 
@@ -294,13 +306,31 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
     """Remove birthday entry when a member leaves the guild."""
     guild_id = int(event.guild_id)
     uid = int(event.user_id)
-    guild_state = state.load(guild_id)
+
+    try:
+        guild_state = state.load(guild_id)
+    except Exception:
+        logger.exception(
+            "G=%d U=%d: Failed to load birthday state for member leave cleanup",
+            guild_id,
+            uid,
+        )
+        return
 
     if uid not in guild_state.birthdays:
         return
 
     del guild_state.birthdays[uid]
-    state.save(guild_state)
+
+    try:
+        state.save(guild_state)
+    except Exception:
+        logger.exception(
+            "G=%d U=%d: Failed to save birthday state after member leave cleanup",
+            guild_id,
+            uid,
+        )
+        return
 
     guild = event.get_guild()
     guild_name = guild.name if guild else str(event.guild_id)

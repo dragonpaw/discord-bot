@@ -13,7 +13,11 @@ import lightbulb
 from dragonpaw_bot import utils
 from dragonpaw_bot.colors import SOLARIZED_ORANGE, SOLARIZED_YELLOW
 from dragonpaw_bot.plugins.birthdays import state
-from dragonpaw_bot.plugins.birthdays.constants import BIRTHDAY_CONFIG_PREFIX
+from dragonpaw_bot.plugins.birthdays.constants import (
+    BIRTHDAY_CONFIG_PREFIX,
+    BIRTHDAY_TZ_PREFIX,
+    TIMEZONE_REGIONS,
+)
 from dragonpaw_bot.plugins.birthdays.models import (
     BirthdayEntry,
     BirthdayGuildConfig,
@@ -149,7 +153,7 @@ def _days_until_birthday(
     return (next_year - today).days
 
 
-def _is_birthday_on_date(entry: BirthdayEntry, date: datetime.date) -> bool:
+def is_birthday_on_date(entry: BirthdayEntry, date: datetime.date) -> bool:
     """Check if a birthday entry matches a given date, handling Feb 29."""
     if entry.month == date.month and entry.day == date.day:
         return True
@@ -168,22 +172,36 @@ def _validate_timezone(tz_str: str) -> zoneinfo.ZoneInfo | None:
         return None
 
 
-def _user_local_date(entry: BirthdayEntry) -> datetime.date:
+def _get_user_tz(entry: BirthdayEntry) -> datetime.tzinfo:
+    """Return the user's timezone, falling back to UTC on invalid values."""
+    if not entry.timezone:
+        return datetime.UTC
+    try:
+        return zoneinfo.ZoneInfo(entry.timezone)
+    except (KeyError, zoneinfo.ZoneInfoNotFoundError):
+        logger.warning(
+            "U=%d: Invalid timezone %r in state, falling back to UTC",
+            entry.user_id,
+            entry.timezone,
+        )
+        return datetime.UTC
+
+
+def user_local_date(entry: BirthdayEntry) -> datetime.date:
     """Return today's date in the user's configured timezone (default UTC)."""
-    tz = zoneinfo.ZoneInfo(entry.timezone) if entry.timezone else datetime.UTC
-    return datetime.datetime.now(tz).date()
+    return datetime.datetime.now(_get_user_tz(entry)).date()
 
 
-def _user_local_hour(entry: BirthdayEntry) -> int:
+def user_local_hour(entry: BirthdayEntry) -> int:
     """Return the current hour in the user's configured timezone (default UTC)."""
-    tz = zoneinfo.ZoneInfo(entry.timezone) if entry.timezone else datetime.UTC
-    return datetime.datetime.now(tz).hour
+    return datetime.datetime.now(_get_user_tz(entry)).hour
 
 
-def _user_local_date_offset(entry: BirthdayEntry, *, days: int) -> datetime.date:
+def user_local_date_offset(entry: BirthdayEntry, *, days: int) -> datetime.date:
     """Return today + offset days in the user's configured timezone."""
-    tz = zoneinfo.ZoneInfo(entry.timezone) if entry.timezone else datetime.UTC
-    return (datetime.datetime.now(tz) + datetime.timedelta(days=days)).date()
+    return (
+        datetime.datetime.now(_get_user_tz(entry)) + datetime.timedelta(days=days)
+    ).date()
 
 
 # ---------------------------------------------------------------------------- #
@@ -228,7 +246,7 @@ class BirthdayStatus(
             )
             return
 
-        local_today = _user_local_date(entry)
+        local_today = user_local_date(entry)
         days = _days_until_birthday(entry.month, entry.day, today=local_today)
         day_str = (
             "today! 🎂" if days == 0 else f"in **{days}** day{'s' if days != 1 else ''}"
@@ -261,9 +279,6 @@ class BirthdaySet(
     month = lightbulb.integer("month", "Birth month (1-12)")
     day = lightbulb.integer("day", "Birth day (1-31)")
     wishlist_url = lightbulb.string("wishlist_url", "Wishlist URL", default=None)
-    timezone = lightbulb.string(
-        "timezone", "IANA timezone (e.g. America/New_York)", default=None
-    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
@@ -280,34 +295,36 @@ class BirthdaySet(
             await ctx.respond(error, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
-        if self.timezone is not None and _validate_timezone(self.timezone) is None:
-            await ctx.respond(
-                f"Unknown timezone `{self.timezone}`. Use an IANA timezone like "
-                "`America/New_York`, `Europe/London`, or `Asia/Tokyo`.",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            return
-
         uid = int(ctx.user.id)
         existing = guild_state.birthdays.get(uid)
 
+        existing_tz = existing.timezone if existing else None
         entry = BirthdayEntry(
             user_id=uid,
             month=self.month,
             day=self.day,
             wishlist_url=self.wishlist_url
             or (existing.wishlist_url if existing else None),
-            timezone=self.timezone or (existing.timezone if existing else None),
+            timezone=existing_tz,
         )
         guild_state.birthdays[uid] = entry
         guild_state.guild_name = guild.name
         state.save(guild_state)
 
         action = "updated" if existing else "registered"
-        await ctx.respond(
-            f"🎂 Birthday {action}: **{MONTH_NAMES[self.month]} {self.day}**",
-            flags=hikari.MessageFlag.EPHEMERAL,
-        )
+
+        if existing_tz:
+            await ctx.respond(
+                f"🎂 Birthday {action}: **{MONTH_NAMES[self.month]} {self.day}**",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+        else:
+            await ctx.respond(
+                f"🎂 Birthday {action}: **{MONTH_NAMES[self.month]} {self.day}**\n\n"
+                f"Now select your timezone so announcements happen at your local midnight:",
+                components=[region_select_row()],
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
 
         logger.info(
             "G=%r U=%r: Birthday %s to %s %d",
@@ -373,17 +390,126 @@ class BirthdayWishlist(
         )
 
 
+def region_select_row() -> hikari.api.ComponentBuilder:
+    """Build the region select menu for timezone selection."""
+    row = hikari.impl.MessageActionRowBuilder()
+    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}region")
+    for region_name in TIMEZONE_REGIONS:
+        select.add_option(region_name, region_name)
+    select.set_placeholder("Choose your region")
+    return row
+
+
+def timezone_select_row(region: str) -> hikari.api.ComponentBuilder:
+    """Build the timezone select menu for a given region."""
+    row = hikari.impl.MessageActionRowBuilder()
+    select = row.add_text_menu(f"{BIRTHDAY_TZ_PREFIX}tz")
+    for tz_id, label in TIMEZONE_REGIONS[region]:
+        select.add_option(f"{label} — {tz_id}", tz_id)
+    select.set_placeholder(f"Choose your timezone ({region})")
+    return row
+
+
+async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> None:
+    """Handle timezone region/timezone select menu interactions."""
+    custom_id = interaction.custom_id
+    field = custom_id.removeprefix(BIRTHDAY_TZ_PREFIX)
+
+    guild_id = interaction.guild_id
+    if not guild_id:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="This command must be used in a server.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    guild_state = state.load(int(guild_id))
+    uid = int(interaction.user.id)
+    entry = guild_state.birthdays.get(uid)
+
+    if not entry:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="You don't have a birthday registered yet. Use `/birthday set` first.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    if field == "region":
+        region = interaction.values[0] if interaction.values else None
+        if not region or region not in TIMEZONE_REGIONS:
+            logger.warning(
+                "G=%s U=%r: Invalid timezone region selection: %r",
+                guild_id,
+                interaction.user.username,
+                region,
+            )
+            await interaction.create_initial_response(
+                response_type=hikari.ResponseType.MESSAGE_UPDATE,
+                content="Invalid region selected. Please try `/birthday timezone` again.",
+                components=[],
+            )
+            return
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=f"**Region:** {region}\nNow pick your timezone:",
+            components=[timezone_select_row(region)],
+        )
+        return
+
+    if field == "tz":
+        tz_id = interaction.values[0] if interaction.values else None
+        if not tz_id or _validate_timezone(tz_id) is None:
+            logger.warning(
+                "G=%s U=%r: Invalid timezone selection: %r",
+                guild_id,
+                interaction.user.username,
+                tz_id,
+            )
+            await interaction.create_initial_response(
+                response_type=hikari.ResponseType.MESSAGE_UPDATE,
+                content="Invalid timezone selected. Please try `/birthday timezone` again.",
+                components=[],
+            )
+            return
+        entry.timezone = tz_id
+        state.save(guild_state)
+        guild = bot.cache.get_guild(guild_id)
+        guild_name = guild.name if guild else str(guild_id)
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=f"Timezone set to **{tz_id}**. Your birthday will be "
+            f"announced at midnight in your local time.",
+            components=[],
+        )
+        logger.info(
+            "G=%r U=%r: Updated timezone to %s",
+            guild_name,
+            interaction.user.username,
+            tz_id,
+        )
+        return
+
+    logger.warning(
+        "G=%s U=%r: Unknown birthday timezone interaction field: %r",
+        guild_id,
+        interaction.user.username,
+        field,
+    )
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        content="Something went wrong. Please try again.",
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+
+
 class BirthdayTimezone(
     lightbulb.SlashCommand,
     name="timezone",
     description="Set your timezone for birthday announcements",
 ):
-    timezone = lightbulb.string(
-        "timezone",
-        "IANA timezone (e.g. America/New_York). Omit to view current.",
-        default=None,
-    )
-
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
@@ -404,34 +530,11 @@ class BirthdayTimezone(
             )
             return
 
-        if self.timezone is None:
-            current = entry.timezone or "UTC (default)"
-            await ctx.respond(
-                f"Your current timezone: **{current}**",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            return
-
-        if _validate_timezone(self.timezone) is None:
-            await ctx.respond(
-                f"Unknown timezone `{self.timezone}`. Use an IANA timezone like "
-                "`America/New_York`, `Europe/London`, or `Asia/Tokyo`.",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            return
-
-        entry.timezone = self.timezone
-        state.save(guild_state)
+        current = entry.timezone or "UTC (default)"
         await ctx.respond(
-            f"Timezone updated to **{self.timezone}**. Your birthday will be "
-            f"announced at midnight in your local time.",
+            f"Your current timezone: **{current}**\nSelect a region to change it:",
+            components=[region_select_row()],
             flags=hikari.MessageFlag.EPHEMERAL,
-        )
-        logger.info(
-            "G=%r U=%r: Updated timezone to %s",
-            guild_state.guild_name,
-            ctx.user.username,
-            self.timezone,
         )
 
 
@@ -641,7 +744,7 @@ class BirthdayList(
 # ---------------------------------------------------------------------------- #
 
 
-def _config_embed(cfg: BirthdayGuildConfig) -> hikari.Embed:
+def config_embed(cfg: BirthdayGuildConfig) -> hikari.Embed:
     """Build an embed showing current birthday config settings."""
     embed = hikari.Embed(
         title="🎂 Birthday — Configuration",
@@ -703,7 +806,9 @@ class _DefaultsActionRow:
     def build(self) -> tuple[Any, Any]:
         payload, resources = self._inner.build()
         if self._defaults:
-            payload["components"][0]["default_values"] = self._defaults
+            components = payload.get("components")
+            if components and len(components) > 0:
+                components[0]["default_values"] = self._defaults
         return payload, resources
 
 
@@ -711,7 +816,7 @@ ROLE_FIELDS = {"register_role", "manage_role", "list_role", "birthday_role"}
 MULTI_ROLE_FIELDS = {"register_role"}
 
 
-async def _config_components(
+async def config_components(
     bot: DragonpawBot,
     guild_id: hikari.Snowflakeish,
     cfg: BirthdayGuildConfig,
@@ -809,7 +914,7 @@ async def _config_components(
     return rows
 
 
-def _resolve_select_value(
+def resolve_select_value(
     interaction: hikari.ComponentInteraction, field: str
 ) -> str | None:
     """Extract the name from a role or channel select interaction, or None if cleared."""
@@ -826,7 +931,7 @@ def _resolve_select_value(
     return channel.name if channel else None
 
 
-def _resolve_multi_role_value(
+def resolve_multi_role_value(
     interaction: hikari.ComponentInteraction,
 ) -> list[str]:
     """Extract role names from a multi-select role interaction."""
@@ -845,7 +950,7 @@ def _resolve_multi_role_value(
     return names
 
 
-def _display_config_value(v: object) -> str:
+def display_config_value(v: object) -> str:
     """Format a config value for display in log/audit messages."""
     if isinstance(v, list):
         return ", ".join(v) if v else "None"  # type: ignore[arg-type]
@@ -860,6 +965,20 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     field = custom_id.removeprefix(BIRTHDAY_CONFIG_PREFIX)
 
+    valid_fields = ROLE_FIELDS | {"announcement_channel"}
+    if field not in valid_fields:
+        logger.warning(
+            "U=%r: Unknown birthday config field: %r",
+            interaction.user.username,
+            field,
+        )
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="Unknown setting. Please try again.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
     guild_id = interaction.guild_id
     if not guild_id:
         logger.warning("Config interaction missing guild_id, custom_id=%r", custom_id)
@@ -870,14 +989,19 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         )
         return
 
-    # Only allow the guild owner
+    # Defer immediately to avoid the 3-second timeout
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.DEFERRED_MESSAGE_UPDATE,
+    )
+
+    # Now do slow REST calls safely
     guild = await bot.rest.fetch_guild(guild_id)
     if interaction.user.id != guild.owner_id:
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_CREATE,
+        await interaction.edit_initial_response(
             content="Only the server owner can change these settings.",
-            flags=hikari.MessageFlag.EPHEMERAL,
+            embeds=[],
+            components=[],
         )
         return
 
@@ -887,30 +1011,30 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     # Multi-role fields use a separate resolver
     if field in MULTI_ROLE_FIELDS:
-        new_value = _resolve_multi_role_value(interaction)
+        new_value = resolve_multi_role_value(interaction)
     else:
-        new_value = _resolve_select_value(interaction, field)
+        new_value = resolve_select_value(interaction, field)
 
     # For channel fields, verify the bot can write to the selected channel
     if new_value and field == "announcement_channel":
         channel_id = hikari.Snowflake(interaction.values[0])
         missing = await utils.check_channel_perms(bot, guild_id, channel_id)
         if missing:
-            missing_str = ", ".join(f"**{p}**" for p in missing)
-            await interaction.create_initial_response(
-                response_type=hikari.ResponseType.MESSAGE_CREATE,
-                content=(
-                    f"I can't use #{new_value} — I'm missing these permissions: "
-                    f"{missing_str}. Please fix the channel permissions and try again."
-                ),
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
             logger.warning(
                 "G=%r U=%r: Birthday config rejected #%s — missing permissions: %s",
                 guild.name,
                 interaction.user.username,
                 new_value,
                 ", ".join(missing),
+            )
+            embed = config_embed(cfg)
+            embed.set_footer(
+                text=f"Cannot use #{new_value} — missing: {', '.join(missing)}"
+            )
+            components = await config_components(bot, guild_id, cfg)
+            await interaction.edit_initial_response(
+                embed=embed,
+                components=components,
             )
             return
 
@@ -922,33 +1046,28 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
             field,
             new_value,
         )
-        embed = _config_embed(cfg)
-        components = await _config_components(bot, guild_id, cfg)
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+        embed = config_embed(cfg)
+        components = await config_components(bot, guild_id, cfg)
+        await interaction.edit_initial_response(
             embed=embed,
             components=components,
         )
         return
 
-    # Update state and prepare response before responding
     setattr(cfg, field, new_value)
     guild_state.guild_name = guild.name
-    embed = _config_embed(cfg)
-    embed.set_footer(text="Settings updated.")
-    components = await _config_components(bot, guild_id, cfg)
+    state.save(guild_state)
 
-    # Respond first (within 3-second timeout)
-    await interaction.create_initial_response(
-        response_type=hikari.ResponseType.MESSAGE_UPDATE,
+    embed = config_embed(cfg)
+    embed.set_footer(text="Settings updated.")
+    components = await config_components(bot, guild_id, cfg)
+    await interaction.edit_initial_response(
         embed=embed,
         components=components,
     )
 
-    # Then do slow work: save state and log
-    state.save(guild_state)
-    display_old = _display_config_value(old_value)
-    display_new = _display_config_value(new_value)
+    display_old = display_config_value(old_value)
+    display_new = display_config_value(new_value)
     logger.info(
         "G=%r U=%r: Birthday setting changed: %s = %r (was %r)",
         guild.name,
@@ -979,8 +1098,8 @@ class BirthdayConfig(
             return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
-        embed = _config_embed(cfg)
-        components = await _config_components(bot, ctx.guild_id, cfg)
+        embed = config_embed(cfg)
+        components = await config_components(bot, ctx.guild_id, cfg)
         await ctx.respond(
             embed=embed,
             components=components,

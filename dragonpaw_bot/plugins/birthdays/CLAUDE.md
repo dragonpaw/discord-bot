@@ -13,9 +13,9 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 ### Slash Commands (`/birthday`)
 
 - **status** — Shows your registered birthday, wishlist URL, and days until your next birthday. Requires `register_role`. Ephemeral.
-- **set [month] [day] [wishlist_url] [timezone]** — Register or update your own birthday (month/day only, no year). Requires `register_role`. Optionally include a wishlist URL and/or IANA timezone (e.g. `America/New_York`).
-- **wishlist [url]** — Update just your wishlist URL. Requires `register_role`. With no argument, shows your current wishlist.
-- **timezone [timezone]** — Set your IANA timezone for birthday announcements (e.g. `America/New_York`). Requires `register_role`. With no argument, shows your current timezone.
+- **set [month] [day] [wishlist_url]** — Register or update your own birthday (month/day only, no year). Requires `register_role`. Optionally include a wishlist URL. If no timezone is set, prompts with an interactive region/timezone select menu.
+- **wishlist [url]** — View or update your wishlist URL. Requires `register_role`. With no argument, shows your current wishlist.
+- **timezone** — Set your timezone for birthday announcements via a two-step interactive select menu (region → timezone). Requires `register_role`. Shows your current timezone and a region selector to change it.
 - **set-for @user [month] [day] [wishlist_url]** — Requires `manage_role`. Register or update a birthday for another user.
 - **remove** — Remove your own birthday entry. Requires `register_role`.
 - **remove-for @user** — Requires `manage_role`. Remove another user's birthday entry.
@@ -68,7 +68,7 @@ Posted in the configured announcement channel on the member's birthday:
 
 Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild state. Contains:
 
-- `config` — `BirthdayGuildConfig` with role/channel IDs
+- `config` — `BirthdayGuildConfig` with role/channel names
 - `birthdays` — Dict mapping user ID to `BirthdayEntry`
 
 ### File Structure
