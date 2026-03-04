@@ -159,8 +159,12 @@ async def configure_role_menus(
                     f"Description truncated from {len(o.description)} to {_MAX_DESC} chars."
                 )
             valid_options.append((o.role, o.description, o.emoji))
+            if o.emoji and o.emoji in emoji_map:
+                field_name = f"{emoji_map[o.emoji].mention} {o.role}"
+            else:
+                field_name = o.role
             embed.add_field(
-                name=o.role,
+                name=field_name,
                 value=f"{o.description}\n_ _\n",
                 inline=False,
             )
