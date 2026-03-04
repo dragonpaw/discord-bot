@@ -740,10 +740,22 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         )
         return
 
+    # Update state and prepare response before responding
     setattr(cfg, field, new_value)
     guild_state.guild_name = guild.name
-    state.save(guild_state)
+    embed = _config_embed(cfg)
+    embed.set_footer(text="Settings updated.")
+    components = await _config_components(bot, guild_id, cfg)
 
+    # Respond first (within 3-second timeout)
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_UPDATE,
+        embed=embed,
+        components=components,
+    )
+
+    # Then do slow work: save state and log
+    state.save(guild_state)
     display_old = old_value or "None"
     display_new = new_value or "None"
     logger.info(
@@ -754,21 +766,11 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         display_new,
         display_old,
     )
-
     await utils.log_to_guild(
         bot,
         guild_id,
         f"⚙️ **Birthday config changed** by {interaction.user.mention}: "
         f"`{field}` changed from `{display_old}` to `{display_new}`",
-    )
-
-    embed = _config_embed(cfg)
-    embed.set_footer(text="Settings updated.")
-    components = await _config_components(bot, guild_id, cfg)
-    await interaction.create_initial_response(
-        response_type=hikari.ResponseType.MESSAGE_UPDATE,
-        embed=embed,
-        components=components,
     )
 
 
