@@ -74,7 +74,7 @@ Persisted as `state/role_menus_{guild_id}.yaml`, separate from the main guild st
 - **Warning:** Missing emojis, empty menus
 - **Error:** Missing roles, invalid custom IDs
 
-Log messages use `G=%r` for guild context and include `U=%r` where a user is involved.
+Log messages use structlog with `guild=` for guild context and `user=` where a user is involved. Interaction handlers rely on contextvars from the central dispatcher.
 
 ### Limits
 

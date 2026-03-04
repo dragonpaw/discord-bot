@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import datetime
-import logging
 import tomllib
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import hikari
 import pydantic
+import structlog
 
 from dragonpaw_bot import http, structs, utils
 from dragonpaw_bot.colors import rainbow
@@ -24,7 +24,7 @@ from dragonpaw_bot.plugins.role_menus.models import (
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 SINGLE_ROLE_NOTE = "You can only pick one option from this menu."
 
@@ -98,6 +98,7 @@ async def configure_role_menus(
 
     This wipes out all old role messages and sends new ones with select menus.
     """
+    log = logger.bind(guild=guild.name)
     errors: list[str] = []
 
     channel = await utils.guild_channel_by_name(
@@ -113,7 +114,7 @@ async def configure_role_menus(
 
     emoji_map = await utils.guild_emojis(bot=bot, guild=guild)
 
-    logger.debug("Trying to delete old role menus...")
+    log.debug("Trying to delete old role menus...")
     await utils.delete_my_messages(
         bot=bot, guild_name=guild.name, channel_id=channel.id
     )
@@ -127,27 +128,25 @@ async def configure_role_menus(
 
     colors = rainbow(len(config.menu))
     for menu_index, menu in enumerate(config.menu):
-        logger.info("G=%r Adding the menu: %s", guild.name, menu.name)
+        log.info("Adding the menu", menu=menu.name)
         embed = build_menu_embed(menu, colors[menu_index])
 
         valid_options: list[tuple[str, str, str | None]] = []
         for o in menu.options:
             if o.role not in role_map:
-                logger.warning(
-                    "G=%r Menu=%r: Role %r doesn't exist.",
-                    guild.name,
-                    menu.name,
-                    o.role,
+                log.warning(
+                    "Role doesn't exist",
+                    menu=menu.name,
+                    role=o.role,
                 )
                 errors.append(f"Role '{o.role}' doesn't seem to exist.")
                 continue
             # Emoji is optional — warn if specified but missing in guild
             if o.emoji and o.emoji not in emoji_map:
-                logger.warning(
-                    "G=%r Menu=%r: Emoji %r doesn't exist, skipping decoration.",
-                    guild.name,
-                    menu.name,
-                    o.emoji,
+                log.warning(
+                    "Emoji doesn't exist, skipping decoration",
+                    menu=menu.name,
+                    emoji=o.emoji,
                 )
                 errors.append(
                     f"Menu '{menu.name}': Emoji '{o.emoji}' not found, skipped."
@@ -170,10 +169,9 @@ async def configure_role_menus(
             )
 
         if not valid_options:
-            logger.warning(
-                "G=%r Menu=%r: No valid options; menu posted with no select.",
-                guild.name,
-                menu.name,
+            log.warning(
+                "No valid options; menu posted with no select",
+                menu=menu.name,
             )
             await channel.send(embed=embed)
             continue
@@ -205,7 +203,7 @@ def _find_menu_state(
     try:
         menu_index = int(custom_id.removeprefix(ROLE_MENU_PREFIX))
     except ValueError:
-        logger.error("Invalid role menu custom_id: %r", custom_id)
+        logger.error("Invalid role menu custom_id", custom_id=custom_id)
         return None
 
     for m in guild_state.menus:
@@ -213,7 +211,9 @@ def _find_menu_state(
             return m
 
     logger.error(
-        "No menu state for index %d in guild %d", menu_index, guild_state.guild_id
+        "No menu state for index in guild",
+        menu_index=menu_index,
+        guild_id=guild_state.guild_id,
     )
     return None
 
@@ -295,9 +295,8 @@ async def handle_role_menu_interaction(
     """Handle a role menu select interaction."""
     if not interaction.guild_id or not interaction.member:
         logger.error(
-            "Role menu interaction missing guild_id or member: custom_id=%r user=%r",
-            interaction.custom_id,
-            interaction.user.username,
+            "Role menu interaction missing guild_id or member",
+            custom_id=interaction.custom_id,
         )
         return
 
@@ -305,7 +304,7 @@ async def handle_role_menu_interaction(
 
     guild_state = state.load(guild_id)
     if not guild_state.menus:
-        logger.warning("G=%d: Role menu interaction but no menus in state", guild_id)
+        logger.warning("Role menu interaction but no menus in state")
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="This role menu is outdated. Please ask an admin to re-run `/config`.",
@@ -329,11 +328,7 @@ async def handle_role_menu_interaction(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
     except hikari.NotFoundError:
-        logger.warning(
-            "G=%r U=%r: Role menu interaction expired before response",
-            guild_state.guild_name,
-            interaction.user.username,
-        )
+        logger.warning("Role menu interaction expired before response")
         return
 
     selected_roles = set(interaction.values) if interaction.values else set()
@@ -349,20 +344,16 @@ async def handle_role_menu_interaction(
         )
     except hikari.HTTPError:
         logger.warning(
-            "G=%r U=%r: Failed to send role change summary for menu %r",
-            guild_state.guild_name,
-            interaction.user.username,
-            menu_state.menu_name,
+            "Failed to send role change summary",
+            menu=menu_state.menu_name,
         )
 
     if added or removed:
         logger.info(
-            "G=%r U=%r: Role menu %r — added=%r removed=%r",
-            guild_state.guild_name,
-            interaction.user.username,
-            menu_state.menu_name,
-            added or None,
-            removed or None,
+            "Role menu changes applied",
+            menu=menu_state.menu_name,
+            added=added or None,
+            removed=removed or None,
         )
 
 
@@ -373,6 +364,7 @@ async def configure_guild(
 
     Returns a list of warning/error messages for the caller to display.
     """
+    log = logger.bind(guild=guild.name)
     all_errors: list[str] = []
 
     if url.startswith("https://gist.github.com"):
@@ -382,14 +374,12 @@ async def configure_guild(
     try:
         config = parse_role_config(config_text)
     except tomllib.TOMLDecodeError as e:
-        logger.error("Error parsing TOML file: %s", e)
+        log.error("Error parsing TOML file", error=str(e))
         await utils.log_to_guild(bot, guild.id, f"🤯 **Config error:** {e}")
         return [f"Config error: {e}"]
     except pydantic.ValidationError as e:
-        logger.error("Config validation error: %s", e)
-        await utils.log_to_guild(
-            bot, guild.id, f"🤯 **Config validation error:** {e}"
-        )
+        log.error("Config validation error", error=str(e))
+        await utils.log_to_guild(bot, guild.id, f"🤯 **Config validation error:** {e}")
         return [f"Config validation error: {e}"]
 
     role_map = await utils.guild_roles(bot=bot, guild=guild)
@@ -410,10 +400,10 @@ async def configure_guild(
         role_map=role_map,
     )
     for err in errors:
-        logger.warning("Error setting up role menus: %r", err)
+        log.warning("Error setting up role menus", error=err)
         await utils.log_to_guild(bot, guild.id, f"🤯 **Role menu error:** {err}")
     all_errors.extend(errors)
 
     bot.state_update(guild_state)
-    logger.info("G=%r Configured guild.", guild.name)
+    log.info("Configured guild.")
     return all_errors

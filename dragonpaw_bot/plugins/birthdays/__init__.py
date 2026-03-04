@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import TYPE_CHECKING
 
 import hikari
 import lightbulb
+import structlog
 
 from dragonpaw_bot import utils
 from dragonpaw_bot.plugins.birthdays import commands, state
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 __all__ = ["INTERACTION_HANDLERS", "MODAL_HANDLERS"]
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     BIRTHDAY_CONFIG_PREFIX: commands.handle_config_interaction,
@@ -57,6 +57,7 @@ async def announce_birthday(
     cfg: BirthdayGuildConfig,
 ) -> None:
     """Post announcement and assign birthday role for a member."""
+    log = logger.bind(guild=guild.name, user=member.username)
     # Post announcement embed
     if cfg.announcement_channel:
         channel = await utils.guild_channel_by_name(
@@ -71,23 +72,13 @@ async def announce_birthday(
                     embed=embed,
                     mentions_everyone=True,
                 )
-                logger.info(
-                    "G=%r U=%r: Posted birthday announcement",
-                    guild.name,
-                    member.username,
-                )
+                log.info("Posted birthday announcement")
             except hikari.HTTPError as exc:
-                logger.warning(
-                    "G=%r U=%r: Failed to post birthday announcement: %s",
-                    guild.name,
-                    member.username,
-                    exc,
-                )
+                log.warning("Failed to post birthday announcement", error=str(exc))
         else:
-            logger.warning(
-                "G=%r: Announcement channel %r not found",
-                guild.name,
-                cfg.announcement_channel,
+            log.warning(
+                "Announcement channel not found",
+                channel=cfg.announcement_channel,
             )
 
     # Assign birthday role
@@ -96,25 +87,11 @@ async def announce_birthday(
         if role:
             try:
                 await bot.rest.add_role_to_member(guild.id, member.id, role.id)
-                logger.info(
-                    "G=%r U=%r: Assigned birthday role %r",
-                    guild.name,
-                    member.username,
-                    cfg.birthday_role,
-                )
+                log.info("Assigned birthday role", role=cfg.birthday_role)
             except hikari.HTTPError as exc:
-                logger.warning(
-                    "G=%r U=%r: Failed to assign birthday role: %s",
-                    guild.name,
-                    member.username,
-                    exc,
-                )
+                log.warning("Failed to assign birthday role", error=str(exc))
         else:
-            logger.warning(
-                "G=%r: Birthday role %r not found",
-                guild.name,
-                cfg.birthday_role,
-            )
+            log.warning("Birthday role not found", role=cfg.birthday_role)
 
     await utils.log_to_guild(
         bot,
@@ -135,20 +112,12 @@ async def cleanup_birthday_role(
     role = await utils.guild_role_by_name(bot, guild, cfg.birthday_role)
     if not role:
         return
+    log = logger.bind(guild=guild.name, user=member.username)
     try:
         await bot.rest.remove_role_from_member(guild.id, member.id, role.id)
-        logger.info(
-            "G=%r U=%r: Removed birthday role (birthday over)",
-            guild.name,
-            member.username,
-        )
+        log.info("Removed birthday role (birthday over)")
     except hikari.HTTPError as exc:
-        logger.warning(
-            "G=%r U=%r: Failed to remove birthday role: %s",
-            guild.name,
-            member.username,
-            exc,
-        )
+        log.warning("Failed to remove birthday role", error=str(exc))
 
 
 async def send_week_ahead_dm(
@@ -159,18 +128,16 @@ async def send_week_ahead_dm(
     entry: BirthdayEntry,
 ) -> None:
     """Send a week-ahead DM reminder to a member, removing them if they left."""
+    log = logger.bind(guild=guild.name, user_id=uid)
     try:
         member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
     except hikari.NotFoundError:
-        logger.warning(
-            "G=%r U=%d: Member left guild, removing birthday entry",
-            guild.name,
-            uid,
-        )
+        log.warning("Member left guild, removing birthday entry")
         del guild_state.birthdays[uid]
         state.save(guild_state)
         return
 
+    member_log = logger.bind(guild=guild.name, user=member.username)
     wishlist_line = (
         f"Your current wishlist: {entry.wishlist_url}"
         if entry.wishlist_url
@@ -183,24 +150,11 @@ async def send_week_ahead_dm(
             f"{wishlist_line}\n"
             f"Update your wishlist with `/birthday wishlist <url>`"
         )
-        logger.debug(
-            "G=%r U=%r: Sent week-ahead birthday DM",
-            guild.name,
-            member.username,
-        )
+        member_log.debug("Sent week-ahead birthday DM")
     except hikari.ForbiddenError:
-        logger.warning(
-            "G=%r U=%r: Cannot DM user for birthday reminder (DMs disabled)",
-            guild.name,
-            member.username,
-        )
+        member_log.warning("Cannot DM user for birthday reminder (DMs disabled)")
     except hikari.HTTPError as exc:
-        logger.warning(
-            "G=%r U=%r: Failed to DM birthday reminder: %s",
-            guild.name,
-            member.username,
-            exc,
-        )
+        member_log.warning("Failed to DM birthday reminder", error=str(exc))
 
 
 async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> None:
@@ -209,21 +163,18 @@ async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> Non
     Runs hourly. For each user, computes "today" in their local timezone and only
     processes events during the user's midnight hour (hour 0).
     """
+    log = logger.bind(guild=guild.name)
     guild_id = int(guild.id)
     guild_state = state.load(guild_id)
 
     if not guild_state.birthdays:
-        logger.debug("G=%r: No birthday entries, skipping", guild.name)
+        log.debug("No birthday entries, skipping")
         return
 
     guild_state.guild_name = guild.name
     cfg = guild_state.config
 
-    logger.debug(
-        "G=%r: Hourly birthday check for %d entry(ies)",
-        guild.name,
-        len(guild_state.birthdays),
-    )
+    log.debug("Hourly birthday check", entry_count=len(guild_state.birthdays))
 
     changed = False
     for uid, entry in list(guild_state.birthdays.items()):
@@ -241,20 +192,12 @@ async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> Non
         # Birthday announcements
         if commands.is_birthday_on_date(entry, local_today):
             if entry.last_announced == local_today:
-                logger.debug(
-                    "G=%r U=%d: Already announced today, skipping",
-                    guild.name,
-                    uid,
-                )
+                log.debug("Already announced today, skipping", user_id=uid)
                 continue
             try:
                 member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
             except hikari.NotFoundError:
-                logger.warning(
-                    "G=%r U=%d: Member left guild, removing birthday entry",
-                    guild.name,
-                    uid,
-                )
+                log.warning("Member left guild, removing birthday entry", user_id=uid)
                 del guild_state.birthdays[uid]
                 state.save(guild_state)
                 continue
@@ -268,10 +211,9 @@ async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> Non
             try:
                 member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
             except hikari.NotFoundError:
-                logger.warning(
-                    "G=%r U=%d: Member left guild during role cleanup, removing entry",
-                    guild.name,
-                    uid,
+                log.warning(
+                    "Member left guild during role cleanup, removing entry",
+                    user_id=uid,
                 )
                 del guild_state.birthdays[uid]
                 changed = True
@@ -292,12 +234,12 @@ async def hourly_birthdays(bot: hikari.GatewayBot) -> None:
     """Hourly task: announce birthdays at each user's local midnight."""
     assert isinstance(bot, DragonpawBot)
     guilds = list(bot.cache.get_guilds_view().values())
-    logger.debug("Birthday hourly run: processing %d guild(s)", len(guilds))
+    logger.debug("Birthday hourly run", guild_count=len(guilds))
     for guild in guilds:
         try:
             await process_guild_birthdays(bot, guild)
         except Exception:
-            logger.exception("Error processing birthdays for guild %r", guild.name)
+            logger.exception("Error processing birthdays for guild", guild=guild.name)
 
 
 # ---------------------------------------------------------------------------- #
@@ -315,9 +257,9 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
         guild_state = state.load(guild_id)
     except Exception:
         logger.exception(
-            "G=%d U=%d: Failed to load birthday state for member leave cleanup",
-            guild_id,
-            uid,
+            "Failed to load birthday state for member leave cleanup",
+            guild_id=guild_id,
+            user_id=uid,
         )
         return
 
@@ -330,18 +272,18 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
         state.save(guild_state)
     except Exception:
         logger.exception(
-            "G=%d U=%d: Failed to save birthday state after member leave cleanup",
-            guild_id,
-            uid,
+            "Failed to save birthday state after member leave cleanup",
+            guild_id=guild_id,
+            user_id=uid,
         )
         return
 
     guild = event.get_guild()
     guild_name = guild.name if guild else str(event.guild_id)
     logger.warning(
-        "G=%r U=%d: Member left guild, removed birthday entry",
-        guild_name,
-        uid,
+        "Member left guild, removed birthday entry",
+        guild=guild_name,
+        user_id=uid,
     )
 
     bot: DragonpawBot = event.app  # type: ignore[assignment]

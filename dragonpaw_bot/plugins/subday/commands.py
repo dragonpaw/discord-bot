@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import datetime
-import logging
 from typing import TYPE_CHECKING
 
 import hikari
 import lightbulb
+import structlog
 
 from dragonpaw_bot import utils
 from dragonpaw_bot.colors import (
@@ -30,7 +30,7 @@ from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig, SubDayPartici
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------- #
@@ -51,9 +51,9 @@ async def _require_guild_owner(
     if ctx.user.id == guild.owner_id:
         return True
     logger.warning(
-        "G=%r U=%r: SubDay admin command denied, not guild owner",
-        guild.name,
-        ctx.user.username,
+        "SubDay admin command denied, not guild owner",
+        guild=guild.name,
+        user=ctx.user.username,
     )
     await ctx.respond(
         "Only the server owner can use this command.",
@@ -83,11 +83,11 @@ async def _check_permission(
     if allowed:
         return True
     logger.warning(
-        "G=%r U=%r: SubDay %s denied, missing %s",
-        guild.name,
-        ctx.user.username,
-        action,
-        label,
+        "SubDay action denied, missing permission",
+        guild=guild.name,
+        user=ctx.user.username,
+        action=action,
+        required=label,
     )
     await ctx.respond(
         f"You need {label} to use this command.",
@@ -205,17 +205,17 @@ async def _dm_completion(
         embed.set_image(chart_bytes)
         await dm.send(embed=embed)
         logger.info(
-            "G=%r U=%r: Sent completion DM for week %d",
-            guild_name,
-            target.username,
-            week,
+            "Sent completion DM",
+            guild=guild_name,
+            user=target.username,
+            week=week,
         )
     except hikari.HTTPError as exc:
         logger.warning(
-            "G=%r U=%r: Cannot DM user for completion notice: %s",
-            guild_name,
-            target.username,
-            exc,
+            "Cannot DM user for completion notice",
+            guild=guild_name,
+            user=target.username,
+            error=str(exc),
         )
 
 
@@ -230,10 +230,10 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
 ) -> None:
     """Post achievement embed and handle milestone/graduation rewards."""
     logger.debug(
-        "G=%r U=%r: Posting achievement for week %d",
-        guild_name,
-        target.username,
-        week,
+        "Posting achievement",
+        guild=guild_name,
+        user=target.username,
+        week=week,
     )
     prizes = cfg.milestone_prizes()
 
@@ -248,8 +248,8 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         achievements = channel_map.get(cfg.achievements_channel)
         if not achievements:
             logger.warning(
-                "No #%s channel found, achievement embed will not be posted",
-                cfg.achievements_channel,
+                "Achievements channel not found, embed will not be posted",
+                channel=cfg.achievements_channel,
             )
 
     # Generate star chart attachment (use guild display name)
@@ -272,9 +272,9 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
                 await achievements.send(embed=embed)
             except hikari.HTTPError as exc:
                 logger.warning(
-                    "G=%r: Failed to post achievement: %s",
-                    cfg.achievements_channel,
-                    exc,
+                    "Failed to post achievement",
+                    channel=cfg.achievements_channel,
+                    error=str(exc),
                 )
         return
 
@@ -283,7 +283,9 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
     # Milestone or graduation
     if week == TOTAL_WEEKS:
         logger.info(
-            "G=%r U=%r: GRADUATED from Where I am Led!", guild_name, target.username
+            "GRADUATED from Where I am Led!",
+            guild=guild_name,
+            user=target.username,
         )
         embed = _graduation_embed(target, prizes)
         staff_msg = (
@@ -293,11 +295,11 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         )
     else:
         logger.info(
-            "G=%r U=%r: Reached milestone week %d (%s)",
-            guild_name,
-            target.username,
-            week,
-            role_name or "no role",
+            "Reached milestone week",
+            guild=guild_name,
+            user=target.username,
+            week=week,
+            role=role_name or "no role",
         )
         embed = _milestone_embed(target, week, role_name, prizes)
         prize = prizes.get(week, "a prize")
@@ -313,9 +315,9 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
             await achievements.send(embed=embed)
         except hikari.HTTPError as exc:
             logger.warning(
-                "G=%r: Failed to post milestone achievement: %s",
-                cfg.achievements_channel,
-                exc,
+                "Failed to post milestone achievement",
+                channel=cfg.achievements_channel,
+                error=str(exc),
             )
 
     # Assign milestone role (skip if None)
@@ -324,10 +326,13 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
         if role:
             await target.add_role(role, reason=f"SubDay: week {week}")
             logger.info(
-                "G=%r U=%r: Assigned role %r", guild_name, target.username, role.name
+                "Assigned milestone role",
+                guild=guild_name,
+                user=target.username,
+                role=role.name,
             )
         else:
-            logger.warning("Role %r not found in guild", role_name)
+            logger.warning("Milestone role not found in guild", role=role_name)
 
     # Log to guild log channel
     await utils.log_to_guild(bot, guild_id, staff_msg)
@@ -351,9 +356,9 @@ def _do_signup(
 
     if user_id in guild_state.participants:
         logger.debug(
-            "G=%r U=%r: SubDay signup rejected, already enrolled",
-            guild_state.guild_name,
-            user.username,
+            "SubDay signup rejected, already enrolled",
+            guild=guild_state.guild_name,
+            user=user.username,
         )
         return None
 
@@ -410,15 +415,15 @@ async def _do_signup_async(
         state.save(guild_state)
     except hikari.HTTPError as exc:
         logger.warning(
-            "G=%r U=%r: Cannot DM user for subday signup: %s",
-            guild.name,
-            user.username,
-            exc,
+            "Cannot DM user for SubDay signup",
+            guild=guild.name,
+            user=user.username,
+            error=str(exc),
         )
     logger.info(
-        "G=%r U=%r: Signed up for SubDay",
-        guild.name,
-        user.username,
+        "Signed up for SubDay",
+        guild=guild.name,
+        user=user.username,
     )
     await utils.log_to_guild(
         bot, guild_id, f"📝 {user.mention} signed up for **Where I am Led**."
@@ -430,9 +435,9 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
     guild_id = interaction.guild_id
     if not guild_id or not interaction.member:
         logger.warning(
-            "Signup interaction missing guild_id=%r or member=%r",
-            interaction.guild_id,
-            interaction.member,
+            "Signup interaction missing guild_id or member",
+            guild_id=interaction.guild_id,
+            has_member=interaction.member is not None,
         )
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
@@ -454,10 +459,8 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
             else "server owner status"
         )
         logger.warning(
-            "G=%r U=%r: SubDay signup denied, missing %s",
-            guild.name,
-            interaction.user.username,
-            label,
+            "SubDay signup denied, missing permission",
+            required=label,
         )
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
@@ -504,13 +507,9 @@ class SubDayAbout(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        logger.info(
-            "G=%r U=%r: Viewed SubDay about",
-            ctx.guild_id,
-            ctx.user.username,
-        )
-
         guild_state = state.load(int(ctx.guild_id))
+        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
+        log.info("Viewed SubDay about")
         cfg = guild_state.config
         enroll_label = ", ".join(cfg.enroll_role) if cfg.enroll_role else "server owner"
 
@@ -749,11 +748,9 @@ class SubDayStatus(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        logger.info(
-            "G=%r U=%r: Checking SubDay status", ctx.guild_id, ctx.user.username
-        )
-
         guild_state = state.load(int(ctx.guild_id))
+        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
+        log.info("Checking SubDay status")
         user_id = int(ctx.user.id)
 
         own_participant = guild_state.participants.get(user_id)
@@ -807,6 +804,7 @@ class SubDayOwner(
         assert ctx.guild_id
         bot = _get_bot(ctx)
         guild_state = state.load(int(ctx.guild_id))
+        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
         user_id = int(ctx.user.id)
 
         if user_id not in guild_state.participants:
@@ -828,11 +826,7 @@ class SubDayOwner(
             participant.pending_owner_id = None
             if had_owner or had_pending:
                 state.save(guild_state)
-                logger.info(
-                    "G=%r U=%r: Cleared owner",
-                    guild_state.guild_name,
-                    ctx.user.username,
-                )
+                log.info("Cleared owner")
             await ctx.respond(
                 "Your owner has been cleared.",
                 flags=hikari.MessageFlag.EPHEMERAL,
@@ -897,12 +891,10 @@ class SubDayOwner(
         except (hikari.ForbiddenError, hikari.HTTPError) as exc:
             participant.pending_owner_id = None
             state.save(guild_state)
-            logger.warning(
-                "G=%r U=%r: Failed to DM owner request to %r: %s",
-                guild_state.guild_name,
-                ctx.user.username,
-                target.username,
-                exc,
+            log.warning(
+                "Failed to DM owner request",
+                target=target.username,
+                error=str(exc),
             )
             await ctx.respond(
                 f"I couldn't send a DM to {target.mention}. "
@@ -912,12 +904,7 @@ class SubDayOwner(
             return
 
         state.save(guild_state)
-        logger.info(
-            "G=%r U=%r: Sent owner request to %r",
-            guild_state.guild_name,
-            ctx.user.username,
-            target.username,
-        )
+        log.info("Sent owner request", target=target.username)
         await ctx.respond(
             f"An owner request has been sent to {target.mention}. "
             "They'll need to accept it via DM.",
@@ -956,10 +943,10 @@ async def _handle_owner_approve(
     state.save(guild_state)
 
     logger.info(
-        "G=%r: Owner approved — owner=%d sub=%d",
-        guild_state.guild_name,
-        owner_user_id,
-        sub_user_id,
+        "Owner approved",
+        guild=guild_state.guild_name,
+        owner_id=owner_user_id,
+        sub_id=sub_user_id,
     )
 
     await interaction.create_initial_response(
@@ -978,9 +965,9 @@ async def _handle_owner_approve(
         )
     except hikari.HTTPError:
         logger.warning(
-            "G=%r: Could not DM sub %d about owner approval",
-            guild_state.guild_name,
-            sub_user_id,
+            "Could not DM sub about owner approval",
+            guild=guild_state.guild_name,
+            sub_id=sub_user_id,
         )
 
     await utils.log_to_guild(
@@ -1006,10 +993,10 @@ async def _handle_owner_deny(
     state.save(guild_state)
 
     logger.info(
-        "G=%r: Owner denied — owner=%d sub=%d",
-        guild_state.guild_name,
-        owner_user_id,
-        sub_user_id,
+        "Owner denied",
+        guild=guild_state.guild_name,
+        owner_id=owner_user_id,
+        sub_id=sub_user_id,
     )
 
     await interaction.create_initial_response(
@@ -1025,9 +1012,9 @@ async def _handle_owner_deny(
         await dm.send(f"<@{owner_user_id}> has **declined** your owner request.")
     except hikari.HTTPError:
         logger.warning(
-            "G=%r: Could not DM sub %d about owner denial",
-            guild_state.guild_name,
-            sub_user_id,
+            "Could not DM sub about owner denial",
+            guild=guild_state.guild_name,
+            sub_id=sub_user_id,
         )
 
     await utils.log_to_guild(
@@ -1047,7 +1034,7 @@ async def handle_owner_interaction(interaction: hikari.ComponentInteraction) -> 
     _OWNER_REQUEST_PARTS = 3
     parts = cid.removeprefix(SUBDAY_OWNER_REQUEST_PREFIX).split(":")
     if len(parts) != _OWNER_REQUEST_PARTS or parts[0] not in ("approve", "deny"):
-        logger.warning("Unrecognized owner interaction custom_id=%r", cid)
+        logger.warning("Unrecognized owner interaction custom_id", custom_id=cid)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="This button is no longer valid.",
@@ -1212,7 +1199,7 @@ class SubDayComplete(
 
         # Prevent self-completion
         if target.id == ctx.user.id:
-            logger.debug("U=%r: SubDay self-completion blocked", ctx.user.username)
+            logger.debug("SubDay self-completion blocked", user=ctx.user.username)
             await ctx.respond(
                 "You cannot mark your own work as complete.",
                 flags=hikari.MessageFlag.EPHEMERAL,
@@ -1266,12 +1253,12 @@ class SubDayComplete(
                 )
             await utils.log_to_guild(bot, ctx.guild_id, staff_msg)
         logger.info(
-            "G=%r U=%r: Completed SubDay week %d (marked by %s%s)",
-            guild_state.guild_name,
-            target.username,
-            week,
-            ctx.user.username,
-            ", backfill" if backfill_week else "",
+            "Completed SubDay week",
+            guild=guild_state.guild_name,
+            user=target.username,
+            week=week,
+            marked_by=ctx.user.username,
+            backfill=bool(backfill_week),
         )
 
 
@@ -1292,12 +1279,8 @@ class SubDayList(
         if not await _check_permission(ctx, guild, cfg.complete_role, "list"):
             return
 
-        logger.info(
-            "G=%r U=%r: Listing SubDay participants (%d enrolled)",
-            guild_state.guild_name,
-            ctx.user.username,
-            len(guild_state.participants),
-        )
+        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
+        log.info("Listing SubDay participants", enrolled=len(guild_state.participants))
 
         if not guild_state.participants:
             await ctx.respond(
@@ -1371,10 +1354,10 @@ class SubDayRemove(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         logger.info(
-            "G=%r U=%r: Removed from SubDay by %s",
-            guild_state.guild_name,
-            target.username,
-            ctx.user.username,
+            "Removed from SubDay",
+            guild=guild_state.guild_name,
+            user=target.username,
+            removed_by=ctx.user.username,
         )
         await utils.log_to_guild(
             bot,
@@ -1618,11 +1601,11 @@ async def _reject_missing_perms(
         flags=hikari.MessageFlag.EPHEMERAL,
     )
     logger.warning(
-        "G=%r U=%r: SubDay config rejected #%s — missing permissions: %s",
-        guild_state.guild_name,
-        interaction.user.username,
-        channel_name,
-        ", ".join(missing),
+        "SubDay config rejected, missing channel permissions",
+        guild=guild_state.guild_name,
+        user=interaction.user.username,
+        channel=channel_name,
+        missing_perms=", ".join(missing),
     )
     return True
 
@@ -1644,7 +1627,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     guild_id = interaction.guild_id
     if not guild_id:
-        logger.warning("Config interaction missing guild_id, custom_id=%r", custom_id)
+        logger.warning("Config interaction missing guild_id", custom_id=custom_id)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="This command must be used in a server.",
@@ -1682,11 +1665,9 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     if new_value == old_value:
         logger.debug(
-            "G=%r U=%r: SubDay setting unchanged: %s = %r",
-            guild.name,
-            interaction.user.username,
-            field,
-            new_value,
+            "SubDay setting unchanged",
+            field=field,
+            value=new_value,
         )
         embed = embed_builder(cfg)
         components = await components_builder(bot, guild_id, cfg)
@@ -1704,12 +1685,10 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     display_old = _display_config_value(old_value)
     display_new = _display_config_value(new_value)
     logger.info(
-        "G=%r U=%r: SubDay setting changed: %s = %r (was %r)",
-        guild.name,
-        interaction.user.username,
-        field,
-        display_new,
-        display_old,
+        "SubDay setting changed",
+        field=field,
+        old_value=display_old,
+        new_value=display_new,
     )
 
     await utils.log_to_guild(
@@ -1847,19 +1826,18 @@ class SubDayPrizes(
         cfg = guild_state.config
         changed = False
 
+        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
         for field in ("prize_13", "prize_26", "prize_39", "prize_52"):
             value = getattr(self, field, None)
             if value is not None:
                 old_value = getattr(cfg, field)
                 setattr(cfg, field, value)
                 changed = True
-                logger.info(
-                    "G=%r U=%r: SubDay %s: %s -> %s",
-                    guild_state.guild_name,
-                    ctx.user.username,
-                    field,
-                    old_value,
-                    value,
+                log.info(
+                    "SubDay prize updated",
+                    field=field,
+                    old_value=old_value,
+                    new_value=value,
                 )
 
         if changed:

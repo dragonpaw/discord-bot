@@ -237,7 +237,7 @@ async def test_unknown_interaction_id_logs_error(caplog):
     event = _make_component_event("totally_bogus_id")
     with caplog.at_level(logging.ERROR, logger="dragonpaw_bot.bot"):
         await on_component_interaction(event)
-    assert any("Unhandled component interaction" in r.message for r in caplog.records)
+    assert any("Unhandled interaction" in r.message for r in caplog.records)
     assert any("totally_bogus_id" in r.message for r in caplog.records)
 
 

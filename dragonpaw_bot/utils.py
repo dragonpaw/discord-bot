@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Mapping, Optional, Sequence, Union
 
 import hikari
 import hikari.messages
 import lightbulb
+import structlog
 from emojis.db.db import EMOJI_DB
 
 InteractionHandler = Callable[[hikari.ComponentInteraction], Awaitable[None]]
@@ -15,7 +15,7 @@ ModalHandler = Callable[[hikari.ModalInteraction], Awaitable[None]]
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------- #
 #                           Discord utility functions                          #
@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 async def delete_my_messages(
     bot: DragonpawBot, guild_name: str, channel_id: hikari.Snowflake
 ):
-    logger.debug("Checking for old messages in channel: %r", channel_id)
+    logger.debug("Checking for old messages in channel", channel_id=channel_id)
     assert bot.user_id
     async for message in bot.rest.fetch_messages(channel=channel_id):
         if message.author.id == bot.user_id:
-            logger.debug("G:%r: Deleting my message: %r", guild_name, message)
+            logger.debug("Deleting my message", guild=guild_name, message_id=message.id)
             await message.delete()
 
 
@@ -38,7 +38,7 @@ async def guild_channel_by_name(
     guild: hikari.Guild | hikari.Snowflake,
     name: str,
 ) -> Optional[hikari.GuildTextChannel]:
-    logger.debug("Finding channel: %s", name)
+    logger.debug("Finding channel", name=name)
     if isinstance(guild, hikari.Guild):
         channels: Sequence[hikari.GuildChannel] = list(guild.get_channels().values())
         if not channels:
@@ -60,7 +60,7 @@ async def guild_emojis(
     custom_emojis = await bot.rest.fetch_guild_emojis(guild=guild.id)
     for e in custom_emojis:
         emoji_map[e.name] = e
-        logger.debug("Guild emoji: %s:%r", e.name, e)
+        logger.debug("Guild emoji", name=e.name, emoji=e)
 
     # Shove the Global Emojis in there as well
     for u in EMOJI_DB:
@@ -139,7 +139,7 @@ async def get_guild(
     guild = bot.cache.get_guild(ctx.guild_id)
     if guild:
         return guild
-    logger.debug("G=%r: Guild not in cache, fetching via REST", ctx.guild_id)
+    logger.debug("Guild not in cache, fetching via REST", guild_id=ctx.guild_id)
     return await bot.rest.fetch_guild(ctx.guild_id)
 
 
@@ -155,7 +155,7 @@ async def check_channel_perms(
 ) -> list[str]:
     """Return a list of missing permission names for the bot in the given channel."""
     logger.debug(
-        "Checking bot permissions in channel %r (guild %r)", channel_id, guild_id
+        "Checking bot permissions in channel", channel_id=channel_id, guild_id=guild_id
     )
     assert bot.user_id
     me = await bot.rest.fetch_member(guild_id, bot.user_id)
@@ -181,13 +181,15 @@ async def check_channel_perms(
         channel = await bot.rest.fetch_channel(channel_id)
     except hikari.ForbiddenError:
         logger.warning(
-            "Cannot fetch channel %r in guild %r — bot lacks View Channel permission",
-            channel_id,
-            guild_id,
+            "Cannot fetch channel — bot lacks View Channel permission",
+            channel_id=channel_id,
+            guild_id=guild_id,
         )
         return ["View Channel (cannot access channel)"]
     except hikari.NotFoundError:
-        logger.warning("Channel %r in guild %r no longer exists", channel_id, guild_id)
+        logger.warning(
+            "Channel no longer exists", channel_id=channel_id, guild_id=guild_id
+        )
         return ["Channel not found (may have been deleted)"]
     if isinstance(channel, hikari.PermissibleGuildChannel):
         overwrites = channel.permission_overwrites
@@ -230,9 +232,11 @@ async def log_to_guild(
     """
     c = bot.state(guild_id)
     if not c or not c.log_channel_id:
-        logger.debug("G=%r: No log channel configured, skipping log message", guild_id)
+        logger.debug(
+            "No log channel configured, skipping log message", guild_id=guild_id
+        )
         return
     try:
         await bot.rest.create_message(channel=c.log_channel_id, content=message)
     except hikari.HTTPError as exc:
-        logger.warning("G=%r: Failed to send log message: %s", c.name, exc)
+        logger.warning("Failed to send log message", guild=c.name, error=str(exc))

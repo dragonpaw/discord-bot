@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 import hikari
 import lightbulb
+import structlog
 
 from dragonpaw_bot.plugins.role_menus.commands import (
     configure_guild,
@@ -26,7 +26,7 @@ __all__ = [
     "parse_role_config",
 ]
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     ROLE_MENU_PREFIX: handle_role_menu_interaction,
@@ -50,14 +50,15 @@ class RolesConfigCommand(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         if not ctx.guild_id:
-            logger.error("Interaction without a guild?!: %r", ctx)
+            logger.error("Interaction without a guild")
             return
 
         await ctx.respond("Config loading now...", flags=hikari.MessageFlag.EPHEMERAL)
 
         bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
         guild = await bot.rest.fetch_guild(guild=ctx.guild_id)
-        logger.info("G=%r Setting up guild with file %r", guild.name, self.url)
+        log = logger.bind(guild=guild.name, user=ctx.user.username)
+        log.info("Setting up guild with file", url=self.url)
         errors = await configure_guild(bot=bot, guild=guild, url=self.url)
 
         if errors:

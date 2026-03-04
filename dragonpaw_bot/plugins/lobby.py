@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, List, Mapping
 
 import hikari
 import lightbulb
+import structlog
 
 from dragonpaw_bot import structs, utils
 from dragonpaw_bot.colors import SOLARIZED_BLUE
@@ -13,7 +13,7 @@ from dragonpaw_bot.utils import InteractionHandler
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 loader = lightbulb.Loader()
 
@@ -27,6 +27,7 @@ async def configure_lobby(
     state: structs.GuildState,
     role_map: Mapping[str, hikari.Role],
 ) -> List[str]:
+    log = logger.bind(guild=guild.name)
     errors: List[str] = []
 
     # Where is the lobby
@@ -84,7 +85,7 @@ async def configure_lobby(
         else:
             await channel.send(embed=embed)
 
-    logger.info("G=%r Configured lobby channel %s", guild.name, config.channel)
+    log.info("Configured lobby channel", channel=config.channel)
     return errors
 
 
@@ -95,7 +96,9 @@ async def on_member_join(event: hikari.MemberCreateEvent):
 
     c = bot.state(event.guild_id)
     if not c:
-        logger.error("Called on an unknown guild: %r", event.guild_id)
+        logger.error(
+            "on_member_join called on an unknown guild", guild_id=int(event.guild_id)
+        )
         return
 
     # Is there a on-join role configured
@@ -136,7 +139,10 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
     guild_state = bot.state(interaction.guild_id)
     if not guild_state:
-        logger.error("Called on an unknown guild: %r", interaction.guild_id)
+        logger.error(
+            "handle_rules_agreed called on an unknown guild",
+            guild_id=int(interaction.guild_id),
+        )
         return
 
     if not guild_state.lobby_role_id:
@@ -149,11 +155,7 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
         flags=hikari.MessageFlag.EPHEMERAL,
     )
 
-    logger.info(
-        "G=%r U=%r: Agreed to the rules.",
-        guild_state.name,
-        interaction.user.username,
-    )
+    logger.info("User agreed to the rules")
 
     try:
         await bot.rest.remove_role_from_member(
@@ -163,10 +165,8 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
         )
     except hikari.ForbiddenError:
         logger.error(
-            "G=%r U=%r: Cannot remove lobby role %r — forbidden",
-            guild_state.name,
-            interaction.user.username,
-            guild_state.lobby_role_id,
+            "Cannot remove lobby role — forbidden",
+            role_id=guild_state.lobby_role_id,
         )
         await utils.log_to_guild(
             bot,

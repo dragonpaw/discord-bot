@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import calendar
 import datetime
-import logging
 import zoneinfo
 from typing import TYPE_CHECKING, Any
 
 import hikari
 import lightbulb
+import structlog
 
 from dragonpaw_bot import utils
 from dragonpaw_bot.colors import SOLARIZED_ORANGE, SOLARIZED_YELLOW
@@ -26,7 +26,7 @@ from dragonpaw_bot.plugins.birthdays.models import (
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _FEB = 2
 _LEAP_DAY = 29
@@ -72,9 +72,9 @@ async def _require_guild_owner(
     if ctx.user.id == guild.owner_id:
         return True
     logger.warning(
-        "G=%r U=%r: Birthday admin command denied, not guild owner",
-        guild.name,
-        ctx.user.username,
+        "Birthday admin command denied, not guild owner",
+        guild=guild.name,
+        user=ctx.user.username,
     )
     await ctx.respond(
         "Only the server owner can use this command.",
@@ -104,11 +104,11 @@ async def _check_permission(
     if allowed:
         return True
     logger.warning(
-        "G=%r U=%r: Birthday %s denied, missing %s",
-        guild.name,
-        ctx.user.username,
-        action,
-        label,
+        "Birthday command denied, missing permission",
+        guild=guild.name,
+        user=ctx.user.username,
+        action=action,
+        required=label,
     )
     await ctx.respond(
         f"You need {label} to use this command.",
@@ -184,9 +184,9 @@ def _get_user_tz(entry: BirthdayEntry) -> datetime.tzinfo:
         return zoneinfo.ZoneInfo(entry.timezone)
     except (KeyError, zoneinfo.ZoneInfoNotFoundError):
         logger.warning(
-            "U=%d: Invalid timezone %r in state, falling back to UTC",
-            entry.user_id,
-            entry.timezone,
+            "Invalid timezone in state, falling back to UTC",
+            user_id=entry.user_id,
+            timezone=entry.timezone,
         )
         return datetime.UTC
 
@@ -378,9 +378,9 @@ class BirthdayWishlist(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         logger.info(
-            "G=%r U=%r: Updated wishlist URL",
-            guild_state.guild_name,
-            ctx.user.username,
+            "Updated wishlist URL",
+            guild=guild_state.guild_name,
+            user=ctx.user.username,
         )
 
 
@@ -508,12 +508,7 @@ async def _handle_set_region(
     params = field.removeprefix("region:")
     region = interaction.values[0] if interaction.values else None
     if not region or region not in TIMEZONE_REGIONS:
-        logger.warning(
-            "G=%s U=%r: Invalid timezone region selection: %r",
-            interaction.guild_id,
-            interaction.user.username,
-            region,
-        )
+        logger.warning("Invalid timezone region selection", region=region)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_UPDATE,
             content=f"Invalid region. {_RETRY_MSG}",
@@ -551,12 +546,7 @@ async def _handle_set_timezone(
     day = int(parts[1])
     tz_id = interaction.values[0] if interaction.values else None
     if not tz_id or _validate_timezone(tz_id) is None:
-        logger.warning(
-            "G=%s U=%r: Invalid timezone selection: %r",
-            interaction.guild_id,
-            interaction.user.username,
-            tz_id,
-        )
+        logger.warning("Invalid timezone selection", timezone=tz_id)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_UPDATE,
             content=f"Invalid timezone. {_RETRY_MSG}",
@@ -599,13 +589,11 @@ async def _handle_set_timezone(
         components=[],
     )
     logger.info(
-        "G=%r U=%r: Birthday %s to %s %d (tz=%s)",
-        guild_name,
-        interaction.user.username,
-        action,
-        MONTH_NAMES[month],
-        day,
-        tz_id,
+        "Birthday registered or updated",
+        action=action,
+        month=MONTH_NAMES[month],
+        day=day,
+        timezone=tz_id,
     )
     await utils.log_to_guild(
         bot,
@@ -635,12 +623,7 @@ async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> Non
     elif field.startswith("tz:"):
         await _handle_set_timezone(interaction, field)
     else:
-        logger.warning(
-            "G=%s U=%r: Unknown birthday interaction field: %r",
-            interaction.guild_id,
-            interaction.user.username,
-            field,
-        )
+        logger.warning("Unknown birthday interaction field", field=field)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="Something went wrong. Please try again.",
@@ -664,12 +647,7 @@ async def handle_birthday_modal(interaction: hikari.ModalInteraction) -> None:
     if field.startswith("day:"):
         await _handle_set_day(interaction, field)
     else:
-        logger.warning(
-            "G=%s U=%r: Unknown birthday modal field: %r",
-            interaction.guild_id,
-            interaction.user.username,
-            field,
-        )
+        logger.warning("Unknown birthday modal field", field=field)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="Something went wrong. Please try again.",
@@ -724,13 +702,13 @@ class BirthdaySetFor(
         )
 
         logger.info(
-            "G=%r U=%r: Birthday %s for %r to %s %d",
-            guild.name,
-            ctx.user.username,
-            action,
-            self.user.username,
-            MONTH_NAMES[self.month],
-            self.day,
+            "Birthday set for other user",
+            guild=guild.name,
+            user=ctx.user.username,
+            action=action,
+            target=self.user.username,
+            month=MONTH_NAMES[self.month],
+            day=self.day,
         )
         await utils.log_to_guild(
             bot,
@@ -773,9 +751,9 @@ class BirthdayRemove(
         )
 
         logger.info(
-            "G=%r U=%r: Removed own birthday",
-            guild_state.guild_name,
-            ctx.user.username,
+            "Removed own birthday",
+            guild=guild_state.guild_name,
+            user=ctx.user.username,
         )
         await utils.log_to_guild(
             bot,
@@ -820,10 +798,10 @@ class BirthdayRemoveFor(
         )
 
         logger.info(
-            "G=%r U=%r: Removed birthday for %r",
-            guild.name,
-            ctx.user.username,
-            self.user.username,
+            "Removed birthday for other user",
+            guild=guild.name,
+            user=ctx.user.username,
+            target=self.user.username,
         )
         await utils.log_to_guild(
             bot,
@@ -1107,11 +1085,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     valid_fields = ROLE_FIELDS | {"announcement_channel"}
     if field not in valid_fields:
-        logger.warning(
-            "U=%r: Unknown birthday config field: %r",
-            interaction.user.username,
-            field,
-        )
+        logger.warning("Unknown birthday config field", field=field)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="Unknown setting. Please try again.",
@@ -1121,7 +1095,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     guild_id = interaction.guild_id
     if not guild_id:
-        logger.warning("Config interaction missing guild_id, custom_id=%r", custom_id)
+        logger.warning("Config interaction missing guild_id", custom_id=custom_id)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="This command must be used in a server.",
@@ -1161,11 +1135,9 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         missing = await utils.check_channel_perms(bot, guild_id, channel_id)
         if missing:
             logger.warning(
-                "G=%r U=%r: Birthday config rejected #%s — missing permissions: %s",
-                guild.name,
-                interaction.user.username,
-                new_value,
-                ", ".join(missing),
+                "Birthday config rejected — missing channel permissions",
+                channel=new_value,
+                missing=", ".join(missing),
             )
             embed = config_embed(cfg)
             embed.set_footer(
@@ -1179,13 +1151,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
             return
 
     if new_value == old_value:
-        logger.debug(
-            "G=%r U=%r: Birthday setting unchanged: %s = %r",
-            guild.name,
-            interaction.user.username,
-            field,
-            new_value,
-        )
+        logger.debug("Birthday setting unchanged", field=field, value=new_value)
         embed = config_embed(cfg)
         components = await config_components(bot, guild_id, cfg)
         await interaction.edit_initial_response(
@@ -1209,12 +1175,10 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     display_old = display_config_value(old_value)
     display_new = display_config_value(new_value)
     logger.info(
-        "G=%r U=%r: Birthday setting changed: %s = %r (was %r)",
-        guild.name,
-        interaction.user.username,
-        field,
-        display_new,
-        display_old,
+        "Birthday setting changed",
+        field=field,
+        new_value=display_new,
+        old_value=display_old,
     )
     await utils.log_to_guild(
         bot,

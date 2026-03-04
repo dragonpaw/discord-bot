@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import asyncio
 import datetime
-import logging
 import pickle
 from os import environ
 from pathlib import Path
@@ -10,26 +9,28 @@ from typing import Any
 import hikari
 import lightbulb
 import safer
+import structlog
 import uvloop
 import yaml
 
 from dragonpaw_bot import structs
+from dragonpaw_bot.logging import configure_logging
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
 from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
 from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
-logging.getLogger("dragonpaw_bot").setLevel(logging.DEBUG)
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = structlog.get_logger(__name__)
 
-# Interaction dispatch table: (prefix, handler, error_label).
+# Interaction dispatch table: (prefix, handler, plugin_name).
 # Sorted longest-prefix-first so "subday_cfg_role:" matches before "subday_cfg:".
 _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
     [
-        *((p, h, "processing your request") for p, h in subday_handlers.items()),
-        *((p, h, "processing your request") for p, h in birthday_handlers.items()),
-        *((p, h, "updating your roles") for p, h in role_menu_handlers.items()),
+        *((p, h, "subday") for p, h in subday_handlers.items()),
+        *((p, h, "birthdays") for p, h in birthday_handlers.items()),
+        *((p, h, "role_menus") for p, h in role_menu_handlers.items()),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -37,10 +38,7 @@ _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
 
 _MODAL_ROUTES: list[tuple[str, ModalHandler, str]] = sorted(
     [
-        *(
-            (p, h, "processing your request")
-            for p, h in birthday_modal_handlers.items()
-        ),
+        *((p, h, "birthdays") for p, h in birthday_modal_handlers.items()),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -82,7 +80,7 @@ class DragonpawBot(hikari.GatewayBot):
         )
         self._state: dict[hikari.Snowflake, structs.GuildState] = {}
         self.user_id: hikari.Snowflake | None = None
-        logger.info("TEST_GUILDS=%r", TEST_GUILDS)
+        logger.info("Starting bot", test_guilds=TEST_GUILDS)
 
     def state(self, guild_id: hikari.Snowflake) -> structs.GuildState | None:
         # If we don't have a state in-memory, maybe there is one on disk?
@@ -119,7 +117,7 @@ def state_path(guild_id: hikari.Snowflake, extension="toml"):
 
 def state_save_pickle(state: structs.GuildState):
     filename = state_path(state.id, extension="pickle")
-    logger.info("G=%r Saving state to: %s", state.name, filename)
+    logger.info("Saving state", guild=state.name, path=str(filename))
     with safer.open(filename, "wb") as f:
         pickle.dump(obj=state.model_dump(), file=f)
 
@@ -128,15 +126,15 @@ def state_load_pickle(guild_id: hikari.Snowflake) -> structs.GuildState | None:
     filename = state_path(guild_id=guild_id, extension="pickle")
 
     if not filename.exists():
-        logger.debug("No state file for guild: %d", guild_id)
+        logger.debug("No state file for guild", guild_id=guild_id)
         return None
 
-    logger.debug("Loading state from: %s", filename)
+    logger.debug("Loading state", path=str(filename))
     try:
         with safer.open(filename, "rb") as f:
             return structs.GuildState.model_validate(pickle.load(f))
-    except Exception as e:
-        logger.exception("Error loading file: %r", e)
+    except Exception:
+        logger.exception("Error loading file", path=str(filename))
         return None
 
 
@@ -168,7 +166,7 @@ def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
 
 def state_save_yaml(state: structs.GuildState) -> None:
     filename = state_path(state.id, extension="yaml")
-    logger.info("G=%r Saving state to: %s", state.name, filename)
+    logger.info("Saving state", guild=state.name, path=str(filename))
     data = _state_to_yaml_dict(state)
     with safer.open(filename, "w") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
@@ -178,28 +176,28 @@ def state_load_yaml(guild_id: hikari.Snowflake) -> structs.GuildState | None:
     yaml_file = state_path(guild_id=guild_id, extension="yaml")
 
     if yaml_file.exists():
-        logger.debug("Loading state from: %s", yaml_file)
+        logger.debug("Loading state", path=str(yaml_file))
         try:
             with open(yaml_file) as f:
                 data = yaml.safe_load(f)
             return _yaml_dict_to_state(data)
-        except Exception as e:
-            logger.exception("Error loading YAML state: %r", e)
-            logger.warning("Deleting corrupt state file: %s", yaml_file)
+        except Exception:
+            logger.exception("Error loading YAML state", path=str(yaml_file))
+            logger.warning("Deleting corrupt state file", path=str(yaml_file))
             yaml_file.unlink()
             return None
 
     # Auto-migrate from pickle if it exists
     pickle_file = state_path(guild_id=guild_id, extension="pickle")
     if pickle_file.exists():
-        logger.info("Migrating state from pickle to YAML: %s", pickle_file)
+        logger.info("Migrating state from pickle to YAML", path=str(pickle_file))
         state = state_load_pickle(guild_id=guild_id)
         if state:
             state_save_yaml(state)
             pickle_file.unlink()
             return state
 
-    logger.debug("No state file for guild: %d", guild_id)
+    logger.debug("No state file for guild", guild_id=guild_id)
     return None
 
 
@@ -211,10 +209,10 @@ def state_load_yaml(guild_id: hikari.Snowflake) -> structs.GuildState | None:
 @bot.listen(hikari.ShardReadyEvent)
 async def on_ready(event: hikari.ShardReadyEvent) -> None:
     """Post-initialization for the bot."""
-    logger.info("Connected to Discord as %r", event.my_user)
+    logger.info("Connected to Discord", user=str(event.my_user))
     logger.info(
-        "Use this URL to add this bot to a server: %s",
-        OAUTH_URL.format(CLIENT_ID=CLIENT_ID, OAUTH_PERMISSIONS=OAUTH_PERMISSIONS),
+        "OAuth URL",
+        url=OAUTH_URL.format(CLIENT_ID=CLIENT_ID, OAUTH_PERMISSIONS=OAUTH_PERMISSIONS),
     )
     bot.user_id = event.my_user.id
 
@@ -235,17 +233,17 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
 async def on_guild_available(event: hikari.GuildAvailableEvent):
     state = bot.state(guild_id=event.guild_id)
     if state:
-        logger.info("G=%r State loaded from disk, resuming services", state.name)
+        logger.info("State loaded from disk, resuming services", guild=state.name)
     else:
         guild = event.get_guild()
-        name = (guild and guild.name) or event.guild_id
-        logger.info("G=%r No state found, so nothing to do.", name)
+        name = (guild and guild.name) or str(event.guild_id)
+        logger.info("No state found, nothing to do", guild=name)
 
 
 @bot.listen(hikari.GuildJoinEvent)
 async def on_guild_join(event: hikari.GuildJoinEvent):
     guild = await bot.rest.fetch_guild(guild=event.guild_id)
-    logger.info("G=%r Joined server.", guild.name)
+    logger.info("Joined server", guild=guild.name)
 
 
 # ---------------------------------------------------------------------------- #
@@ -269,10 +267,11 @@ class Logging(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         if not ctx.guild_id:
-            logger.error("Interaction without a guild?!: %r", ctx)
+            logger.error("Interaction without a guild")
             return
 
         guild = await bot.rest.fetch_guild(guild=ctx.guild_id)
+        log = logger.bind(guild=guild.name, user=ctx.user.username)
         state = bot.state(ctx.guild_id)
         if not state:
             state = structs.GuildState(
@@ -285,12 +284,7 @@ class Logging(
         if self.channel is not None:
             state.log_channel_id = self.channel.id
             bot.state_update(state)
-            logger.info(
-                "G=%r U=%r: Set log channel to #%s",
-                guild.name,
-                ctx.user.username,
-                self.channel.name,
-            )
+            log.info("Set log channel", channel=self.channel.name)
             await ctx.respond(
                 f"Log channel set to <#{self.channel.id}>.",
                 flags=hikari.MessageFlag.EPHEMERAL,
@@ -298,33 +292,26 @@ class Logging(
         else:
             state.log_channel_id = None
             bot.state_update(state)
-            logger.info(
-                "G=%r U=%r: Cleared log channel",
-                guild.name,
-                ctx.user.username,
-            )
+            log.info("Cleared log channel")
             await ctx.respond(
                 "Log channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
             )
 
 
 async def _respond_interaction_error(
-    interaction: hikari.ComponentInteraction | hikari.ModalInteraction, message: str
+    interaction: hikari.ComponentInteraction | hikari.ModalInteraction,
 ) -> None:
     """Try to send an ephemeral error response; ignore if the interaction expired."""
     try:
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content=message,
+            content="An error occurred.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
     except hikari.NotFoundError:
         pass  # Interaction expired
     except hikari.HTTPError:
-        logger.warning(
-            "Failed to send error response for interaction custom_id=%r",
-            interaction.custom_id,
-        )
+        logger.warning("Failed to send error response")
 
 
 @bot.listen(hikari.InteractionCreateEvent)
@@ -344,38 +331,31 @@ async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None
         return
 
     cid = interaction.custom_id
-    kind = "Modal" if isinstance(interaction, hikari.ModalInteraction) else "Component"
+    kind = "modal" if isinstance(interaction, hikari.ModalInteraction) else "component"
 
-    logger.debug(
-        "%s interaction: custom_id=%r user=%r guild=%r",
-        kind,
-        cid,
-        interaction.user.username,
-        interaction.guild_id,
+    structlog.contextvars.clear_contextvars()
+    cached_guild = (
+        bot.cache.get_guild(interaction.guild_id) if interaction.guild_id else None
+    )
+    structlog.contextvars.bind_contextvars(
+        guild=cached_guild.name if cached_guild else str(interaction.guild_id),
+        user=interaction.user.username,
+        custom_id=cid,
     )
 
-    for prefix, handler, error_label in routes:
+    logger.debug("Interaction received", kind=kind)
+
+    for prefix, handler, plugin_name in routes:
         if cid.startswith(prefix):
+            structlog.contextvars.bind_contextvars(plugin=plugin_name)
             try:
                 await handler(interaction)  # type: ignore[arg-type]
             except Exception:
-                logger.exception(
-                    "Error handling interaction: custom_id=%r user=%r",
-                    cid,
-                    interaction.user.username,
-                )
-                await _respond_interaction_error(
-                    interaction, f"An error occurred {error_label}."
-                )
+                logger.exception("Error handling interaction")
+                await _respond_interaction_error(interaction)
             return
 
-    logger.error(
-        "Unhandled %s interaction: custom_id=%r user=%r guild=%r",
-        kind.lower(),
-        cid,
-        interaction.user.username,
-        interaction.guild_id,
-    )
+    logger.error("Unhandled interaction", kind=kind)
 
 
 @bot.listen(hikari.StartingEvent)

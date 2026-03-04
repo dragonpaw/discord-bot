@@ -92,7 +92,7 @@ Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild sta
 - **Debug:** State loads, DM delivery, cron tick timing
 - **Warning:** DM failures, missing channels/roles, member leave cleanup
 
-All log messages follow the pattern `logger.info("G=%r U=%r: ...", guild_name, username, ...)`.
+All log messages use structlog with `guild=` and `user=` keyword arguments. Interaction handlers rely on contextvars from the central dispatcher.
 
 ### Required Discord Setup
 

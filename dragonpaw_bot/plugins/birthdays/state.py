@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import pydantic
 import safer
+import structlog
 import yaml
 
 from dragonpaw_bot.plugins.birthdays.models import BirthdayGuildState
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 STATE_DIR = ROOT_DIR / "state"
@@ -33,13 +33,15 @@ def load(guild_id: int) -> BirthdayGuildState:
         _cache[guild_id] = st
         return st
 
-    logger.debug("Loading birthday state from: %s", path)
+    logger.debug("Loading birthday state", guild_id=guild_id, path=str(path))
 
     try:
         with open(path) as f:
             data = yaml.safe_load(f)
     except (OSError, yaml.YAMLError):
-        logger.exception("G=%d: Failed to read birthday state file %s", guild_id, path)
+        logger.exception(
+            "Failed to read birthday state file", guild_id=guild_id, path=str(path)
+        )
         raise
 
     if not data:
@@ -51,7 +53,7 @@ def load(guild_id: int) -> BirthdayGuildState:
         st = BirthdayGuildState.model_validate(data)
     except pydantic.ValidationError:
         logger.exception(
-            "G=%d: Birthday state validation failed for %s", guild_id, path
+            "Birthday state validation failed", guild_id=guild_id, path=str(path)
         )
         raise
 
@@ -62,7 +64,7 @@ def load(guild_id: int) -> BirthdayGuildState:
 def save(guild_state: BirthdayGuildState) -> None:
     """Save guild state to disk and update cache."""
     path = _state_path(guild_state.guild_id)
-    logger.info("G=%r: Saving birthday state to: %s", guild_state.guild_name, path)
+    logger.info("Saving birthday state", guild=guild_state.guild_name, path=str(path))
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     try:
         with safer.open(path, "w") as f:
@@ -74,9 +76,9 @@ def save(guild_state: BirthdayGuildState) -> None:
             )
     except Exception:
         logger.exception(
-            "G=%r: FAILED to save birthday state to %s",
-            guild_state.guild_name,
-            path,
+            "FAILED to save birthday state",
+            guild=guild_state.guild_name,
+            path=str(path),
         )
         raise
     _cache[guild_state.guild_id] = guild_state

@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import TYPE_CHECKING
 
 import hikari
 import lightbulb
+import structlog
 
 from dragonpaw_bot.plugins.subday import commands, prompts, state
 from dragonpaw_bot.plugins.subday.constants import (
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 __all__ = ["INTERACTION_HANDLERS", "MILESTONE_WEEKS", "TOTAL_WEEKS"]
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     SUBDAY_OWNER_REQUEST_PREFIX: commands.handle_owner_interaction,
@@ -66,16 +66,16 @@ async def _forward_owner_prompts(
     owner_prompts: dict[int, list[tuple[int, prompts.WeekPrompt]]],
 ) -> None:
     """Forward prompt copies to owners after the main Sunday loop."""
+    log = logger.bind(guild=guild.name)
     owner_changed = False
     for owner_id, sub_prompt_list in owner_prompts.items():
         # Verify owner is still in the guild
         try:
             await bot.rest.fetch_member(guild.id, hikari.Snowflake(owner_id))
         except hikari.NotFoundError:
-            logger.info(
-                "G=%r: Owner %d left the server, clearing owner references",
-                guild.name,
-                owner_id,
+            log.info(
+                "Owner left the server, clearing owner references",
+                owner_id=owner_id,
             )
             for p in guild_state.participants.values():
                 if p.owner_id == owner_id:
@@ -91,33 +91,30 @@ async def _forward_owner_prompts(
                 try:
                     owner_embeds = prompts.build_owner_dm_embeds(prompt, sub_uid)
                     await dm.send(embeds=owner_embeds)
-                    logger.info(
-                        "G=%r: Sent owner %d prompt copy for sub %d (week %d)",
-                        guild.name,
-                        owner_id,
-                        sub_uid,
-                        prompt.week,
+                    log.info(
+                        "Sent owner prompt copy for sub",
+                        owner_id=owner_id,
+                        sub_uid=sub_uid,
+                        week=prompt.week,
                     )
                 except (hikari.ForbiddenError, hikari.HTTPError) as exc:
-                    logger.warning(
-                        "G=%r: Failed to DM owner %d prompt for sub %d: %s",
-                        guild.name,
-                        owner_id,
-                        sub_uid,
-                        exc,
+                    log.warning(
+                        "Failed to DM owner prompt for sub",
+                        owner_id=owner_id,
+                        sub_uid=sub_uid,
+                        error=str(exc),
                     )
                 await asyncio.sleep(1)
         except (hikari.ForbiddenError, hikari.HTTPError) as exc:
-            logger.warning(
-                "G=%r: Cannot DM owner %d: %s",
-                guild.name,
-                owner_id,
-                exc,
+            log.warning(
+                "Cannot DM owner",
+                owner_id=owner_id,
+                error=str(exc),
             )
 
     if owner_changed:
         state.save(guild_state)
-        logger.info("G=%r: Saved state after clearing departed owners", guild.name)
+        log.info("Saved state after clearing departed owners")
 
 
 async def _advance_participant(  # noqa: PLR0911
@@ -128,21 +125,18 @@ async def _advance_participant(  # noqa: PLR0911
     owner_prompts: dict[int, list[tuple[int, prompts.WeekPrompt]]],
 ) -> bool | None:
     """Advance one participant. Returns True if changed, None if should be removed."""
+    log = logger.bind(guild=guild.name, user_id=uid)
     if not participant.week_completed:
-        logger.debug(
-            "G=%r U=%d: Week %d not completed, skipping",
-            guild.name,
-            uid,
-            participant.current_week,
+        log.debug(
+            "Week not completed, skipping",
+            week=participant.current_week,
         )
         return False
 
     if participant.current_week >= TOTAL_WEEKS:
-        logger.debug(
-            "G=%r U=%d: Already at week %d (graduated), skipping",
-            guild.name,
-            uid,
-            participant.current_week,
+        log.debug(
+            "Already graduated, skipping",
+            week=participant.current_week,
         )
         return False
 
@@ -150,15 +144,13 @@ async def _advance_participant(  # noqa: PLR0911
     try:
         member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
     except hikari.NotFoundError:
-        logger.info("G=%r U=%d: Left the server, removing from SubDay", guild.name, uid)
+        log.info("Left the server, removing from SubDay")
         return None  # sentinel: remove
 
     participant.current_week += 1
     participant.week_completed = False
     participant.week_sent = False
-    logger.info(
-        "G=%r U=%d: Advanced to week %d", guild.name, uid, participant.current_week
-    )
+    log.info("Advanced to week", week=participant.current_week)
 
     if participant.current_week <= TOTAL_WEEKS:
         try:
@@ -167,27 +159,16 @@ async def _advance_participant(  # noqa: PLR0911
             dm = await member.user.fetch_dm_channel()
             await dm.send(embeds=dm_embeds)
             participant.week_sent = True
-            logger.info(
-                "G=%r U=%r: Sent SubDay week %d prompt",
-                guild.name,
-                member.username,
-                participant.current_week,
+            log.info(
+                "Sent SubDay week prompt",
+                week=participant.current_week,
             )
             if participant.owner_id:
                 owner_prompts.setdefault(participant.owner_id, []).append((uid, prompt))
         except hikari.ForbiddenError:
-            logger.warning(
-                "G=%r U=%r: Cannot DM user for SubDay prompt (DMs disabled)",
-                guild.name,
-                member.username,
-            )
+            log.warning("Cannot DM user for SubDay prompt (DMs disabled)")
         except hikari.HTTPError as exc:
-            logger.error(
-                "G=%r U=%r: Failed to DM SubDay prompt: %s",
-                guild.name,
-                member.username,
-                exc,
-            )
+            log.warning("Failed to DM SubDay prompt", error=str(exc))
 
     await asyncio.sleep(1)
     return True
@@ -209,17 +190,17 @@ def _cleanup_removed_participants(
 
 async def _process_guild_prompts(bot: DragonpawBot, guild: hikari.Guild) -> None:
     """Process weekly prompts for a single guild."""
+    log = logger.bind(guild=guild.name)
     guild_id = int(guild.id)
     guild_state = state.load(guild_id)
 
     if not guild_state.participants:
-        logger.debug("G=%r: No SubDay participants, skipping", guild.name)
+        log.debug("No SubDay participants, skipping")
         return
 
-    logger.info(
-        "G=%r: Processing %d SubDay participant(s)",
-        guild.name,
-        len(guild_state.participants),
+    log.info(
+        "Processing SubDay participants",
+        count=len(guild_state.participants),
     )
     guild_state.guild_name = guild.name
     changed = False
@@ -239,9 +220,9 @@ async def _process_guild_prompts(bot: DragonpawBot, guild: hikari.Guild) -> None
 
     if changed:
         state.save(guild_state)
-        logger.info("G=%r: Sunday run complete, state saved", guild.name)
+        log.info("Sunday run complete, state saved")
     else:
-        logger.debug("G=%r: No changes this Sunday run", guild.name)
+        log.debug("No changes this Sunday run")
 
     if owner_prompts:
         await _forward_owner_prompts(bot, guild, guild_state, owner_prompts)
@@ -252,9 +233,9 @@ async def sunday_prompts(bot: hikari.GatewayBot) -> None:
     """Advance completed participants and DM their next prompt."""
     assert isinstance(bot, DragonpawBot)
     guilds = list(bot.cache.get_guilds_view().values())
-    logger.info("Sunday prompt run: processing %d guild(s)", len(guilds))
+    logger.info("Sunday prompt run", guild_count=len(guilds))
     for guild in guilds:
         try:
             await _process_guild_prompts(bot, guild)
         except Exception:
-            logger.exception("Error processing SubDay prompts for guild %r", guild.name)
+            logger.exception("Error processing SubDay prompts", guild=guild.name)
