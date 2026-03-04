@@ -339,7 +339,7 @@ async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None
     )
     structlog.contextvars.bind_contextvars(
         guild=cached_guild.name if cached_guild else str(interaction.guild_id),
-        user=interaction.user.username,
+        user=interaction.member.display_name if interaction.member else interaction.user.username,
         custom_id=cid,
     )
 
