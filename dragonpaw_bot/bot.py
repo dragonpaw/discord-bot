@@ -279,7 +279,19 @@ class Config(
 
         g = await bot.rest.fetch_guild(guild=ctx.guild_id)
         logger.info("G=%r Setting up guild with file %r", g.name, self.url)
-        await configure_guild(bot=bot, guild=g, url=self.url)
+        errors = await configure_guild(bot=bot, guild=g, url=self.url)
+
+        if errors:
+            error_lines = "\n".join(f"- {e}" for e in errors)
+            await ctx.respond(
+                f"⚠️ **Config loaded with warnings:**\n{error_lines}",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+        else:
+            await ctx.respond(
+                "✅ Config loaded successfully.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
 
 
 @loader.command
@@ -347,8 +359,14 @@ def config_parse_toml(guild: hikari.Guild, text: str) -> structs.GuildConfig:
     return structs.GuildConfig.model_validate(data)
 
 
-async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> None:
-    """Load the config for a guild and start setting up everything there."""
+async def configure_guild(
+    bot: DragonpawBot, guild: hikari.Guild, url: str
+) -> list[str]:
+    """Load the config for a guild and start setting up everything there.
+
+    Returns a list of warning/error messages for the caller to display.
+    """
+    all_errors: list[str] = []
 
     if url.startswith("https://gist.github.com"):
         config_text = await http.get_gist(url)
@@ -359,7 +377,7 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
     except tomllib.TOMLDecodeError as e:
         logger.error("Error parsing TOML file: %s", e)
         await utils.log_to_guild(bot, guild.id, f"🤯 **Config error:** {e}")
-        return
+        return [f"Config error: {e}"]
 
     role_map = await utils.guild_roles(bot=bot, guild=guild)
 
@@ -383,6 +401,7 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
         for err in errors:
             logger.error("Error setting up role menus: %r", err)
             await utils.log_to_guild(bot, guild.id, f"🤯 **Role menu error:** {err}")
+        all_errors.extend(errors)
     else:
         logger.debug("No roles menus")
 
@@ -397,11 +416,13 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
         for err in errors:
             logger.error("Error setting up lobby: %r", err)
             await utils.log_to_guild(bot, guild.id, f"🤯 **Lobby error:** {err}")
+        all_errors.extend(errors)
     else:
         logger.debug("No lobby.")
 
     bot.state_update(state)
     logger.info("G=%r Configured guild.", guild.name)
+    return all_errors
 
 
 async def _respond_interaction_error(

@@ -68,7 +68,13 @@ def build_menu_select(
         emoji: hikari.Emoji | hikari.UndefinedType = hikari.UNDEFINED
         if emoji_name and emoji_name in emoji_map:
             emoji = emoji_map[emoji_name]
-        select.add_option(role_name, role_name, description=description, emoji=emoji)
+        _MAX_DESC = 100
+        desc = (
+            description[: _MAX_DESC - 1] + "…"
+            if len(description) > _MAX_DESC
+            else description
+        )
+        select.add_option(role_name, role_name, description=desc, emoji=emoji)
 
     return select
 
@@ -133,6 +139,15 @@ async def configure_role_menus(
                     guild.name,
                     menu.name,
                     o.emoji,
+                )
+                errors.append(
+                    f"Menu '{menu.name}': Emoji '{o.emoji}' not found, skipped."
+                )
+            _MAX_DESC = 100
+            if len(o.description) > _MAX_DESC:
+                errors.append(
+                    f"Menu '{menu.name}', role '{o.role}': "
+                    f"Description truncated from {len(o.description)} to {_MAX_DESC} chars."
                 )
             valid_options.append((o.role, o.description, o.emoji))
             embed.add_field(
