@@ -23,7 +23,7 @@ class RolesConfig(pydantic.BaseModel):
 
 
 class RoleMenuState(pydantic.BaseModel):
-    menu_index: int = pydantic.Field(ge=0)
+    menu_slug: str = pydantic.Field(min_length=1)
     menu_name: str
     message_id: int = pydantic.Field(gt=0)
     single: bool

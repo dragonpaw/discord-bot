@@ -40,7 +40,7 @@ options = [
 - **Single-select menus:** `max_values=1` — picking a new role replaces the old one
 - **Multi-select menus:** `max_values=len(options)` — pick as many as you want
 - Both types use `min_values=0` so members can deselect all
-- Custom ID format: `role_menu:<menu_index>`
+- Custom ID format: `role_menu:<menu_slug>` (slug is derived from menu name, e.g. "DM Permission" → `dm-permission`)
 - Response: `DEFERRED_MESSAGE_CREATE` (ephemeral) followed by summary of changes via `edit_initial_response`
 
 ### State
@@ -50,7 +50,7 @@ Persisted as `state/role_menus_{guild_id}.yaml`, separate from the main guild st
 - `guild_id` / `guild_name` — Guild identifiers
 - `role_channel_id` — The channel where menus are posted
 - `role_names` — Dict mapping role ID to name (for logging)
-- `menus` — List of `RoleMenuState` entries (menu_index, message_id, option_role_ids, single flag)
+- `menus` — List of `RoleMenuState` entries (menu_slug, message_id, option_role_ids, single flag)
 
 ### File Structure
 

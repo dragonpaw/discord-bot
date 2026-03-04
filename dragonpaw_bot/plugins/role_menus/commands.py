@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+import re
 import tomllib
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
@@ -49,8 +50,15 @@ def build_menu_embed(menu: RoleMenuConfig, color: tuple[int, int, int]) -> hikar
     return embed
 
 
+def _slugify(name: str) -> str:
+    """Convert a menu name to a URL-safe slug for use in custom_ids."""
+    slug = name.lower().strip()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    return slug.strip("-")
+
+
 def build_menu_select(
-    menu_index: int,
+    menu_slug: str,
     menu: RoleMenuConfig,
     valid_options: list[tuple[str, str, str | None]],
     emoji_map: Mapping[str, hikari.KnownCustomEmoji | hikari.UnicodeEmoji],
@@ -59,7 +67,7 @@ def build_menu_select(
 
     valid_options is a list of (role_name, description, emoji_name|None).
     """
-    custom_id = f"{ROLE_MENU_PREFIX}{menu_index}"
+    custom_id = f"{ROLE_MENU_PREFIX}{menu_slug}"
 
     if menu.single:
         max_values = 1
@@ -128,6 +136,7 @@ async def configure_role_menus(
 
     colors = rainbow(len(config.menu))
     for menu_index, menu in enumerate(config.menu):
+        menu_slug = _slugify(menu.name)
         log.info("Adding the menu", menu=menu.name)
         embed = build_menu_embed(menu, colors[menu_index])
 
@@ -176,12 +185,12 @@ async def configure_role_menus(
             await channel.send(embed=embed)
             continue
 
-        select = build_menu_select(menu_index, menu, valid_options, emoji_map)
+        select = build_menu_select(menu_slug, menu, valid_options, emoji_map)
         row = hikari.impl.MessageActionRowBuilder().add_component(select)
         message = await channel.send(embed=embed, component=row)
 
         menu_state = RoleMenuState(
-            menu_index=menu_index,
+            menu_slug=menu_slug,
             menu_name=menu.name,
             message_id=int(message.id),
             single=menu.single,
@@ -199,20 +208,19 @@ async def configure_role_menus(
 def _find_menu_state(
     guild_state: RoleMenuGuildState, custom_id: str
 ) -> RoleMenuState | None:
-    """Parse menu index from custom_id and find the matching menu state."""
-    try:
-        menu_index = int(custom_id.removeprefix(ROLE_MENU_PREFIX))
-    except ValueError:
-        logger.error("Invalid role menu custom_id", custom_id=custom_id)
+    """Parse menu slug from custom_id and find the matching menu state."""
+    menu_slug = custom_id.removeprefix(ROLE_MENU_PREFIX)
+    if not menu_slug:
+        logger.error("Empty role menu slug in custom_id", custom_id=custom_id)
         return None
 
     for m in guild_state.menus:
-        if m.menu_index == menu_index:
+        if m.menu_slug == menu_slug:
             return m
 
     logger.error(
-        "No menu state for index in guild",
-        menu_index=menu_index,
+        "No menu state for slug in guild",
+        menu_slug=menu_slug,
         guild_id=guild_state.guild_id,
     )
     return None

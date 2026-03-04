@@ -97,10 +97,10 @@ def test_roles_config_empty_menu_rejected():
         RolesConfig(channel="roles", menu=[])
 
 
-def test_menu_state_negative_index_rejected():
+def test_menu_state_empty_slug_rejected():
     with pytest.raises(pydantic.ValidationError):
         RoleMenuState(
-            menu_index=-1,
+            menu_slug="",
             menu_name="M",
             message_id=100,
             single=False,
@@ -111,7 +111,7 @@ def test_menu_state_negative_index_rejected():
 def test_menu_state_zero_message_id_rejected():
     with pytest.raises(pydantic.ValidationError):
         RoleMenuState(
-            menu_index=0,
+            menu_slug="m",
             menu_name="M",
             message_id=0,
             single=False,
@@ -148,7 +148,7 @@ def test_guild_state_json_round_trip():
         role_names={10: "Star", 20: "Fire"},
         menus=[
             RoleMenuState(
-                menu_index=0,
+                menu_slug="colors",
                 menu_name="Colors",
                 message_id=789,
                 single=True,
@@ -188,7 +188,7 @@ def test_state_save_and_load(role_menus_state_dir):
         role_names={10: "Star"},
         menus=[
             RoleMenuState(
-                menu_index=0,
+                menu_slug="colors",
                 menu_name="Colors",
                 message_id=200,
                 single=False,
@@ -222,7 +222,7 @@ def test_state_yaml_is_human_readable(role_menus_state_dir):
         guild_name="Test",
         menus=[
             RoleMenuState(
-                menu_index=0,
+                menu_slug="m",
                 menu_name="M",
                 message_id=100,
                 single=False,
@@ -271,14 +271,14 @@ def _sample_guild_state() -> RoleMenuGuildState:
         guild_name="Test",
         menus=[
             RoleMenuState(
-                menu_index=0,
+                menu_slug="colors",
                 menu_name="Colors",
                 message_id=200,
                 single=False,
                 option_role_ids={"Red": 10, "Blue": 20},
             ),
             RoleMenuState(
-                menu_index=1,
+                menu_slug="roles",
                 menu_name="Roles",
                 message_id=300,
                 single=True,
@@ -290,27 +290,27 @@ def _sample_guild_state() -> RoleMenuGuildState:
 
 def test_find_menu_state_valid():
     gs = _sample_guild_state()
-    result = _find_menu_state(gs, "role_menu:0")
+    result = _find_menu_state(gs, "role_menu:colors")
     assert result is not None
     assert result.menu_name == "Colors"
 
 
 def test_find_menu_state_second_menu():
     gs = _sample_guild_state()
-    result = _find_menu_state(gs, "role_menu:1")
+    result = _find_menu_state(gs, "role_menu:roles")
     assert result is not None
     assert result.menu_name == "Roles"
 
 
-def test_find_menu_state_invalid_index():
+def test_find_menu_state_empty_slug():
     gs = _sample_guild_state()
-    result = _find_menu_state(gs, "role_menu:abc")
+    result = _find_menu_state(gs, "role_menu:")
     assert result is None
 
 
-def test_find_menu_state_missing_index():
+def test_find_menu_state_missing_slug():
     gs = _sample_guild_state()
-    result = _find_menu_state(gs, "role_menu:99")
+    result = _find_menu_state(gs, "role_menu:nonexistent")
     assert result is None
 
 
@@ -391,7 +391,7 @@ def test_build_menu_select_multi():
         ("Blue", "Blue role", None),
         ("Green", "Green role", None),
     ]
-    select = build_menu_select(0, menu, valid_options, {})
+    select = build_menu_select("colors", menu, valid_options, {})
     assert select.min_values == 0
     assert select.max_values == 3
 
@@ -406,7 +406,7 @@ def test_build_menu_select_single():
         ],
     )
     valid_options = [("M", "Male", None), ("F", "Female", None)]
-    select = build_menu_select(0, menu, valid_options, {})
+    select = build_menu_select("gender", menu, valid_options, {})
     assert select.min_values == 0
     assert select.max_values == 1
 
@@ -421,5 +421,5 @@ def test_build_menu_select_with_emoji():
         ],
     )
     valid_options = [("Red", "Red role", "red_circle")]
-    select = build_menu_select(0, menu, valid_options, emoji_map)
-    assert select.custom_id == "role_menu:0"
+    select = build_menu_select("colors", menu, valid_options, emoji_map)
+    assert select.custom_id == "role_menu:colors"
