@@ -868,7 +868,8 @@ class BirthdayList(
                 wishlist = (
                     f" — [Wishlist]({entry.wishlist_url})" if entry.wishlist_url else ""
                 )
-                lines.append(f"  {entry.day}: <@{entry.user_id}>{wishlist}")
+                tz = f" ({entry.timezone})" if entry.timezone else ""
+                lines.append(f"  {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
 
         embed = hikari.Embed(
             title="🎂 Registered Birthdays",
