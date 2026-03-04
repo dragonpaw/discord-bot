@@ -57,7 +57,12 @@ async def _announce_birthday(
         if channel:
             try:
                 embed = commands.build_announcement_embed(member, entry)
-                await bot.rest.create_message(channel=channel.id, embed=embed)
+                await bot.rest.create_message(
+                    channel=channel.id,
+                    content="@everyone",
+                    embed=embed,
+                    mentions_everyone=True,
+                )
                 logger.info(
                     "G=%r U=%r: Posted birthday announcement",
                     guild.name,
