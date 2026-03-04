@@ -280,37 +280,19 @@ def _month_select_row() -> hikari.api.ComponentBuilder:
     return row
 
 
-def _day_select_rows(month: int) -> list[hikari.api.ComponentBuilder]:
-    """Build day select menu(s) for the given month.
-
-    Discord limits select menus to 25 options, so months with more than
-    25 days need two rows.
-    """
+def _day_modal_row(month: int) -> hikari.api.ComponentBuilder:
+    """Build a modal action row with a text input for the birth day."""
     max_day = _LEAP_DAY if month == _FEB else calendar.monthrange(2000, month)[1]
-    _MAX_OPTIONS = 25
-    if max_day <= _MAX_OPTIONS:
-        row = hikari.impl.MessageActionRowBuilder()
-        select = row.add_text_menu(f"{BIRTHDAY_PREFIX}day:{month}")
-        for d in range(1, max_day + 1):
-            select.add_option(str(d), str(d))
-        select.set_placeholder(f"Choose your birth day ({MONTH_NAMES[month]})")
-        return [row]
-
-    # Split into two rows: 1-15 and 16-max
-    split = 15
-    row1 = hikari.impl.MessageActionRowBuilder()
-    select1 = row1.add_text_menu(f"{BIRTHDAY_PREFIX}day:{month}")
-    for d in range(1, split + 1):
-        select1.add_option(str(d), str(d))
-    select1.set_placeholder(f"Day 1–{split} ({MONTH_NAMES[month]})")
-
-    row2 = hikari.impl.MessageActionRowBuilder()
-    select2 = row2.add_text_menu(f"{BIRTHDAY_PREFIX}day2:{month}")
-    for d in range(split + 1, max_day + 1):
-        select2.add_option(str(d), str(d))
-    select2.set_placeholder(f"Day {split + 1}–{max_day} ({MONTH_NAMES[month]})")
-
-    return [row1, row2]
+    row = hikari.impl.ModalActionRowBuilder()
+    row.add_text_input(
+        "day",
+        f"Birth day (1–{max_day})",
+        placeholder=f"Enter a number from 1 to {max_day}",
+        min_length=1,
+        max_length=2,
+        required=True,
+    )
+    return row
 
 
 class BirthdaySet(
@@ -407,7 +389,7 @@ _RETRY_MSG = "Please try `/birthday set` again."
 
 
 async def _handle_set_month(interaction: hikari.ComponentInteraction) -> None:
-    """Step 1: Month selected → show day picker."""
+    """Step 1: Month selected → show day input modal."""
     month_str = interaction.values[0] if interaction.values else None
     if not month_str or not month_str.isdigit():
         await interaction.create_initial_response(
@@ -424,42 +406,55 @@ async def _handle_set_month(interaction: hikari.ComponentInteraction) -> None:
             components=[],
         )
         return
-    await interaction.create_initial_response(
-        response_type=hikari.ResponseType.MESSAGE_UPDATE,
-        content=f"🎂 **Set Your Birthday**\n"
-        f"Month: **{MONTH_NAMES[month]}**\n"
-        f"Step 2 of 3: Choose your birth day:",
-        components=_day_select_rows(month),
+    await interaction.create_modal_response(
+        title=f"🎂 Enter your birth day ({MONTH_NAMES[month]})",
+        custom_id=f"{BIRTHDAY_PREFIX}day:{month}",
+        component=_day_modal_row(month),
     )
 
 
-async def _handle_set_day(interaction: hikari.ComponentInteraction, field: str) -> None:
-    """Step 2: Day selected → show region picker."""
-    month_str = field.removeprefix("day2:").removeprefix("day:")
-    day_str = interaction.values[0] if interaction.values else None
-    if not month_str.isdigit() or not day_str or not day_str.isdigit():
+def _extract_modal_text_input(
+    interaction: hikari.ModalInteraction, custom_id: str
+) -> str | None:
+    """Extract a text input value from a modal interaction's components."""
+    for row in interaction.components:
+        for component in row.components:
+            if (
+                isinstance(component, hikari.TextInputComponent)
+                and component.custom_id == custom_id
+            ):
+                return component.value
+    return None
+
+
+async def _handle_set_day(interaction: hikari.ModalInteraction, field: str) -> None:
+    """Step 2: Day submitted via modal → show region picker."""
+    month_str = field.removeprefix("day:")
+    day_str = _extract_modal_text_input(interaction, "day")
+    if not month_str.isdigit() or not day_str or not day_str.strip().isdigit():
         await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_UPDATE,
-            content=f"Invalid selection. {_RETRY_MSG}",
-            components=[],
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content=f"Invalid input. {_RETRY_MSG}",
+            flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
     month = int(month_str)
-    day = int(day_str)
+    day = int(day_str.strip())
     error = _validate_date(month, day)
     if error:
         await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
             content=f"{error} {_RETRY_MSG}",
-            components=[],
+            flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
     await interaction.create_initial_response(
-        response_type=hikari.ResponseType.MESSAGE_UPDATE,
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
         content=f"🎂 **Set Your Birthday**\n"
         f"Date: **{MONTH_NAMES[month]} {day}**\n"
         f"Step 3 of 3: Choose your region:",
         components=[_region_select_row(month, day)],
+        flags=hikari.MessageFlag.EPHEMERAL,
     )
 
 
@@ -585,8 +580,6 @@ async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> Non
 
     if field == "month":
         await _handle_set_month(interaction)
-    elif field.startswith("day:") or field.startswith("day2:"):
-        await _handle_set_day(interaction, field)
     elif field.startswith("region:"):
         await _handle_set_region(interaction, field)
     elif field.startswith("tz:"):
@@ -594,6 +587,35 @@ async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> Non
     else:
         logger.warning(
             "G=%s U=%r: Unknown birthday interaction field: %r",
+            interaction.guild_id,
+            interaction.user.username,
+            field,
+        )
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="Something went wrong. Please try again.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+
+
+async def handle_birthday_modal(interaction: hikari.ModalInteraction) -> None:
+    """Handle modal submissions for the birthday set flow (day input)."""
+    custom_id = interaction.custom_id
+    field = custom_id.removeprefix(BIRTHDAY_PREFIX)
+
+    if not interaction.guild_id:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="This command must be used in a server.",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    if field.startswith("day:"):
+        await _handle_set_day(interaction, field)
+    else:
+        logger.warning(
+            "G=%s U=%r: Unknown birthday modal field: %r",
             interaction.guild_id,
             interaction.user.username,
             field,

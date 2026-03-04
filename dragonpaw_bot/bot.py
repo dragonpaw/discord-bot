@@ -16,12 +16,13 @@ import yaml
 
 from dragonpaw_bot import http, structs, utils
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
+from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
 from dragonpaw_bot.plugins.lobby import INTERACTION_HANDLERS as lobby_handlers
 from dragonpaw_bot.plugins.lobby import configure_lobby
 from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
 from dragonpaw_bot.plugins.role_menus import configure_role_menus
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
-from dragonpaw_bot.utils import InteractionHandler
+from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 logging.getLogger("dragonpaw_bot").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -34,6 +35,17 @@ _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
         *((p, h, "processing your request") for p, h in subday_handlers.items()),
         *((p, h, "processing your request") for p, h in birthday_handlers.items()),
         *((p, h, "updating your roles") for p, h in role_menu_handlers.items()),
+    ],
+    key=lambda r: len(r[0]),
+    reverse=True,
+)
+
+_MODAL_ROUTES: list[tuple[str, ModalHandler, str]] = sorted(
+    [
+        *(
+            (p, h, "processing your request")
+            for p, h in birthday_modal_handlers.items()
+        ),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -393,7 +405,7 @@ async def configure_guild(bot: DragonpawBot, guild: hikari.Guild, url: str) -> N
 
 
 async def _respond_interaction_error(
-    interaction: hikari.ComponentInteraction, message: str
+    interaction: hikari.ComponentInteraction | hikari.ModalInteraction, message: str
 ) -> None:
     """Try to send an ephemeral error response; ignore if the interaction expired."""
     try:
@@ -413,27 +425,35 @@ async def _respond_interaction_error(
 
 @bot.listen(hikari.InteractionCreateEvent)
 async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None:
-    """Central dispatcher for component interactions.
+    """Central dispatcher for component and modal interactions.
 
-    Routes to handlers by prefix match from _INTERACTION_ROUTES.
+    Routes to handlers by prefix match from _INTERACTION_ROUTES / _MODAL_ROUTES.
     Unmatched interactions are logged as errors.
     """
-    if not isinstance(event.interaction, hikari.ComponentInteraction):
-        return
     interaction = event.interaction
+
+    if isinstance(interaction, hikari.ComponentInteraction):
+        routes = _INTERACTION_ROUTES
+    elif isinstance(interaction, hikari.ModalInteraction):
+        routes = _MODAL_ROUTES
+    else:
+        return
+
     cid = interaction.custom_id
+    kind = "Modal" if isinstance(interaction, hikari.ModalInteraction) else "Component"
 
     logger.debug(
-        "Component interaction: custom_id=%r user=%r guild=%r",
+        "%s interaction: custom_id=%r user=%r guild=%r",
+        kind,
         cid,
         interaction.user.username,
         interaction.guild_id,
     )
 
-    for prefix, handler, error_label in _INTERACTION_ROUTES:
+    for prefix, handler, error_label in routes:
         if cid.startswith(prefix):
             try:
-                await handler(interaction)
+                await handler(interaction)  # type: ignore[arg-type]
             except Exception:
                 logger.exception(
                     "Error handling interaction: custom_id=%r user=%r",
@@ -446,7 +466,8 @@ async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None
             return
 
     logger.error(
-        "Unhandled component interaction: custom_id=%r user=%r guild=%r",
+        "Unhandled %s interaction: custom_id=%r user=%r guild=%r",
+        kind.lower(),
         cid,
         interaction.user.username,
         interaction.guild_id,

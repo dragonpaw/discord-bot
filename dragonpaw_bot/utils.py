@@ -10,6 +10,7 @@ import lightbulb
 from emojis.db.db import EMOJI_DB
 
 InteractionHandler = Callable[[hikari.ComponentInteraction], Awaitable[None]]
+ModalHandler = Callable[[hikari.ModalInteraction], Awaitable[None]]
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot

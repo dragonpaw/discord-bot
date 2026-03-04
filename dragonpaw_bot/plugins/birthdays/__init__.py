@@ -18,18 +18,22 @@ from dragonpaw_bot.plugins.birthdays.models import (
     BirthdayEntry,
     BirthdayGuildConfig,
 )
-from dragonpaw_bot.utils import InteractionHandler
+from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
-__all__ = ["INTERACTION_HANDLERS"]
+__all__ = ["INTERACTION_HANDLERS", "MODAL_HANDLERS"]
 
 logger = logging.getLogger(__name__)
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     BIRTHDAY_CONFIG_PREFIX: commands.handle_config_interaction,
     BIRTHDAY_PREFIX: commands.handle_tz_interaction,
+}
+
+MODAL_HANDLERS: dict[str, ModalHandler] = {
+    BIRTHDAY_PREFIX: commands.handle_birthday_modal,
 }
 
 loader = lightbulb.Loader()
