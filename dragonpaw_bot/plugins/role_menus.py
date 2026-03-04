@@ -175,6 +175,9 @@ async def on_reaction_add(event: hikari.GuildReactionAddEvent):
         logger.error("Called on an unknown guild: %r", event.guild_id)
         return
 
+    if event.channel_id != c.role_channel_id:
+        return
+
     if isinstance(event.emoji_name, hikari.UnicodeEmoji):
         key = (event.message_id, event.emoji_name.name)
     elif isinstance(event.emoji_name, str):
@@ -239,6 +242,9 @@ async def on_reaction_remove(event: hikari.GuildReactionDeleteEvent):
     c = bot.state(event.guild_id)
     if not c:
         logger.error("Called on an unknown guild: %r", event.guild_id)
+        return
+
+    if event.channel_id != c.role_channel_id:
         return
 
     if isinstance(event.emoji_name, hikari.UnicodeEmoji):
