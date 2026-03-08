@@ -17,6 +17,8 @@ from dragonpaw_bot import structs
 from dragonpaw_bot.logging import configure_logging
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
+from dragonpaw_bot.plugins.channel_cleanup import config as cleanup_config
+from dragonpaw_bot.plugins.media_channels import config as media_config
 from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
 from dragonpaw_bot.utils import InteractionHandler, ModalHandler
@@ -52,6 +54,7 @@ STATE_DIR = ROOT_DIR / "state"
 OAUTH_PERMISSIONS = (
     hikari.Permissions.SEND_MESSAGES
     | hikari.Permissions.MANAGE_ROLES
+    | hikari.Permissions.MANAGE_MESSAGES
     | hikari.Permissions.READ_MESSAGE_HISTORY  # Needed to find own old messages
     | hikari.Permissions.KICK_MEMBERS
     | hikari.Permissions.USE_APPLICATION_COMMANDS
@@ -60,6 +63,7 @@ CLIENT_ID = environ["CLIENT_ID"]
 OAUTH_URL = "https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&permissions={OAUTH_PERMISSIONS}&scope=applications.commands%20bot"
 INTENTS = (
     hikari.Intents.GUILD_MESSAGES
+    | hikari.Intents.MESSAGE_CONTENT
     | hikari.Intents.GUILDS
     | hikari.Intents.GUILD_MEMBERS
     | hikari.Intents.GUILD_EMOJIS
@@ -228,6 +232,17 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
             "Bot > Privileged Gateway Intents > Server Members Intent"
         )
 
+    if (
+        INTENTS & hikari.Intents.MESSAGE_CONTENT
+        and not flags & hikari.ApplicationFlags.MESSAGE_CONTENT_INTENT
+    ):
+        logger.warning(
+            "MESSAGE_CONTENT intent is requested but NOT enabled in the "
+            "Discord Developer Portal. Media channel enforcement will be "
+            "unable to read message content and will fail to detect text-only posts. "
+            "Enable it under: Bot > Privileged Gateway Intents > Message Content Intent"
+        )
+
 
 @bot.listen(hikari.GuildAvailableEvent)
 async def on_guild_available(event: hikari.GuildAvailableEvent):
@@ -251,6 +266,13 @@ async def on_guild_join(event: hikari.GuildJoinEvent):
 # ---------------------------------------------------------------------------- #
 
 loader = lightbulb.Loader()
+
+_config_group = lightbulb.Group("config", "Bot configuration")
+_media_sub = _config_group.subgroup("media", "Media-only channel settings")
+_cleanup_sub = _config_group.subgroup("cleanup", "Auto-expiry channel settings")
+media_config.register(_media_sub)
+cleanup_config.register(_cleanup_sub)
+loader.command(_config_group)
 
 
 @loader.command
@@ -366,5 +388,7 @@ async def on_starting(_: hikari.StartingEvent) -> None:
         "dragonpaw_bot.plugins.role_menus",
         "dragonpaw_bot.plugins.subday",
         "dragonpaw_bot.plugins.birthdays",
+        "dragonpaw_bot.plugins.media_channels",
+        "dragonpaw_bot.plugins.channel_cleanup",
     )
     await client.start()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Mapping, Optional, Sequence, Union
 
 import hikari
@@ -219,6 +220,91 @@ async def check_channel_perms(
         if not (perms & perm):
             missing.append(label)
     return missing
+
+
+async def purge_old_messages(  # noqa: PLR0913
+    bot: DragonpawBot,
+    guild_name: str,
+    channel_name: str,
+    channel_id: int,
+    expiry_minutes: int,
+    single_delete_limit: int = 1000,
+) -> int:
+    """Delete messages older than expiry_minutes from a channel.
+
+    Bulk-deletes where possible (< 14 days), single-deletes for older messages
+    (capped at single_delete_limit per call — remainder picked up next run).
+    Hikari handles rate limiting automatically. Returns count of deleted messages.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=expiry_minutes)
+    bulk_cutoff = now - timedelta(days=14)
+    to_bulk: list[hikari.Snowflake] = []
+    # Store (id, created_at) so we can report age of the oldest deleted message
+    to_single: list[tuple[hikari.Snowflake, datetime]] = []
+
+    try:
+        async for msg in bot.rest.fetch_messages(channel=hikari.Snowflake(channel_id), before=cutoff):
+            if msg.created_at > bulk_cutoff:
+                to_bulk.append(msg.id)
+            else:
+                to_single.append((msg.id, msg.created_at))
+    except (hikari.ForbiddenError, hikari.NotFoundError) as exc:
+        logger.warning(
+            "Cannot fetch messages for cleanup",
+            guild=guild_name,
+            channel=channel_name,
+            error=str(exc),
+        )
+        return 0
+
+    for i in range(0, len(to_bulk), 100):
+        try:
+            await bot.rest.delete_messages(hikari.Snowflake(channel_id), to_bulk[i : i + 100])
+        except (hikari.ForbiddenError, hikari.NotFoundError) as exc:
+            logger.warning(
+                "Bulk delete failed",
+                guild=guild_name,
+                channel=channel_name,
+                error=str(exc),
+            )
+            break
+
+    to_single = to_single[:single_delete_limit]
+
+    for idx, (msg_id, _) in enumerate(to_single):
+        if idx > 0 and idx % 10 == 0:
+            logger.debug(
+                "Single-deleting old messages, progress",
+                guild=guild_name,
+                channel=channel_name,
+                deleted_so_far=idx,
+                total=len(to_single),
+            )
+        try:
+            await bot.rest.delete_message(channel=hikari.Snowflake(channel_id), message=msg_id)
+        except hikari.NotFoundError:
+            pass  # Already gone
+        except hikari.ForbiddenError as exc:
+            logger.warning(
+                "Single delete failed, stopping",
+                guild=guild_name,
+                channel=channel_name,
+                error=str(exc),
+            )
+            break
+
+    if to_single:
+        oldest_age_days = (now - to_single[-1][1]).days
+        logger.debug(
+            "Single-delete complete",
+            guild=guild_name,
+            channel=channel_name,
+            count=len(to_single),
+            oldest_days=oldest_age_days,
+        )
+
+    return len(to_bulk) + len(to_single)
 
 
 async def log_to_guild(

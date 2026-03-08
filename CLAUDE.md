@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Bot Personality
+
+The bot's persona is a cute, enthusiastic little hungry dragon who loves to snack on messages. When writing user-facing copy (enforcement notices, status messages, etc.), lean into this — use playful, warm, dragon-themed language. The bot's avatar is a dragon riding a shark with lasers. Never be scolding or cold in user-facing messages.
+
 ## Project Overview
 
 A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikari-lightbulb v3** framework. It provides features for Discord servers: select-menu-based role assignment, a lobby/welcome system with optional click-through rules, and a 52-week guided journal program (SubDay).
@@ -39,6 +43,12 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - **`plugins/lobby.py`** — Handles new member joins: auto-assigns a role, posts welcome messages, and optionally shows server rules with an "I agree" button that removes the lobby role.
 - **`plugins/subday/`** — 52-week guided journal program ("Where I am Led"). See `plugins/subday/CLAUDE.md` for details. Multi-file plugin with models, commands, cron scheduler, prompt parser, and state persistence.
 - **`plugins/birthdays/`** — Birthday tracking with announcements and wishlists. See `plugins/birthdays/CLAUDE.md` for details. Multi-file plugin with models, commands, daily cron task, and state persistence.
+- **`plugins/media_channels/`** — Enforces media-only policy in configured channels; hourly cleanup cron. See `plugins/media_channels/CLAUDE.md` for details.
+- **`plugins/channel_cleanup/`** — Auto-deletes old messages from configured channels via hourly cron. See `plugins/channel_cleanup/CLAUDE.md` for details.
+
+**`/config` command group** — Defined in `bot.py` (main loader) and extended by each plugin's `config.py`. Each plugin that needs admin configuration exposes a `register(subgroup)` function in `plugin_dir/config.py`; `bot.py` imports these and wires them into the `/config` group. Currently: `/config media` (from `media_channels/config.py`) and `/config cleanup` (from `channel_cleanup/config.py`).
+
+**`duration.py`** — Shared `parse_duration_minutes()` and `format_duration()` helpers used by plugin config commands.
 
 **`utils.py`** — Discord helpers: deleting bot messages, looking up channels/roles/emojis by name, checking member roles, and `log_to_guild()` for sending notifications to a guild's configured log channel.
 
