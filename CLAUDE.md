@@ -52,6 +52,10 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **State serialization note:** Role menu state is now persisted separately in `state/role_menus_{guild_id}.yaml`. The main `GuildState` YAML is straightforward Pydantic JSON-mode serialization. Legacy YAML files containing `role_emojis`/`role_names`/`role_channel_id` are automatically stripped on load.
 
+## Git Workflow
+
+- Push directly to `main` — no feature branches.
+
 ## Key Conventions
 
 - Uses `uvloop` as the async event loop

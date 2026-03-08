@@ -219,7 +219,34 @@ async def _dm_completion(
         )
 
 
-async def _post_achievement(  # noqa: PLR0912, PLR0913
+def _milestone_prize_teaser(current_week: int, cfg: SubDayGuildConfig) -> str:
+    """Return a prize-teaser string for the next upcoming milestone, or ''."""
+    next_milestone = next((m for m in MILESTONE_WEEKS if m >= current_week), None)
+    if not next_milestone:
+        return ""
+    prize = cfg.milestone_prizes().get(next_milestone, "a prize")
+    weeks_away = next_milestone - current_week
+    if weeks_away == 0:
+        return f"\n🎁 Milestone week! Prize: **{prize}**"
+    return f"\n🎁 Next prize ({weeks_away}w away): **{prize}**"
+
+
+async def _try_post_achievement_embed(
+    achievements: hikari.GuildTextChannel | None,
+    embed: hikari.Embed,
+    chart_bytes: hikari.Bytes,
+    channel_name: str | None,
+) -> None:
+    if not achievements:
+        return
+    try:
+        embed.set_image(chart_bytes)
+        await achievements.send(embed=embed)
+    except hikari.HTTPError as exc:
+        logger.warning("Failed to post achievement", channel=channel_name, error=str(exc))
+
+
+async def _post_achievement(  # noqa: PLR0913
     bot: DragonpawBot,
     guild_id: hikari.Snowflake,
     completer: hikari.Member,
@@ -265,17 +292,8 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
 
     # Regular completion — just post the embed
     if week not in milestone_roles:
-        if achievements:
-            try:
-                embed = _regular_completion_embed(target, week)
-                embed.set_image(chart_bytes)
-                await achievements.send(embed=embed)
-            except hikari.HTTPError as exc:
-                logger.warning(
-                    "Failed to post achievement",
-                    channel=cfg.achievements_channel,
-                    error=str(exc),
-                )
+        embed = _regular_completion_embed(target, week)
+        await _try_post_achievement_embed(achievements, embed, chart_bytes, cfg.achievements_channel)
         return
 
     role_name = milestone_roles[week]
@@ -309,16 +327,7 @@ async def _post_achievement(  # noqa: PLR0912, PLR0913
             f"Please arrange their prize: **{prize}**."
         )
 
-    if achievements:
-        try:
-            embed.set_image(chart_bytes)
-            await achievements.send(embed=embed)
-        except hikari.HTTPError as exc:
-            logger.warning(
-                "Failed to post milestone achievement",
-                channel=cfg.achievements_channel,
-                error=str(exc),
-            )
+    await _try_post_achievement_embed(achievements, embed, chart_bytes, cfg.achievements_channel)
 
     # Assign milestone role (skip if None)
     if role_name:
@@ -634,17 +643,7 @@ def _owned_sub_status_embed(
         icon = "⏳"
         status = f"Week {p.current_week} — in progress"
 
-    # Next prize teaser
-    prizes = cfg.milestone_prizes()
-    next_milestone = next((m for m in MILESTONE_WEEKS if m >= p.current_week), None)
-    if next_milestone:
-        prize = prizes.get(next_milestone, "a prize")
-        weeks_away = next_milestone - p.current_week
-        if weeks_away == 0:
-            status += f"\n🎁 Milestone week! Prize: **{prize}**"
-        else:
-            status += f"\n🎁 Next prize ({weeks_away}w away): **{prize}**"
-
+    status += _milestone_prize_teaser(p.current_week, cfg)
     status += (
         f"\n\n**Progress**: {p.current_week}/{TOTAL_WEEKS} weeks"
         f"\n**Signed up**: <t:{int(p.signup_date.timestamp())}:R>"
@@ -689,12 +688,10 @@ def _own_progress_embed(
             "Complete it and show a reviewer to move on."
         )
 
-    milestone_roles = cfg.milestone_roles()
-    next_milestone = next(
-        (m for m in sorted(milestone_roles) if m >= p.current_week), None
-    )
+    next_milestone = next((m for m in MILESTONE_WEEKS if m >= p.current_week), None)
     if next_milestone:
-        role_name = milestone_roles[next_milestone]
+        milestone_roles = cfg.milestone_roles()
+        role_name = milestone_roles.get(next_milestone)
         role_label = f" ({role_name})" if role_name else ""
         weeks_away = next_milestone - p.current_week
         if weeks_away == 0:
@@ -707,16 +704,7 @@ def _own_progress_embed(
             )
         status_text += f"\n\n{milestone_text}"
 
-    # Next prize teaser
-    prizes = cfg.milestone_prizes()
-    prize_milestone = next((m for m in MILESTONE_WEEKS if m >= p.current_week), None)
-    if prize_milestone:
-        prize = prizes.get(prize_milestone, "a prize")
-        pw = prize_milestone - p.current_week
-        if pw == 0:
-            status_text += f"\n🎁 Milestone week! Prize: **{prize}**"
-        else:
-            status_text += f"\n🎁 Next prize ({pw}w away): **{prize}**"
+    status_text += _milestone_prize_teaser(p.current_week, cfg)
 
     chart_bytes = chart.render_star_chart(
         username=display_name,
@@ -912,6 +900,39 @@ class SubDayOwner(
         )
 
 
+async def _notify_sub_of_owner_decision(  # noqa: PLR0913
+    bot: DragonpawBot,
+    guild_name: str,
+    guild_id: int,
+    sub_user_id: int,
+    owner_user_id: int,
+    approved: bool,
+) -> None:
+    dm_text = (
+        f"<@{owner_user_id}> has **accepted** your owner request! "
+        "They'll now receive copies of your weekly prompts. 💜"
+        if approved
+        else f"<@{owner_user_id}> has **declined** your owner request."
+    )
+    log_text = (
+        f"🤝 **SubDay owner accepted** — <@{owner_user_id}> accepted ownership of <@{sub_user_id}>"
+        if approved
+        else f"😢 **SubDay owner declined** — <@{owner_user_id}> declined ownership of <@{sub_user_id}>"
+    )
+    try:
+        sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
+        dm = await sub_user.fetch_dm_channel()
+        await dm.send(dm_text)
+    except hikari.HTTPError:
+        logger.warning(
+            "Could not DM sub about owner decision",
+            guild=guild_name,
+            sub_id=sub_user_id,
+            approved=approved,
+        )
+    await utils.log_to_guild(bot, hikari.Snowflake(guild_id), log_text)
+
+
 async def _handle_owner_approve(
     interaction: hikari.ComponentInteraction,
     guild_state: state.SubDayGuildState,
@@ -955,26 +976,8 @@ async def _handle_owner_approve(
         flags=hikari.MessageFlag.EPHEMERAL,
     )
 
-    # Notify sub
-    try:
-        sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
-        dm = await sub_user.fetch_dm_channel()
-        await dm.send(
-            f"<@{owner_user_id}> has **accepted** your owner request! "
-            "They'll now receive copies of your weekly prompts. 💜"
-        )
-    except hikari.HTTPError:
-        logger.warning(
-            "Could not DM sub about owner approval",
-            guild=guild_state.guild_name,
-            sub_id=sub_user_id,
-        )
-
-    await utils.log_to_guild(
-        bot,
-        hikari.Snowflake(guild_id),
-        f"🤝 **SubDay owner accepted** — <@{owner_user_id}> "
-        f"accepted ownership of <@{sub_user_id}>",
+    await _notify_sub_of_owner_decision(
+        bot, guild_state.guild_name, guild_id, sub_user_id, owner_user_id, approved=True
     )
 
 
@@ -1005,23 +1008,8 @@ async def _handle_owner_deny(
         flags=hikari.MessageFlag.EPHEMERAL,
     )
 
-    # Notify sub
-    try:
-        sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
-        dm = await sub_user.fetch_dm_channel()
-        await dm.send(f"<@{owner_user_id}> has **declined** your owner request.")
-    except hikari.HTTPError:
-        logger.warning(
-            "Could not DM sub about owner denial",
-            guild=guild_state.guild_name,
-            sub_id=sub_user_id,
-        )
-
-    await utils.log_to_guild(
-        bot,
-        hikari.Snowflake(guild_id),
-        f"😢 **SubDay owner declined** — <@{owner_user_id}> "
-        f"declined ownership of <@{sub_user_id}>",
+    await _notify_sub_of_owner_decision(
+        bot, guild_state.guild_name, guild_id, sub_user_id, owner_user_id, approved=False
     )
 
 
@@ -1178,7 +1166,7 @@ class SubDayComplete(
     )
 
     @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:
+    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912, PLR0915
         assert ctx.guild_id and ctx.member
         bot = _get_bot(ctx)
         guild = await utils.get_guild(ctx, bot)
@@ -1191,13 +1179,13 @@ class SubDayComplete(
 
         # If the requested week matches the participant's current week, fall back
         # to normal complete so the reviewer only needs complete_role, not backfill_role.
-        backfill_week: int | None = self.week
+        requested_week: int | None = self.week
+        has_explicit_week = requested_week is not None
         existing = guild_state.participants.get(target_id)
-        if backfill_week and existing and existing.current_week == backfill_week:
-            backfill_week = None
+        is_backfill = bool(requested_week and (not existing or existing.current_week != requested_week))
 
-        required_role = cfg.backfill_role if backfill_week else cfg.complete_role
-        action = "backfill" if backfill_week else "complete"
+        required_role = cfg.backfill_role if is_backfill else cfg.complete_role
+        action = "backfill" if is_backfill else "complete"
 
         if not await _check_permission(ctx, guild, required_role, action):
             return
@@ -1211,9 +1199,8 @@ class SubDayComplete(
             )
             return
 
-        if backfill_week:
-            result = _prepare_backfill(guild_state, target_id, backfill_week)
-            participant, auto_enrolled = result
+        if is_backfill:
+            participant, auto_enrolled = _prepare_backfill(guild_state, target_id, requested_week)  # type: ignore[arg-type]
         else:
             error = _validate_normal_complete(guild_state, target, target_id)
             if error:
@@ -1226,7 +1213,7 @@ class SubDayComplete(
         participant.week_completed = True
         participant.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
 
-        sent_next = bool(self.sent and backfill_week and participant.current_week < TOTAL_WEEKS)
+        sent_next = bool(self.sent and has_explicit_week and participant.current_week < TOTAL_WEEKS)
         if sent_next:
             participant.current_week += 1
             participant.week_completed = False
@@ -1258,12 +1245,18 @@ class SubDayComplete(
         # so only send for regular completions/backfills)
         milestone_roles = cfg.milestone_roles()
         if week not in milestone_roles:
-            if backfill_week:
+            if is_backfill:
                 staff_msg = (
                     f"⏩ {ctx.member.mention} backfilled {target.mention} "
                     f"to **Week {week}** (complete)"
                     + (f", advanced to Week {week + 1} (prompt already sent)" if sent_next else "")
                     + "."
+                )
+            elif sent_next:
+                staff_msg = (
+                    f"✅ {ctx.member.mention} marked {target.mention} "
+                    f"complete for **Week {week}**, "
+                    f"and advanced to Week {week + 1} (prompt already sent)."
                 )
             else:
                 staff_msg = (
@@ -1277,7 +1270,7 @@ class SubDayComplete(
             user=target.username,
             week=week,
             marked_by=ctx.user.username,
-            backfill=bool(backfill_week),
+            backfill=is_backfill,
         )
 
 

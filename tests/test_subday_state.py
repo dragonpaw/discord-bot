@@ -173,11 +173,35 @@ def test_sent_next_ignored_at_total_weeks():
 
 
 def test_sent_next_false_without_backfill():
-    """sent=True with no backfill week → sent_next is False."""
+    """sent=True with no explicit week → sent_next is False."""
     p = _sample_participant(current_week=5)
-    backfill_week = None
-    sent_next = bool(True and backfill_week and p.current_week < 52)
+    has_explicit_week = False
+    sent_next = bool(True and has_explicit_week and p.current_week < 52)
     assert sent_next is False
+
+
+def test_sent_next_fires_when_week_matches_current():
+    """sent:True with week==current_week advances participant even after optimization."""
+    # Participant is on week 10; reviewer runs /subday complete @user week:10 sent:True
+    # The optimization sets backfill_week=None, but has_explicit_week stays True.
+    p = _sample_participant(current_week=10)
+    p.week_completed = True
+    p.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
+
+    has_explicit_week = True  # self.week (10) was not None before the optimization
+    from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
+
+    sent_next = bool(True and has_explicit_week and p.current_week < TOTAL_WEEKS)
+    assert sent_next is True
+
+    if sent_next:
+        p.current_week += 1
+        p.week_completed = False
+        p.week_sent = True
+
+    assert p.current_week == 11
+    assert p.week_completed is False
+    assert p.week_sent is True
 
 
 def test_sent_next_participant_skipped_by_sunday_cron():
