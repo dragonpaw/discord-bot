@@ -1171,6 +1171,11 @@ class SubDayComplete(
         max_value=TOTAL_WEEKS,
         default=None,
     )
+    sent = lightbulb.boolean(
+        "sent",
+        "Backfill only: mark the next week's prompt as already sent",
+        default=None,
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
@@ -1220,6 +1225,13 @@ class SubDayComplete(
         week = participant.current_week
         participant.week_completed = True
         participant.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
+
+        sent_next = bool(self.sent and backfill_week and participant.current_week < TOTAL_WEEKS)
+        if sent_next:
+            participant.current_week += 1
+            participant.week_completed = False
+            participant.week_sent = True
+
         state.save(guild_state)
 
         # Respond first to avoid interaction timeout, then do async work
@@ -1227,6 +1239,11 @@ class SubDayComplete(
             response = (
                 f"Enrolled {target.mention} and completed "
                 f"**Week {week}** of Where I am Led."
+            )
+        elif sent_next:
+            response = (
+                f"Marked {target.mention} as complete for **Week {week}**, "
+                f"and advanced to Week {week + 1} (prompt already sent — won't re-send on Sunday)."
             )
         else:
             response = f"Marked {target.mention} as complete for **Week {week}**."
@@ -1244,7 +1261,9 @@ class SubDayComplete(
             if backfill_week:
                 staff_msg = (
                     f"⏩ {ctx.member.mention} backfilled {target.mention} "
-                    f"to **Week {week}** (complete)."
+                    f"to **Week {week}** (complete)"
+                    + (f", advanced to Week {week + 1} (prompt already sent)" if sent_next else "")
+                    + "."
                 )
             else:
                 staff_msg = (

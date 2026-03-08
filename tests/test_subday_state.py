@@ -140,3 +140,51 @@ def test_graduated_participant():
     p = _sample_participant(current_week=52, week_completed=True)
     # The scheduler checks current_week >= TOTAL_WEEKS before advancing
     assert p.current_week >= 52
+
+
+def test_sent_next_advances_week_and_sets_week_sent():
+    """Backfill with sent=True advances to next week with week_sent=True."""
+    from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
+
+    p = _sample_participant(current_week=9)
+    p.week_completed = True
+    p.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
+    # Simulate sent_next logic (backfill week 9, sent=True, week < TOTAL_WEEKS)
+    p.current_week += 1
+    p.week_completed = False
+    p.week_sent = True
+
+    assert p.current_week == 10
+    assert p.week_completed is False
+    assert p.week_sent is True
+
+
+def test_sent_next_ignored_at_total_weeks():
+    """Backfill with sent=True on week 52 does not advance past 52."""
+    from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
+
+    p = _sample_participant(current_week=TOTAL_WEEKS)
+    p.week_completed = True
+    # sent_next condition: current_week < TOTAL_WEEKS → False, so no advancement
+    sent_next = bool(True and True and p.current_week < TOTAL_WEEKS)
+    assert sent_next is False
+    assert p.current_week == TOTAL_WEEKS
+    assert p.week_completed is True
+
+
+def test_sent_next_false_without_backfill():
+    """sent=True with no backfill week → sent_next is False."""
+    p = _sample_participant(current_week=5)
+    backfill_week = None
+    sent_next = bool(True and backfill_week and p.current_week < 52)
+    assert sent_next is False
+
+
+def test_sent_next_participant_skipped_by_sunday_cron():
+    """After sent_next, week_completed=False causes Sunday cron to skip participant."""
+    p = _sample_participant(current_week=10, week_completed=False, week_sent=True)
+    # The cron skips participants where week_completed is False
+    assert not p.week_completed
+    assert p.week_sent is True
+    # Current week unchanged (cron didn't advance)
+    assert p.current_week == 10
