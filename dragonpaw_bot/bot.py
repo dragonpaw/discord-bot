@@ -67,7 +67,7 @@ CLIENT_ID = environ["CLIENT_ID"]
 
 def _read_build_tag() -> str:
     """Read build tag from .tag file (baked in at docker build), env var, or default."""
-    tag_file = Path(__file__).parent.parent / ".tag"
+    tag_file = Path(__file__).parent.parent / "BUILD_TAG"
     if tag_file.is_file():
         return tag_file.read_text().strip() or "dev"
     return environ.get("BUILD_TAG", "dev")

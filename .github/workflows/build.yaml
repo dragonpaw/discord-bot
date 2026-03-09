@@ -22,7 +22,7 @@ jobs:
         run: |
           export TAG=$(date "+%Y.%m.%d-%H.%M.%S")
           echo "Tag: $TAG"
-          echo -n $TAG > .tag
+          echo -n $TAG > BUILD_TAG
           docker build . --file Dockerfile \
             --tag ${IMAGE}:${TAG} \
             --tag ${IMAGE}:latest
@@ -41,6 +41,6 @@ jobs:
       - name: Push
         if: github.event_name == 'push'
         run: |
-          export TAG=$(cat .tag)
+          export TAG=$(cat BUILD_TAG)
           docker push ${IMAGE}:latest
           docker push ${IMAGE}:${TAG}
