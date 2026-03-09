@@ -63,7 +63,17 @@ OAUTH_PERMISSIONS = (
     | hikari.Permissions.USE_APPLICATION_COMMANDS
 ).value
 CLIENT_ID = environ["CLIENT_ID"]
-BUILD_TAG = environ.get("BUILD_TAG", "dev")
+
+
+def _read_build_tag() -> str:
+    """Read build tag from .tag file (baked in at docker build), env var, or default."""
+    tag_file = Path(__file__).parent.parent / ".tag"
+    if tag_file.is_file():
+        return tag_file.read_text().strip() or "dev"
+    return environ.get("BUILD_TAG", "dev")
+
+
+BUILD_TAG = _read_build_tag()
 OAUTH_URL = "https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&permissions={OAUTH_PERMISSIONS}&scope=applications.commands%20bot"
 INTENTS = (
     hikari.Intents.GUILD_MESSAGES

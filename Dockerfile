@@ -24,7 +24,4 @@ RUN mkdir -p /app/state
 COPY . /app
 RUN /app/bin/install-deps
 
-ARG BUILD_TAG
-ENV BUILD_TAG $BUILD_TAG
-
 ENTRYPOINT [ "/app/bin/start" ]

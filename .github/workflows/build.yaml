@@ -25,8 +25,7 @@ jobs:
           echo -n $TAG > .tag
           docker build . --file Dockerfile \
             --tag ${IMAGE}:${TAG} \
-            --tag ${IMAGE}:latest \
-            --build-arg BUILD_TAG="$TAG"
+            --tag ${IMAGE}:latest
 
       # - name: Test with pytest
       #   run: docker run ${IMAGE}:latest pytest
