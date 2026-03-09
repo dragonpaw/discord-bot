@@ -1138,9 +1138,7 @@ class SubDayComplete(
         requested_week: int | None = self.week
         has_explicit_week = requested_week is not None
         existing = guild_state.participants.get(target_id)
-        is_backfill = bool(
-            requested_week and (not existing or existing.current_week != requested_week)
-        )
+        is_backfill = has_explicit_week
 
         required_role = cfg.backfill_role if is_backfill else cfg.complete_role
         action = "backfill" if is_backfill else "complete"
