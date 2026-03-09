@@ -8,7 +8,7 @@ import structlog
 
 from dragonpaw_bot import structs, utils
 from dragonpaw_bot.colors import SOLARIZED_BLUE
-from dragonpaw_bot.utils import InteractionHandler
+from dragonpaw_bot.utils import ChannelContext, GuildContext, InteractionHandler
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -21,19 +21,16 @@ RULES_AGREED_ID = "rules_agreed"
 
 
 async def configure_lobby(
-    bot: DragonpawBot,
-    guild: hikari.Guild,
+    gc: GuildContext,
     config: structs.LobbyConfig,
     state: structs.GuildState,
     role_map: Mapping[str, hikari.Role],
 ) -> List[str]:
-    log = logger.bind(guild=guild.name)
+    log = gc.logger
     errors: List[str] = []
 
     # Where is the lobby
-    channel = await utils.guild_channel_by_name(
-        bot=bot, guild=guild, name=config.channel
-    )
+    channel = await utils.guild_channel_by_name(gc, config.channel)
     if not channel:
         errors.append(f"Lobby channel {config.channel} doesn't seem to exist.")
         return errors
@@ -60,9 +57,15 @@ async def configure_lobby(
         )
 
     if config.rules:
-        await utils.delete_my_messages(
-            bot=bot, guild_name=guild.name, channel_id=channel.id
+        cc = ChannelContext.from_entry(
+            gc,
+            type(
+                "_Entry",
+                (),
+                {"channel_id": int(channel.id), "channel_name": channel.name or ""},
+            )(),
         )
+        await cc.delete_my_messages()
 
         embed = hikari.Embed(
             title="Server Rules",
@@ -74,7 +77,7 @@ async def configure_lobby(
         state.lobby_click_for_rules = config.click_for_rules
 
         if config.click_for_rules and config.role:
-            row = bot.rest.build_message_action_row()
+            row = gc.bot.rest.build_message_action_row()
             row.add_interactive_button(
                 hikari.ButtonStyle.SUCCESS,
                 RULES_AGREED_ID,
@@ -116,9 +119,17 @@ async def on_member_join(event: hikari.MemberCreateEvent):
                 days=c.lobby_kick_days,
             )
         except KeyError as e:
-            await utils.log_to_guild(
-                bot,
-                event.guild_id,
+            guild = event.get_guild()
+            guild_name = guild.name if guild else str(event.guild_id)
+            gs = bot.state(event.guild_id)
+            log_channel_id = gs.log_channel_id if gs else None
+            gc = GuildContext(
+                bot=bot,
+                guild_id=event.guild_id,
+                name=guild_name,
+                log_channel_id=log_channel_id,
+            )
+            await gc.log(
                 f"🤯 **Lobby error:** Welcome message has an unknown substitution: {e}",
             )
             return
@@ -168,9 +179,8 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
             "Cannot remove lobby role — forbidden",
             role_id=guild_state.lobby_role_id,
         )
-        await utils.log_to_guild(
-            bot,
-            interaction.guild_id,
+        gc = GuildContext.from_interaction(interaction)
+        await gc.log(
             f"🤯 Unable to remove lobby role from **{interaction.user.username}**. "
             "Check bot role hierarchy permissions.",
         )

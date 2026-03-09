@@ -21,7 +21,7 @@ from dragonpaw_bot.plugins.channel_cleanup import config as cleanup_config
 from dragonpaw_bot.plugins.media_channels import config as media_config
 from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
-from dragonpaw_bot.utils import InteractionHandler, ModalHandler
+from dragonpaw_bot.utils import GuildContext, InteractionHandler, ModalHandler
 
 configure_logging()
 logger = structlog.get_logger(__name__)
@@ -292,9 +292,9 @@ class Logging(
             logger.error("Interaction without a guild")
             return
 
-        guild = await bot.rest.fetch_guild(guild=ctx.guild_id)
-        log = logger.bind(guild=guild.name, user=ctx.user.username)
-        state = bot.state(ctx.guild_id)
+        gc = GuildContext.from_ctx(ctx)
+        guild = await gc.fetch_guild()
+        state = gc.state()
         if not state:
             state = structs.GuildState(
                 id=ctx.guild_id,
@@ -306,7 +306,7 @@ class Logging(
         if self.channel is not None:
             state.log_channel_id = self.channel.id
             bot.state_update(state)
-            log.info("Set log channel", channel=self.channel.name)
+            gc.logger.info("Set log channel", channel=self.channel.name)
             await ctx.respond(
                 f"Log channel set to <#{self.channel.id}>.",
                 flags=hikari.MessageFlag.EPHEMERAL,
@@ -314,7 +314,7 @@ class Logging(
         else:
             state.log_channel_id = None
             bot.state_update(state)
-            log.info("Cleared log channel")
+            gc.logger.info("Cleared log channel")
             await ctx.respond(
                 "Log channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
             )
@@ -361,7 +361,9 @@ async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None
     )
     structlog.contextvars.bind_contextvars(
         guild=cached_guild.name if cached_guild else str(interaction.guild_id),
-        user=interaction.member.display_name if interaction.member else interaction.user.username,
+        user=interaction.member.display_name
+        if interaction.member
+        else interaction.user.username,
         custom_id=cid,
     )
 

@@ -26,6 +26,7 @@ from dragonpaw_bot.plugins.subday.constants import (
     TOTAL_WEEKS,
 )
 from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig, SubDayParticipant
+from dragonpaw_bot.utils import GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -38,69 +39,10 @@ logger = structlog.get_logger(__name__)
 # ---------------------------------------------------------------------------- #
 
 
-def _get_bot(ctx: lightbulb.Context) -> DragonpawBot:
-    bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
-    return bot
-
-
-async def _require_guild_owner(
-    ctx: lightbulb.Context,
-    guild: hikari.Guild | hikari.RESTGuild,
-) -> bool:
-    """Check if the user is the guild owner. Responds with denial if not. Returns True if allowed."""
-    if ctx.user.id == guild.owner_id:
-        return True
-    logger.warning(
-        "SubDay admin command denied, not guild owner",
-        guild=guild.name,
-        user=ctx.user.username,
-    )
-    await ctx.respond(
-        "Only the server owner can use this command.",
-        flags=hikari.MessageFlag.EPHEMERAL,
-    )
-    return False
-
-
-async def _check_permission(
-    ctx: lightbulb.Context,
-    guild: hikari.Guild | hikari.RESTGuild,
-    role_name: str | list[str] | None,
-    action: str,
-) -> bool:
-    """Check permission and respond with denial if lacking. Returns True if allowed."""
-    assert ctx.member
-    if isinstance(role_name, list):
-        allowed = utils.has_any_role_permission(guild, ctx.member, role_name)
-        label = (
-            "one of the **" + "**, **".join(role_name) + "** roles"
-            if role_name
-            else "server owner status"
-        )
-    else:
-        allowed = utils.has_permission(guild, ctx.member, role_name)
-        label = f"**{role_name}** role" if role_name else "server owner status"
-    if allowed:
-        return True
-    logger.warning(
-        "SubDay action denied, missing permission",
-        guild=guild.name,
-        user=ctx.user.username,
-        action=action,
-        required=label,
-    )
-    await ctx.respond(
-        f"You need {label} to use this command.",
-        flags=hikari.MessageFlag.EPHEMERAL,
-    )
-    return False
-
-
 async def help_handler(ctx: lightbulb.Context) -> None:
     """Show contextual help listing commands the user can access."""
     assert ctx.guild_id
-    bot = _get_bot(ctx)
-    guild = await utils.get_guild(ctx, bot)
+    gc = GuildContext.from_ctx(ctx)
     guild_state = state.load(int(ctx.guild_id))
     cfg = guild_state.config
 
@@ -109,17 +51,18 @@ async def help_handler(ctx: lightbulb.Context) -> None:
         "`/subday status` — Check your progress (and your subs')",
         "`/subday owner` — Set or clear your owner",
     ]
-    if ctx.member:
-        if utils.has_any_role_permission(guild, ctx.member, cfg.enroll_role):
+    if gc.member:
+        if gc.has_any_permission(cfg.enroll_role):
             lines.append("`/subday signup` — Sign up for the program")
-        if utils.has_permission(guild, ctx.member, cfg.complete_role):
+        if gc.has_permission(cfg.complete_role):
             lines.append("`/subday complete @user` — Mark a week complete")
             lines.append("`/subday list` — View all participants")
             lines.append("`/subday remove @user` — Remove a participant")
-        if utils.has_permission(guild, ctx.member, cfg.backfill_role):
+        if gc.has_permission(cfg.backfill_role):
             lines.append(
                 "`/subday complete @user week:<n>` — Backfill to a specific week"
             )
+    guild = await gc.fetch_guild()
     if ctx.user.id == guild.owner_id:
         lines.append("`/subday config` — Configure settings (server owner)")
         lines.append("`/subday prize-roles` — Set milestone roles (server owner)")
@@ -249,25 +192,23 @@ async def _try_post_achievement_embed(
 
 
 async def _post_achievement(  # noqa: PLR0913
-    bot: DragonpawBot,
-    guild_id: hikari.Snowflake,
+    gc: GuildContext,
     completer: hikari.Member,
     target: hikari.Member,
     week: int,
     cfg: SubDayGuildConfig,
-    guild_name: str,
 ) -> None:
     """Post achievement embed and handle milestone/graduation rewards."""
     logger.debug(
         "Posting achievement",
-        guild=guild_name,
+        guild=gc.name,
         user=target.username,
         week=week,
     )
     prizes = cfg.milestone_prizes()
 
     # Fetch channels once upfront
-    channels = await bot.rest.fetch_guild_channels(guild_id)
+    channels = await gc.bot.rest.fetch_guild_channels(gc.guild_id)
     channel_map = {
         c.name: c for c in channels if isinstance(c, hikari.GuildTextChannel)
     }
@@ -288,7 +229,7 @@ async def _post_achievement(  # noqa: PLR0913
         week_completed=True,
     )
 
-    await _dm_completion(target, week, chart_bytes, guild_name)
+    await _dm_completion(target, week, chart_bytes, gc.name)
 
     milestone_roles = cfg.milestone_roles()
 
@@ -306,7 +247,7 @@ async def _post_achievement(  # noqa: PLR0913
     if week == TOTAL_WEEKS:
         logger.info(
             "GRADUATED from Where I am Led!",
-            guild=guild_name,
+            guild=gc.name,
             user=target.username,
         )
         embed = _graduation_embed(target, prizes)
@@ -318,7 +259,7 @@ async def _post_achievement(  # noqa: PLR0913
     else:
         logger.info(
             "Reached milestone week",
-            guild=guild_name,
+            guild=gc.name,
             user=target.username,
             week=week,
             role=role_name or "no role",
@@ -337,12 +278,12 @@ async def _post_achievement(  # noqa: PLR0913
 
     # Assign milestone role (skip if None)
     if role_name:
-        role = await utils.guild_role_by_name(bot, guild_id, role_name)
+        role = await utils.guild_role_by_name(gc, role_name)
         if role:
             await target.add_role(role, reason=f"SubDay: week {week}")
             logger.info(
                 "Assigned milestone role",
-                guild=guild_name,
+                guild=gc.name,
                 user=target.username,
                 role=role.name,
             )
@@ -350,7 +291,7 @@ async def _post_achievement(  # noqa: PLR0913
             logger.warning("Milestone role not found in guild", role=role_name)
 
     # Log to guild log channel
-    await utils.log_to_guild(bot, guild_id, staff_msg)
+    await gc.log(staff_msg)
 
 
 # ---------------------------------------------------------------------------- #
@@ -404,6 +345,7 @@ async def _do_signup_async(
 
     guild = await bot.rest.fetch_guild(guild_id)
     guild_state.guild_name = guild.name
+    gc = GuildContext.from_guild(bot, guild)
 
     # DM week 1
     rules_text = prompts.load_rules()
@@ -440,9 +382,7 @@ async def _do_signup_async(
         guild=guild.name,
         user=user.username,
     )
-    await utils.log_to_guild(
-        bot, guild_id, f"📝 {user.mention} signed up for **Where I am Led**."
-    )
+    await gc.log(f"📝 {user.mention} signed up for **Where I am Led**.")
 
 
 async def handle_signup_interaction(interaction: hikari.ComponentInteraction) -> None:
@@ -466,8 +406,8 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
     guild_state = state.load(int(guild_id))
     cfg = guild_state.config
 
-    guild = await bot.rest.fetch_guild(guild_id)
-    if not utils.has_any_role_permission(guild, interaction.member, cfg.enroll_role):
+    gc = GuildContext.from_interaction(interaction)
+    if not gc.has_any_permission(cfg.enroll_role):
         label = (
             "one of the **" + "**, **".join(cfg.enroll_role) + "** roles"
             if cfg.enroll_role
@@ -623,8 +563,8 @@ class SubDayAbout(
             inline=False,
         )
 
-        bot = _get_bot(ctx)
-        row = bot.rest.build_message_action_row()
+        gc = GuildContext.from_ctx(ctx)
+        row = gc.bot.rest.build_message_action_row()
         row.add_interactive_button(
             hikari.ButtonStyle.SUCCESS, SUBDAY_SIGNUP_ID, label="Sign Up"
         )
@@ -769,12 +709,12 @@ class SubDayStatus(
             display_name = ctx.member.display_name if ctx.member else ctx.user.username
             embeds.append(_own_progress_embed(own_participant, display_name, cfg))
 
-        bot = _get_bot(ctx)
+        gc = GuildContext.from_ctx(ctx)
         for sub_uid, sub_p in owned_subs:
             if len(embeds) >= MAX_EMBEDS_PER_MESSAGE:
                 break
             try:
-                member = await bot.rest.fetch_member(ctx.guild_id, sub_uid)
+                member = await gc.bot.rest.fetch_member(ctx.guild_id, sub_uid)
                 sub_name = member.display_name
             except hikari.NotFoundError:
                 sub_name = f"User {sub_uid}"
@@ -796,9 +736,9 @@ class SubDayOwner(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
+        gc = GuildContext.from_ctx(ctx)
         guild_state = state.load(int(ctx.guild_id))
-        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
+        log = gc.logger
         user_id = int(ctx.user.id)
 
         if user_id not in guild_state.participants:
@@ -847,7 +787,7 @@ class SubDayOwner(
 
         # Target must be a member of this guild
         try:
-            await bot.rest.fetch_member(ctx.guild_id, target_id)
+            await gc.bot.rest.fetch_member(ctx.guild_id, target_id)
         except hikari.NotFoundError:
             await ctx.respond(
                 f"{target.mention} is not a member of this server.",
@@ -858,8 +798,8 @@ class SubDayOwner(
         # Send approval DM to the target
         participant.pending_owner_id = target_id
 
-        guild = await bot.rest.fetch_guild(ctx.guild_id)
-        row = bot.rest.build_message_action_row()
+        guild = await gc.fetch_guild()
+        row = gc.bot.rest.build_message_action_row()
         row.add_interactive_button(
             hikari.ButtonStyle.SUCCESS,
             f"{SUBDAY_OWNER_REQUEST_PREFIX}approve:{ctx.guild_id}:{user_id}",
@@ -936,7 +876,19 @@ async def _notify_sub_of_owner_decision(  # noqa: PLR0913
             sub_id=sub_user_id,
             approved=approved,
         )
-    await utils.log_to_guild(bot, hikari.Snowflake(guild_id), log_text)
+    # Build a minimal GuildContext for logging
+    guild = bot.cache.get_guild(hikari.Snowflake(guild_id))
+    if guild:
+        gc = GuildContext.from_guild(bot, guild)
+    else:
+        state_obj = bot.state(hikari.Snowflake(guild_id))
+        gc = GuildContext(
+            bot=bot,
+            guild_id=hikari.Snowflake(guild_id),
+            name=guild_name,
+            log_channel_id=state_obj.log_channel_id if state_obj else None,
+        )
+    await gc.log(log_text)
 
 
 async def _handle_owner_approve(
@@ -1091,16 +1043,15 @@ class SubDaySignup(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
 
-        if not await _check_permission(ctx, guild, cfg.enroll_role, "signup"):
+        if not await gc.check_permission(ctx, cfg.enroll_role, "signup"):
             return
 
-        msg = _do_signup(bot, ctx.guild_id, ctx.user)
+        msg = _do_signup(gc.bot, ctx.guild_id, ctx.user)
         if msg is None:
             await ctx.respond(
                 "You are already signed up! Use `/subday status` to check your progress.",
@@ -1108,7 +1059,7 @@ class SubDaySignup(
             )
             return
         await ctx.respond(msg, flags=hikari.MessageFlag.EPHEMERAL)
-        await _do_signup_async(bot, ctx.guild_id, ctx.user)
+        await _do_signup_async(gc.bot, ctx.guild_id, ctx.user)
 
 
 def _prepare_backfill(
@@ -1179,8 +1130,7 @@ class SubDayComplete(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912, PLR0915
         assert ctx.guild_id and ctx.member
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
@@ -1190,12 +1140,15 @@ class SubDayComplete(
 
         requested_week: int | None = self.week
         has_explicit_week = requested_week is not None
-        is_backfill = has_explicit_week
+        existing = guild_state.participants.get(target_id)
+        is_backfill = bool(
+            requested_week and (not existing or existing.current_week != requested_week)
+        )
 
         required_role = cfg.backfill_role if is_backfill else cfg.complete_role
         action = "backfill" if is_backfill else "complete"
 
-        if not await _check_permission(ctx, guild, required_role, action):
+        if not await gc.check_permission(ctx, required_role, action):
             return
 
         # Prevent self-completion
@@ -1223,9 +1176,9 @@ class SubDayComplete(
         participant.week_completed = True
         participant.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
 
-        # When sent=True, advance to the next week so the Sunday cron skips
-        # this participant (it bails when week_completed=False).
-        sent_next = bool(self.sent and is_backfill and week < TOTAL_WEEKS)
+        sent_next = bool(
+            self.sent and has_explicit_week and participant.current_week < TOTAL_WEEKS
+        )
         if sent_next:
             participant.current_week += 1
             participant.week_completed = False
@@ -1249,9 +1202,7 @@ class SubDayComplete(
 
         await ctx.respond(response, flags=hikari.MessageFlag.EPHEMERAL)
 
-        await _post_achievement(
-            bot, ctx.guild_id, ctx.member, target, week, cfg, guild_state.guild_name
-        )
+        await _post_achievement(gc, ctx.member, target, week, cfg)
 
         # Log completion (milestones are already logged by _post_achievement,
         # so only send for regular completions/backfills)
@@ -1260,23 +1211,29 @@ class SubDayComplete(
             if is_backfill:
                 staff_msg = (
                     f"⏩ {ctx.member.mention} backfilled {target.mention} "
-                    f"to **Week {week}** (complete"
+                    f"to **Week {week}** (complete)"
                     + (
-                        f", advanced to Week {week + 1} — prompt already sent"
+                        f", advanced to Week {week + 1} (prompt already sent)"
                         if sent_next
                         else ""
                     )
-                    + ")."
+                    + "."
+                )
+            elif sent_next:
+                staff_msg = (
+                    f"✅ {ctx.member.mention} marked {target.mention} "
+                    f"complete for **Week {week}**, "
+                    f"and advanced to Week {week + 1} (prompt already sent)."
                 )
             else:
                 staff_msg = (
                     f"✅ {ctx.member.mention} marked {target.mention} "
                     f"complete for **Week {week}**."
                 )
-            await utils.log_to_guild(bot, ctx.guild_id, staff_msg)
+            await gc.log(staff_msg)
         logger.info(
             "Completed SubDay week",
-            guild=guild_state.guild_name,
+            guild=gc.name,
             user=target.username,
             week=week,
             marked_by=ctx.user.username,
@@ -1292,17 +1249,17 @@ class SubDayList(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
 
-        if not await _check_permission(ctx, guild, cfg.complete_role, "list"):
+        if not await gc.check_permission(ctx, cfg.complete_role, "list"):
             return
 
-        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
-        log.info("Listing SubDay participants", enrolled=len(guild_state.participants))
+        gc.logger.info(
+            "Listing SubDay participants", enrolled=len(guild_state.participants)
+        )
 
         if not guild_state.participants:
             await ctx.respond(
@@ -1341,13 +1298,12 @@ class SubDayRemove(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
 
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
 
-        if not await _check_permission(ctx, guild, cfg.complete_role, "remove"):
+        if not await gc.check_permission(ctx, cfg.complete_role, "remove"):
             return
 
         target: hikari.Member = self.user  # type: ignore[assignment]
@@ -1381,9 +1337,7 @@ class SubDayRemove(
             user=target.username,
             removed_by=ctx.user.username,
         )
-        await utils.log_to_guild(
-            bot,
-            ctx.guild_id,
+        await gc.log(
             f"🗑️ {ctx.member.mention} removed {target.mention} from **Where I am Led**.",
         )
 
@@ -1610,7 +1564,9 @@ async def _reject_missing_perms(
 ) -> bool:
     """Check channel perms and send an error response if missing. Returns True if rejected."""
     channel_id = hikari.Snowflake(interaction.values[0])
-    missing = await utils.check_channel_perms(bot, guild_id, channel_id)
+    missing = await utils.check_channel_perms(
+        bot, hikari.Snowflake(guild_id), channel_id
+    )
     if not missing:
         return False
     missing_str = ", ".join(f"**{p}**" for p in missing)
@@ -1713,9 +1669,8 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         new_value=display_new,
     )
 
-    await utils.log_to_guild(
-        bot,
-        guild_id,
+    gc = GuildContext.from_interaction(interaction)
+    await gc.log(
         f"⚙️ **SubDay config changed** by {interaction.user.mention}: "
         f"`{field}` changed from `{display_old}` to `{display_new}`",
     )
@@ -1738,14 +1693,13 @@ class SubDayConfig(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
-        if not await _require_guild_owner(ctx, guild):
+        gc = GuildContext.from_ctx(ctx)
+        if not await gc.require_owner(ctx):
             return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _config_embed(cfg)
-        components = await _config_components(bot, ctx.guild_id, cfg)
+        components = await _config_components(gc.bot, ctx.guild_id, cfg)
         await ctx.respond(
             embed=embed,
             components=components,
@@ -1810,14 +1764,13 @@ class SubDayPrizeRoles(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
-        if not await _require_guild_owner(ctx, guild):
+        gc = GuildContext.from_ctx(ctx)
+        if not await gc.require_owner(ctx):
             return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _prize_roles_embed(cfg)
-        components = await _prize_roles_components(bot, ctx.guild_id, cfg)
+        components = await _prize_roles_components(gc.bot, ctx.guild_id, cfg)
         await ctx.respond(
             embed=embed,
             components=components,
@@ -1840,15 +1793,14 @@ class SubDayPrizes(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
-        if not await _require_guild_owner(ctx, guild):
+        gc = GuildContext.from_ctx(ctx)
+        if not await gc.require_owner(ctx):
             return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         changed = False
 
-        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
+        log = gc.logger
         for field in ("prize_13", "prize_26", "prize_39", "prize_52"):
             value = getattr(self, field, None)
             if value is not None:
@@ -1863,8 +1815,8 @@ class SubDayPrizes(
                 )
 
         if changed:
-            guild = await bot.rest.fetch_guild(ctx.guild_id)
-            guild_state.guild_name = guild.name
+            await gc.fetch_guild()
+            guild_state.guild_name = gc.name
             state.save(guild_state)
 
         prizes = cfg.milestone_prizes()

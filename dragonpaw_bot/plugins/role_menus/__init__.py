@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import hikari
 import lightbulb
 import structlog
@@ -14,10 +12,7 @@ from dragonpaw_bot.plugins.role_menus.commands import (
     parse_role_config,
 )
 from dragonpaw_bot.plugins.role_menus.constants import ROLE_MENU_PREFIX
-from dragonpaw_bot.utils import InteractionHandler
-
-if TYPE_CHECKING:
-    from dragonpaw_bot.bot import DragonpawBot
+from dragonpaw_bot.utils import GuildContext, InteractionHandler
 
 __all__ = [
     "INTERACTION_HANDLERS",
@@ -55,11 +50,9 @@ class RolesConfigCommand(
 
         await ctx.respond("Config loading now...", flags=hikari.MessageFlag.EPHEMERAL)
 
-        bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
-        guild = await bot.rest.fetch_guild(guild=ctx.guild_id)
-        log = logger.bind(guild=guild.name, user=ctx.user.username)
-        log.info("Setting up guild with file", url=self.url)
-        errors = await configure_guild(bot=bot, guild=guild, url=self.url)
+        gc = GuildContext.from_ctx(ctx)
+        gc.logger.info("Setting up guild with file", url=self.url)
+        errors = await configure_guild(gc=gc, url=self.url)
 
         if errors:
             error_lines = "\n".join(f"- {e}" for e in errors)

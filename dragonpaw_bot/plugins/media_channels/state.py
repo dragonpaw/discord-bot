@@ -40,7 +40,9 @@ def load(guild_id: int) -> MediaGuildState:
             data = yaml.safe_load(f)
     except (OSError, yaml.YAMLError):
         logger.exception(
-            "Failed to read media channels state file", guild_id=guild_id, path=str(path)
+            "Failed to read media channels state file",
+            guild_id=guild_id,
+            path=str(path),
         )
         raise
 
@@ -64,7 +66,9 @@ def load(guild_id: int) -> MediaGuildState:
 def save(guild_state: MediaGuildState) -> None:
     """Save guild state to disk and update cache."""
     path = _state_path(guild_state.guild_id)
-    logger.debug("Saving media channels state", guild=guild_state.guild_name, path=str(path))
+    logger.debug(
+        "Saving media channels state", guild=guild_state.guild_name, path=str(path)
+    )
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     try:
         with safer.open(path, "w") as f:

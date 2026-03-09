@@ -21,6 +21,7 @@ from dragonpaw_bot.plugins.role_menus.models import (
     RoleMenuState,
     RolesConfig,
 )
+from dragonpaw_bot.utils import ChannelContext, GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -97,8 +98,7 @@ def build_menu_select(
 
 
 async def configure_role_menus(
-    bot: DragonpawBot,
-    guild: hikari.Guild,
+    gc: GuildContext,
     config: RolesConfig,
     role_map: Mapping[str, hikari.Role],
 ) -> list[str]:
@@ -106,12 +106,10 @@ async def configure_role_menus(
 
     This wipes out all old role messages and sends new ones with select menus.
     """
-    log = logger.bind(guild=guild.name)
+    log = gc.logger
     errors: list[str] = []
 
-    channel = await utils.guild_channel_by_name(
-        bot=bot, guild=guild, name=config.channel
-    )
+    channel = await utils.guild_channel_by_name(gc, config.channel)
     if not channel:
         errors.append(f"Role channel '{config.channel}' doesn't seem to exist.")
         return errors
@@ -120,16 +118,22 @@ async def configure_role_menus(
         errors.append("Role channel is set, but no role menus seem to exist.")
         return errors
 
-    emoji_map = await utils.guild_emojis(bot=bot, guild=guild)
+    emoji_map = await utils.guild_emojis(gc)
 
     log.debug("Trying to delete old role menus...")
-    await utils.delete_my_messages(
-        bot=bot, guild_name=guild.name, channel_id=channel.id
+    cc = ChannelContext.from_entry(
+        gc,
+        type(
+            "_Entry",
+            (),
+            {"channel_id": int(channel.id), "channel_name": channel.name or ""},
+        )(),
     )
+    await cc.delete_my_messages()
 
     guild_state = RoleMenuGuildState(
-        guild_id=int(guild.id),
-        guild_name=guild.name,
+        guild_id=int(gc.guild_id),
+        guild_name=gc.name,
         role_channel_id=int(channel.id),
         role_names={int(r.id): r.name for r in role_map.values()},
     )
@@ -235,6 +239,7 @@ async def _apply_role_changes(
 ) -> tuple[list[str], list[str], list[str]]:
     """Add/remove roles based on the diff. Returns (added, removed, failed) name lists."""
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    gc = GuildContext.from_interaction(interaction)
     guild_snowflake = hikari.Snowflake(guild_state.guild_id)
     added: list[str] = []
     removed: list[str] = []
@@ -257,9 +262,7 @@ async def _apply_role_changes(
             except hikari.ForbiddenError:
                 display = guild_state.role_names.get(role_id, role_name)
                 failed.append(display)
-                await utils.log_to_guild(
-                    bot,
-                    guild_snowflake,
+                await gc.log(
                     f"🤯 Unable to add role: **{display}**, "
                     "please check my permissions relative to that role.",
                 )
@@ -275,9 +278,7 @@ async def _apply_role_changes(
             except hikari.ForbiddenError:
                 display = guild_state.role_names.get(role_id, role_name)
                 failed.append(display)
-                await utils.log_to_guild(
-                    bot,
-                    guild_snowflake,
+                await gc.log(
                     f"🤯 Unable to remove role: **{display}**, "
                     "please check my permissions relative to that role.",
                 )
@@ -365,14 +366,12 @@ async def handle_role_menu_interaction(
         )
 
 
-async def configure_guild(
-    bot: DragonpawBot, guild: hikari.Guild, url: str
-) -> list[str]:
+async def configure_guild(gc: GuildContext, url: str) -> list[str]:
     """Load a role menu config for a guild and set up role menus.
 
     Returns a list of warning/error messages for the caller to display.
     """
-    log = logger.bind(guild=guild.name)
+    log = gc.logger
     all_errors: list[str] = []
 
     if url.startswith("https://gist.github.com"):
@@ -383,35 +382,34 @@ async def configure_guild(
         config = parse_role_config(config_text)
     except tomllib.TOMLDecodeError as e:
         log.error("Error parsing TOML file", error=str(e))
-        await utils.log_to_guild(bot, guild.id, f"🤯 **Config error:** {e}")
+        await gc.log(f"🤯 **Config error:** {e}")
         return [f"Config error: {e}"]
     except pydantic.ValidationError as e:
         log.error("Config validation error", error=str(e))
-        await utils.log_to_guild(bot, guild.id, f"🤯 **Config validation error:** {e}")
+        await gc.log(f"🤯 **Config validation error:** {e}")
         return [f"Config validation error: {e}"]
 
-    role_map = await utils.guild_roles(bot=bot, guild=guild)
+    role_map = await utils.guild_roles(gc)
 
-    old_state = bot.state(guild.id)
+    old_state = gc.bot.state(gc.guild_id)
     guild_state = structs.GuildState(
-        id=guild.id,
-        name=guild.name,
+        id=gc.guild_id,
+        name=gc.name,
         config_url=url,
         config_last=datetime.datetime.now(),
         log_channel_id=old_state.log_channel_id if old_state else None,
     )
 
     errors = await configure_role_menus(
-        bot=bot,
-        guild=guild,
+        gc=gc,
         config=config,
         role_map=role_map,
     )
     for err in errors:
         log.warning("Error setting up role menus", error=err)
-        await utils.log_to_guild(bot, guild.id, f"🤯 **Role menu error:** {err}")
+        await gc.log(f"🤯 **Role menu error:** {err}")
     all_errors.extend(errors)
 
-    bot.state_update(guild_state)
+    gc.bot.state_update(guild_state)
     log.info("Configured guild.")
     return all_errors
