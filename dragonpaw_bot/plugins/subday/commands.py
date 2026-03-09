@@ -1115,7 +1115,6 @@ def _prepare_backfill(
     guild_state: state.SubDayGuildState,
     target_id: int,
     week: int,
-    sent: bool | None = None,
 ) -> tuple[SubDayParticipant, bool]:
     """Auto-enroll if needed and set the participant's week. Returns (participant, auto_enrolled)."""
     if target_id in guild_state.participants:
@@ -1130,7 +1129,7 @@ def _prepare_backfill(
         auto_enrolled = True
 
     participant.current_week = week
-    participant.week_sent = bool(sent)
+    participant.week_sent = False
     return participant, auto_enrolled
 
 
@@ -1210,7 +1209,7 @@ class SubDayComplete(
 
         if is_backfill:
             participant, auto_enrolled = _prepare_backfill(
-                guild_state, target_id, requested_week, self.sent
+                guild_state, target_id, requested_week
             )  # type: ignore[arg-type]
         else:
             error = _validate_normal_complete(guild_state, target, target_id)
@@ -1224,6 +1223,14 @@ class SubDayComplete(
         participant.week_completed = True
         participant.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
 
+        # When sent=True, advance to the next week so the Sunday cron skips
+        # this participant (it bails when week_completed=False).
+        sent_next = bool(self.sent and is_backfill and week < TOTAL_WEEKS)
+        if sent_next:
+            participant.current_week += 1
+            participant.week_completed = False
+            participant.week_sent = True
+
         state.save(guild_state)
 
         # Respond first to avoid interaction timeout, then do async work
@@ -1232,10 +1239,10 @@ class SubDayComplete(
                 f"Enrolled {target.mention} and completed "
                 f"**Week {week}** of Where I am Led."
             )
-        elif is_backfill and self.sent:
+        elif sent_next:
             response = (
-                f"Marked {target.mention} as complete for "
-                f"**Week {week}** (prompt marked as sent)."
+                f"Marked {target.mention} as complete for **Week {week}**, "
+                f"advanced to Week {week + 1} (prompt already sent)."
             )
         else:
             response = f"Marked {target.mention} as complete for **Week {week}**."
@@ -1254,7 +1261,11 @@ class SubDayComplete(
                 staff_msg = (
                     f"⏩ {ctx.member.mention} backfilled {target.mention} "
                     f"to **Week {week}** (complete"
-                    + (", prompt marked as sent" if self.sent else "")
+                    + (
+                        f", advanced to Week {week + 1} — prompt already sent"
+                        if sent_next
+                        else ""
+                    )
                     + ")."
                 )
             else:
