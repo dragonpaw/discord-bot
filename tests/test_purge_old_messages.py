@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock
 
 import hikari
 
-from dragonpaw_bot.utils import purge_old_messages
+from dragonpaw_bot.utils import ChannelContext
 
 GUILD = "test-guild"
 CHANNEL = "test-channel"
@@ -18,7 +18,7 @@ def _msg(age_hours: float) -> Mock:
     return msg
 
 
-def _make_bot(*messages: Mock, fetch_side_effect: Exception | None = None) -> Mock:
+def _make_cc(*messages: Mock, fetch_side_effect: Exception | None = None) -> ChannelContext:
     bot = Mock()
     if fetch_side_effect:
         bot.rest.fetch_messages = Mock(side_effect=fetch_side_effect)
@@ -33,7 +33,16 @@ def _make_bot(*messages: Mock, fetch_side_effect: Exception | None = None) -> Mo
         bot.rest.fetch_messages = Mock(side_effect=_async_gen)
     bot.rest.delete_messages = AsyncMock()
     bot.rest.delete_message = AsyncMock()
-    return bot
+
+    cc = ChannelContext(
+        bot=bot,
+        guild_id=hikari.Snowflake(1),
+        name=GUILD,
+        log_channel_id=None,
+        channel_id=hikari.Snowflake(CHANNEL_ID),
+        channel_name=CHANNEL,
+    )
+    return cc
 
 
 # ---------------------------------------------------------------------------- #
@@ -43,11 +52,11 @@ def _make_bot(*messages: Mock, fetch_side_effect: Exception | None = None) -> Mo
 
 async def test_no_expired_messages_returns_zero():
     recent = _msg(age_hours=1)  # 1h old, expiry is 2h → keep it
-    bot = _make_bot(recent)
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=120)
+    cc = _make_cc(recent)
+    count = await cc.purge_old_messages(expiry_minutes=120)
     assert count == 0
-    bot.rest.delete_messages.assert_not_called()
-    bot.rest.delete_message.assert_not_called()
+    cc.bot.rest.delete_messages.assert_not_called()
+    cc.bot.rest.delete_message.assert_not_called()
 
 
 # ---------------------------------------------------------------------------- #
@@ -57,11 +66,11 @@ async def test_no_expired_messages_returns_zero():
 
 async def test_bulk_delete_for_messages_within_14_days():
     msg = _msg(age_hours=48)  # 2 days old, expiry 1h → delete via bulk
-    bot = _make_bot(msg)
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    cc = _make_cc(msg)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 1
-    bot.rest.delete_messages.assert_called_once()
-    bot.rest.delete_message.assert_not_called()
+    cc.bot.rest.delete_messages.assert_called_once()
+    cc.bot.rest.delete_message.assert_not_called()
 
 
 async def test_bulk_delete_batches_at_100():
@@ -69,10 +78,10 @@ async def test_bulk_delete_batches_at_100():
     # Give each a unique id
     for i, m in enumerate(msgs):
         m.id = hikari.Snowflake(i + 1)
-    bot = _make_bot(*msgs)
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    cc = _make_cc(*msgs)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 150
-    assert bot.rest.delete_messages.call_count == 2  # 100 + 50
+    assert cc.bot.rest.delete_messages.call_count == 2  # 100 + 50
 
 
 # ---------------------------------------------------------------------------- #
@@ -82,20 +91,20 @@ async def test_bulk_delete_batches_at_100():
 
 async def test_single_delete_for_messages_older_than_14_days():
     msg = _msg(age_hours=24 * 15)  # 15 days old → single delete
-    bot = _make_bot(msg)
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    cc = _make_cc(msg)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 1
-    bot.rest.delete_message.assert_called_once()
-    bot.rest.delete_messages.assert_not_called()
+    cc.bot.rest.delete_message.assert_called_once()
+    cc.bot.rest.delete_messages.assert_not_called()
 
 
 async def test_not_found_in_single_delete_is_swallowed():
     msg = _msg(age_hours=24 * 15)
-    bot = _make_bot(msg)
-    bot.rest.delete_message = AsyncMock(
+    cc = _make_cc(msg)
+    cc.bot.rest.delete_message = AsyncMock(
         side_effect=hikari.NotFoundError(url="x", headers={}, raw_body=b"")
     )
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 1  # Still counted even if already gone
 
 
@@ -107,11 +116,11 @@ async def test_not_found_in_single_delete_is_swallowed():
 async def test_mixed_bulk_and_single():
     bulk_msg = _msg(age_hours=48)     # < 14 days → bulk
     single_msg = _msg(age_hours=24 * 20)  # > 14 days → single
-    bot = _make_bot(bulk_msg, single_msg)
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    cc = _make_cc(bulk_msg, single_msg)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 2
-    bot.rest.delete_messages.assert_called_once()
-    bot.rest.delete_message.assert_called_once()
+    cc.bot.rest.delete_messages.assert_called_once()
+    cc.bot.rest.delete_message.assert_called_once()
 
 
 # ---------------------------------------------------------------------------- #
@@ -120,20 +129,20 @@ async def test_mixed_bulk_and_single():
 
 
 async def test_forbidden_on_fetch_returns_zero():
-    bot = _make_bot(
+    cc = _make_cc(
         fetch_side_effect=hikari.ForbiddenError(url="x", headers={}, raw_body=b"")
     )
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 0
-    bot.rest.delete_messages.assert_not_called()
-    bot.rest.delete_message.assert_not_called()
+    cc.bot.rest.delete_messages.assert_not_called()
+    cc.bot.rest.delete_message.assert_not_called()
 
 
 async def test_not_found_on_fetch_returns_zero():
-    bot = _make_bot(
+    cc = _make_cc(
         fetch_side_effect=hikari.NotFoundError(url="x", headers={}, raw_body=b"")
     )
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 0
 
 
@@ -141,27 +150,27 @@ async def test_forbidden_on_bulk_delete_breaks_loop():
     msgs = [_msg(age_hours=48) for _ in range(3)]
     for i, m in enumerate(msgs):
         m.id = hikari.Snowflake(i + 1)
-    bot = _make_bot(*msgs)
-    bot.rest.delete_messages = AsyncMock(
+    cc = _make_cc(*msgs)
+    cc.bot.rest.delete_messages = AsyncMock(
         side_effect=hikari.ForbiddenError(url="x", headers={}, raw_body=b"")
     )
     # Should not raise; error is logged and loop breaks
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 3  # Still counted in return value
-    assert bot.rest.delete_messages.call_count == 1  # Stopped after first failure
+    assert cc.bot.rest.delete_messages.call_count == 1  # Stopped after first failure
 
 
 async def test_forbidden_on_single_delete_breaks_loop():
     msgs = [_msg(age_hours=24 * 20) for _ in range(3)]
     for i, m in enumerate(msgs):
         m.id = hikari.Snowflake(i + 1)
-    bot = _make_bot(*msgs)
-    bot.rest.delete_message = AsyncMock(
+    cc = _make_cc(*msgs)
+    cc.bot.rest.delete_message = AsyncMock(
         side_effect=hikari.ForbiddenError(url="x", headers={}, raw_body=b"")
     )
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 3
-    assert bot.rest.delete_message.call_count == 1  # Stopped after first failure
+    assert cc.bot.rest.delete_message.call_count == 1  # Stopped after first failure
 
 
 async def test_single_delete_limit_caps_deletes():
@@ -169,19 +178,17 @@ async def test_single_delete_limit_caps_deletes():
     msgs = [_msg(age_hours=24 * 20) for _ in range(1500)]
     for i, m in enumerate(msgs):
         m.id = hikari.Snowflake(i + 1)
-    bot = _make_bot(*msgs)
-    count = await purge_old_messages(bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60)
+    cc = _make_cc(*msgs)
+    count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 1000  # Capped; remainder picked up next run
-    assert bot.rest.delete_message.call_count == 1000
+    assert cc.bot.rest.delete_message.call_count == 1000
 
 
 async def test_single_delete_limit_custom():
     msgs = [_msg(age_hours=24 * 20) for _ in range(50)]
     for i, m in enumerate(msgs):
         m.id = hikari.Snowflake(i + 1)
-    bot = _make_bot(*msgs)
-    count = await purge_old_messages(
-        bot, GUILD, CHANNEL, CHANNEL_ID, expiry_minutes=60, single_delete_limit=10
-    )
+    cc = _make_cc(*msgs)
+    count = await cc.purge_old_messages(expiry_minutes=60, single_delete_limit=10)
     assert count == 10
-    assert bot.rest.delete_message.call_count == 10
+    assert cc.bot.rest.delete_message.call_count == 10

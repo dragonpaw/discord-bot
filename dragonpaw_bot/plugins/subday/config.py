@@ -12,13 +12,13 @@ import structlog
 from dragonpaw_bot import utils
 from dragonpaw_bot.colors import SOLARIZED_VIOLET
 from dragonpaw_bot.plugins.subday import state
-from dragonpaw_bot.plugins.subday.commands import _get_bot, _require_guild_owner
 from dragonpaw_bot.plugins.subday.constants import (
     MILESTONE_WEEKS,
     SUBDAY_CFG_ROLE_PREFIX,
     SUBDAY_CONFIG_PREFIX,
 )
 from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig
+from dragonpaw_bot.utils import GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -361,9 +361,8 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         new_value=display_new,
     )
 
-    await utils.log_to_guild(
-        bot,
-        guild_id,
+    gc = GuildContext.from_interaction(interaction)
+    await gc.log(
         f"⚙️ **SubDay config changed** by {interaction.user.mention}: "
         f"`{field}` changed from `{display_old}` to `{display_new}`",
     )
@@ -440,14 +439,13 @@ class SubDaySettings(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
-        if not await _require_guild_owner(ctx, guild):
+        gc = GuildContext.from_ctx(ctx)
+        if not await gc.require_owner(ctx):
             return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _config_embed(cfg)
-        components = await _config_components(bot, ctx.guild_id, cfg)
+        components = await _config_components(gc.bot, ctx.guild_id, cfg)
         await ctx.respond(
             embed=embed,
             components=components,
@@ -463,14 +461,13 @@ class SubDayPrizeRoles(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
-        if not await _require_guild_owner(ctx, guild):
+        gc = GuildContext.from_ctx(ctx)
+        if not await gc.require_owner(ctx):
             return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _prize_roles_embed(cfg)
-        components = await _prize_roles_components(bot, ctx.guild_id, cfg)
+        components = await _prize_roles_components(gc.bot, ctx.guild_id, cfg)
         await ctx.respond(
             embed=embed,
             components=components,
@@ -493,15 +490,14 @@ class SubDayPrizes(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
-        if not await _require_guild_owner(ctx, guild):
+        gc = GuildContext.from_ctx(ctx)
+        if not await gc.require_owner(ctx):
             return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
 
         changed = False
-        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
+        log = gc.logger
         for field in ("prize_13", "prize_26", "prize_39", "prize_52"):
             value = getattr(self, field, None)
             if value is not None:
@@ -516,8 +512,8 @@ class SubDayPrizes(
                 )
 
         if changed:
-            guild = await bot.rest.fetch_guild(ctx.guild_id)
-            guild_state.guild_name = guild.name
+            await gc.fetch_guild()
+            guild_state.guild_name = gc.name
             state.save(guild_state)
 
         prizes = cfg.milestone_prizes()

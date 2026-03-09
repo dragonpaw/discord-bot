@@ -11,9 +11,8 @@ import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot import utils
 from dragonpaw_bot.plugins.media_channels import state as media_state
-from dragonpaw_bot.plugins.media_channels.models import MediaChannelEntry
+from dragonpaw_bot.utils import ChannelContext, GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -118,34 +117,31 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
             error=str(exc),
         )
 
-    await utils.log_to_guild(
+    gc = GuildContext.from_guild(
         bot,
-        event.guild_id,
+        bot.cache.get_guild(event.guild_id)
+        or await bot.rest.fetch_guild(event.guild_id),
+    )
+    await gc.log(
         f"🐉 Nommed text-only post by {msg.author.username} in <#{event.channel_id}>",
     )
 
 
-async def _purge_media_channel(
-    bot: DragonpawBot, guild_name: str, entry: MediaChannelEntry
-) -> None:
-    if entry.expiry_minutes is None:
-        return
+async def _purge_media_channel(cc: ChannelContext, expiry_minutes: int) -> None:
     try:
-        deleted = await utils.purge_old_messages(
-            bot, guild_name, entry.channel_name, entry.channel_id, entry.expiry_minutes
-        )
+        deleted = await cc.purge_old_messages(expiry_minutes)
         if deleted:
             logger.info(
                 "Purged old messages from media channel",
-                guild=guild_name,
-                channel=entry.channel_name,
+                guild=cc.name,
+                channel=cc.channel_name,
                 count=deleted,
             )
     except Exception:
         logger.exception(
             "Media channel cleanup cron error",
-            guild=guild_name,
-            channel=entry.channel_name,
+            guild=cc.name,
+            channel=cc.channel_name,
         )
 
 
@@ -156,11 +152,12 @@ async def hourly_media_cleanup(bot: hikari.GatewayBot) -> None:
     guilds = list(bot.cache.get_guilds_view().values())
     logger.debug("Media channel cleanup hourly run", guild_count=len(guilds))
 
-    tasks = [
-        _purge_media_channel(bot, guild.name, entry)
-        for guild in guilds
-        for entry in media_state.load(int(guild.id)).channels
-        if entry.expiry_minutes is not None
-    ]
+    tasks = []
+    for guild in guilds:
+        gc = GuildContext.from_guild(bot, guild)
+        for entry in media_state.load(int(guild.id)).channels:
+            if entry.expiry_minutes is not None:
+                cc = ChannelContext.from_entry(gc, entry)
+                tasks.append(_purge_media_channel(cc, entry.expiry_minutes))
     if tasks:
         await asyncio.gather(*tasks)

@@ -1,51 +1,58 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Mapping, Optional, Sequence, Union
+from typing import Mapping, Optional, Sequence, Union
 
 import hikari
 import hikari.messages
-import lightbulb
 import structlog
 from emojis.db.db import EMOJI_DB
+
+from dragonpaw_bot.context import (
+    PERM_LABELS,
+    ChannelContext,
+    GuildContext,
+    check_channel_perms,
+    has_any_role_permission,
+    has_permission,
+    member_has_role,
+)
 
 InteractionHandler = Callable[[hikari.ComponentInteraction], Awaitable[None]]
 ModalHandler = Callable[[hikari.ModalInteraction], Awaitable[None]]
 
-if TYPE_CHECKING:
-    from dragonpaw_bot.bot import DragonpawBot
+# Re-export context classes and permission helpers for backwards compatibility
+__all__ = [
+    "PERM_LABELS",
+    "ChannelContext",
+    "GuildContext",
+    "check_channel_perms",
+    "has_any_role_permission",
+    "has_permission",
+    "member_has_role",
+]
 
 logger = structlog.get_logger(__name__)
+
 
 # ---------------------------------------------------------------------------- #
 #                           Discord utility functions                          #
 # ---------------------------------------------------------------------------- #
 
 
-async def delete_my_messages(
-    bot: DragonpawBot, guild_name: str, channel_id: hikari.Snowflake
-):
-    logger.debug("Checking for old messages in channel", channel_id=channel_id)
-    assert bot.user_id
-    async for message in bot.rest.fetch_messages(channel=channel_id):
-        if message.author.id == bot.user_id:
-            logger.debug("Deleting my message", guild=guild_name, message_id=message.id)
-            await message.delete()
-
-
 async def guild_channel_by_name(
-    bot: DragonpawBot,
-    guild: hikari.Guild | hikari.Snowflake,
+    gc: GuildContext,
     name: str,
 ) -> Optional[hikari.GuildTextChannel]:
     logger.debug("Finding channel", name=name)
+    guild = await gc.fetch_guild()
     if isinstance(guild, hikari.Guild):
         channels: Sequence[hikari.GuildChannel] = list(guild.get_channels().values())
         if not channels:
-            channels = await bot.rest.fetch_guild_channels(guild=guild.id)
+            channels = await gc.bot.rest.fetch_guild_channels(guild=guild.id)
     else:
-        channels = await bot.rest.fetch_guild_channels(guild=guild)
+        channels = await gc.bot.rest.fetch_guild_channels(guild=guild.id)
     for channel in channels:
         if channel.name == name and isinstance(channel, hikari.GuildTextChannel):
             return channel
@@ -53,17 +60,15 @@ async def guild_channel_by_name(
 
 
 async def guild_emojis(
-    bot: DragonpawBot, guild: hikari.Guild
+    gc: GuildContext,
 ) -> Mapping[str, Union[hikari.KnownCustomEmoji, hikari.UnicodeEmoji]]:
     emoji_map: dict[str, Union[hikari.KnownCustomEmoji, hikari.UnicodeEmoji]] = {}
 
-    # Load the custom emojis from the guild
-    custom_emojis = await bot.rest.fetch_guild_emojis(guild=guild.id)
+    custom_emojis = await gc.bot.rest.fetch_guild_emojis(guild=gc.guild_id)
     for e in custom_emojis:
         emoji_map[e.name] = e
         logger.debug("Guild emoji", name=e.name, emoji=e)
 
-    # Shove the Global Emojis in there as well
     for u in EMOJI_DB:
         for alias in u.aliases:
             emoji_map[alias] = hikari.UnicodeEmoji.parse(u.emoji)
@@ -71,264 +76,17 @@ async def guild_emojis(
     return emoji_map
 
 
-async def guild_roles(
-    bot: DragonpawBot, guild: hikari.Guild
-) -> Mapping[str, hikari.Role]:
-    roles = await bot.rest.fetch_roles(guild=guild.id)
+async def guild_roles(gc: GuildContext) -> Mapping[str, hikari.Role]:
+    roles = await gc.bot.rest.fetch_roles(guild=gc.guild_id)
     return {r.name: r for r in roles}
 
 
 async def guild_role_by_name(
-    bot: DragonpawBot,
-    guild: hikari.Guild | hikari.Snowflake,
+    gc: GuildContext,
     name: str,
 ) -> Optional[hikari.Role]:
-    guild_id = guild.id if isinstance(guild, hikari.Guild) else guild
-    roles = await bot.rest.fetch_roles(guild=guild_id)
+    roles = await gc.bot.rest.fetch_roles(guild=gc.guild_id)
     for r in roles:
         if r.name == name:
             return r
     return None
-
-
-def member_has_role(member: hikari.Member, role_name: str) -> bool:
-    """Check if a member has a role by name (via the guild's role cache)."""
-    for role in member.get_roles():
-        if role.name == role_name:
-            return True
-    return False
-
-
-def has_permission(
-    guild: hikari.Guild | hikari.RESTGuild,
-    member: hikari.Member,
-    role_name: str | None,
-) -> bool:
-    """Check if member has the named role, or is the server (guild) owner.
-
-    When role_name is None, only the guild owner passes (owner-only access).
-    """
-    if member.id == guild.owner_id:
-        return True
-    if role_name:
-        return member_has_role(member, role_name)
-    return False
-
-
-def has_any_role_permission(
-    guild: hikari.Guild | hikari.RESTGuild,
-    member: hikari.Member,
-    role_names: list[str],
-) -> bool:
-    """Check if member has any of the named roles, or is the guild owner.
-
-    When role_names is empty, only the guild owner passes (owner-only access).
-    """
-    if member.id == guild.owner_id:
-        return True
-    for name in role_names:
-        if member_has_role(member, name):
-            return True
-    return False
-
-
-async def get_guild(
-    ctx: lightbulb.Context, bot: DragonpawBot
-) -> hikari.Guild | hikari.RESTGuild:
-    """Get guild from cache, falling back to REST fetch."""
-    assert ctx.guild_id
-    guild = bot.cache.get_guild(ctx.guild_id)
-    if guild:
-        return guild
-    logger.debug("Guild not in cache, fetching via REST", guild_id=ctx.guild_id)
-    return await bot.rest.fetch_guild(ctx.guild_id)
-
-
-PERM_LABELS: dict[hikari.Permissions, str] = {
-    hikari.Permissions.SEND_MESSAGES: "Send Messages",
-    hikari.Permissions.EMBED_LINKS: "Embed Links",
-    hikari.Permissions.ATTACH_FILES: "Attach Files",
-}
-
-
-async def check_channel_perms(
-    bot: DragonpawBot, guild_id: hikari.Snowflake, channel_id: hikari.Snowflake
-) -> list[str]:
-    """Return a list of missing permission names for the bot in the given channel."""
-    logger.debug(
-        "Checking bot permissions in channel", channel_id=channel_id, guild_id=guild_id
-    )
-    assert bot.user_id
-    me = await bot.rest.fetch_member(guild_id, bot.user_id)
-    roles = await bot.rest.fetch_roles(guild_id)
-    role_map = {r.id: r for r in roles}
-
-    # Start with @everyone permissions
-    everyone_role = role_map.get(guild_id)
-    perms = everyone_role.permissions if everyone_role else hikari.Permissions.NONE
-
-    # Add permissions from member's roles
-    for role_id in me.role_ids:
-        role = role_map.get(role_id)
-        if role:
-            perms |= role.permissions
-
-    # Administrator bypasses everything
-    if perms & hikari.Permissions.ADMINISTRATOR:
-        return []
-
-    # Apply channel permission overwrites
-    try:
-        channel = await bot.rest.fetch_channel(channel_id)
-    except hikari.ForbiddenError:
-        logger.warning(
-            "Cannot fetch channel — bot lacks View Channel permission",
-            channel_id=channel_id,
-            guild_id=guild_id,
-        )
-        return ["View Channel (cannot access channel)"]
-    except hikari.NotFoundError:
-        logger.warning(
-            "Channel no longer exists", channel_id=channel_id, guild_id=guild_id
-        )
-        return ["Channel not found (may have been deleted)"]
-    if isinstance(channel, hikari.PermissibleGuildChannel):
-        overwrites = channel.permission_overwrites
-        # @everyone overwrite
-        if guild_id in overwrites:
-            ow = overwrites[guild_id]
-            perms &= ~ow.deny
-            perms |= ow.allow
-        # Role overwrites
-        allow = hikari.Permissions.NONE
-        deny = hikari.Permissions.NONE
-        for role_id in me.role_ids:
-            if role_id in overwrites:
-                ow = overwrites[role_id]
-                allow |= ow.allow
-                deny |= ow.deny
-        perms &= ~deny
-        perms |= allow
-        # Member-specific overwrite
-        if me.id in overwrites:
-            ow = overwrites[me.id]
-            perms &= ~ow.deny
-            perms |= ow.allow
-
-    missing = []
-    for perm, label in PERM_LABELS.items():
-        if not (perms & perm):
-            missing.append(label)
-    return missing
-
-
-async def purge_old_messages(  # noqa: PLR0913
-    bot: DragonpawBot,
-    guild_name: str,
-    channel_name: str,
-    channel_id: int,
-    expiry_minutes: int,
-    single_delete_limit: int = 1000,
-) -> int:
-    """Delete messages older than expiry_minutes from a channel.
-
-    Bulk-deletes where possible (< 14 days), single-deletes for older messages
-    (capped at single_delete_limit per call — remainder picked up next run).
-    Hikari handles rate limiting automatically. Returns count of deleted messages.
-    """
-    now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(minutes=expiry_minutes)
-    bulk_cutoff = now - timedelta(days=14)
-    to_bulk: list[hikari.Snowflake] = []
-    # Store (id, created_at) so we can report age of the oldest deleted message
-    to_single: list[tuple[hikari.Snowflake, datetime]] = []
-
-    try:
-        async for msg in bot.rest.fetch_messages(
-            channel=hikari.Snowflake(channel_id), before=cutoff
-        ):
-            if msg.created_at > bulk_cutoff:
-                to_bulk.append(msg.id)
-            else:
-                to_single.append((msg.id, msg.created_at))
-    except (hikari.ForbiddenError, hikari.NotFoundError) as exc:
-        logger.warning(
-            "Cannot fetch messages for cleanup",
-            guild=guild_name,
-            channel=channel_name,
-            error=str(exc),
-        )
-        return 0
-
-    for i in range(0, len(to_bulk), 100):
-        try:
-            await bot.rest.delete_messages(
-                hikari.Snowflake(channel_id), to_bulk[i : i + 100]
-            )
-        except (hikari.ForbiddenError, hikari.NotFoundError) as exc:
-            logger.warning(
-                "Bulk delete failed",
-                guild=guild_name,
-                channel=channel_name,
-                error=str(exc),
-            )
-            break
-
-    to_single = to_single[:single_delete_limit]
-
-    for idx, (msg_id, _) in enumerate(to_single):
-        if idx > 0 and idx % 10 == 0:
-            logger.debug(
-                "Single-deleting old messages, progress",
-                guild=guild_name,
-                channel=channel_name,
-                deleted_so_far=idx,
-                total=len(to_single),
-            )
-        try:
-            await bot.rest.delete_message(
-                channel=hikari.Snowflake(channel_id), message=msg_id
-            )
-        except hikari.NotFoundError:
-            pass  # Already gone
-        except hikari.ForbiddenError as exc:
-            logger.warning(
-                "Single delete failed, stopping",
-                guild=guild_name,
-                channel=channel_name,
-                error=str(exc),
-            )
-            break
-
-    if to_single:
-        oldest_age_days = (now - to_single[-1][1]).days
-        logger.debug(
-            "Single-delete complete",
-            guild=guild_name,
-            channel=channel_name,
-            count=len(to_single),
-            oldest_days=oldest_age_days,
-        )
-
-    return len(to_bulk) + len(to_single)
-
-
-async def log_to_guild(
-    bot: DragonpawBot,
-    guild_id: hikari.Snowflake,
-    message: str,
-) -> None:
-    """Send a plain-text message to the guild's configured log channel.
-
-    Silently returns if no log channel is configured.
-    """
-    c = bot.state(guild_id)
-    if not c or not c.log_channel_id:
-        logger.debug(
-            "No log channel configured, skipping log message", guild_id=guild_id
-        )
-        return
-    try:
-        await bot.rest.create_message(channel=c.log_channel_id, content=message)
-    except hikari.HTTPError as exc:
-        logger.warning("Failed to send log message", guild=c.name, error=str(exc))

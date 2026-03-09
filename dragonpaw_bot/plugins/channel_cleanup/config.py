@@ -3,26 +3,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot import utils
 from dragonpaw_bot.duration import format_duration, parse_duration_minutes
 from dragonpaw_bot.plugins.channel_cleanup import state as cleanup_state
 from dragonpaw_bot.plugins.channel_cleanup.models import CleanupChannelEntry
-
-if TYPE_CHECKING:
-    from dragonpaw_bot.bot import DragonpawBot
+from dragonpaw_bot.utils import GuildContext
 
 logger = structlog.get_logger(__name__)
-
-
-def _get_bot(ctx: lightbulb.Context) -> DragonpawBot:
-    bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
-    return bot
 
 
 def register(cleanup_sub: lightbulb.SubGroup) -> None:
@@ -47,9 +37,7 @@ class CleanupAdd(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         if not ctx.guild_id:
             return
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
-        log = logger.bind(guild=guild.name, user=ctx.user.username)
+        gc = GuildContext.from_ctx(ctx)
 
         try:
             expiry_minutes = parse_duration_minutes(self.expires)
@@ -58,7 +46,7 @@ class CleanupAdd(
             return
 
         st = cleanup_state.load(int(ctx.guild_id))
-        st.guild_name = guild.name
+        st.guild_name = gc.name
 
         # Replace existing entry for this channel if present
         st.channels = [c for c in st.channels if c.channel_id != self.channel.id]
@@ -71,7 +59,7 @@ class CleanupAdd(
         )
         cleanup_state.save(st)
 
-        log.info(
+        gc.logger.info(
             "Added cleanup channel",
             channel=self.channel.name,
             expiry_minutes=expiry_minutes,
@@ -82,9 +70,7 @@ class CleanupAdd(
             f"{format_duration(expiry_minutes)}.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        await utils.log_to_guild(
-            bot,
-            ctx.guild_id,
+        await gc.log(
             f"⚙️ {ctx.user.username} added <#{self.channel.id}> for auto-cleanup "
             f"(expires: {format_duration(expiry_minutes)}).",
         )
@@ -102,9 +88,7 @@ class CleanupRemove(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         if not ctx.guild_id:
             return
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
-        log = logger.bind(guild=guild.name, user=ctx.user.username)
+        gc = GuildContext.from_ctx(ctx)
 
         st = cleanup_state.load(int(ctx.guild_id))
         before = len(st.channels)
@@ -117,17 +101,15 @@ class CleanupRemove(
             )
             return
 
-        st.guild_name = guild.name
+        st.guild_name = gc.name
         cleanup_state.save(st)
-        log.info("Removed cleanup channel", channel=self.channel.name)
+        gc.logger.info("Removed cleanup channel", channel=self.channel.name)
 
         await ctx.respond(
             f"<#{self.channel.id}> removed from auto-cleanup.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        await utils.log_to_guild(
-            bot,
-            ctx.guild_id,
+        await gc.log(
             f"⚙️ {ctx.user.username} removed <#{self.channel.id}> from auto-cleanup.",
         )
 

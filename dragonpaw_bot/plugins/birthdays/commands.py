@@ -10,7 +10,6 @@ import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot import utils
 from dragonpaw_bot.colors import SOLARIZED_ORANGE, SOLARIZED_YELLOW
 from dragonpaw_bot.plugins.birthdays import state
 from dragonpaw_bot.plugins.birthdays.constants import (
@@ -20,6 +19,7 @@ from dragonpaw_bot.plugins.birthdays.constants import (
 from dragonpaw_bot.plugins.birthdays.models import (
     BirthdayEntry,
 )
+from dragonpaw_bot.utils import GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -55,64 +55,6 @@ MONTH_NAMES = [
 # ---------------------------------------------------------------------------- #
 #                                   Helpers                                    #
 # ---------------------------------------------------------------------------- #
-
-
-def _get_bot(ctx: lightbulb.Context) -> DragonpawBot:
-    bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
-    return bot
-
-
-async def _require_guild_owner(
-    ctx: lightbulb.Context,
-    guild: hikari.Guild | hikari.RESTGuild,
-) -> bool:
-    """Check if the user is the guild owner. Responds with denial if not. Returns True if allowed."""
-    if ctx.user.id == guild.owner_id:
-        return True
-    logger.warning(
-        "Birthday admin command denied, not guild owner",
-        guild=guild.name,
-        user=ctx.user.username,
-    )
-    await ctx.respond(
-        "Only the server owner can use this command.",
-        flags=hikari.MessageFlag.EPHEMERAL,
-    )
-    return False
-
-
-async def _check_permission(
-    ctx: lightbulb.Context,
-    guild: hikari.Guild | hikari.RESTGuild,
-    role_name: str | list[str] | None,
-    action: str,
-) -> bool:
-    """Check permission and respond with denial if lacking. Returns True if allowed."""
-    assert ctx.member
-    if isinstance(role_name, list):
-        allowed = utils.has_any_role_permission(guild, ctx.member, role_name)
-        label = (
-            "one of the **" + "**, **".join(role_name) + "** roles"
-            if role_name
-            else "server owner status"
-        )
-    else:
-        allowed = utils.has_permission(guild, ctx.member, role_name)
-        label = f"**{role_name}** role" if role_name else "server owner status"
-    if allowed:
-        return True
-    logger.warning(
-        "Birthday command denied, missing permission",
-        guild=guild.name,
-        user=ctx.user.username,
-        action=action,
-        required=label,
-    )
-    await ctx.respond(
-        f"You need {label} to use this command.",
-        flags=hikari.MessageFlag.EPHEMERAL,
-    )
-    return False
 
 
 def _validate_date(month: int, day: int) -> str | None:
@@ -230,11 +172,10 @@ class BirthdayStatus(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
-        if not await _check_permission(ctx, guild, cfg.register_role, "status"):
+        if not await gc.check_permission(ctx, cfg.register_role, "status"):
             return
         uid = int(ctx.user.id)
         entry = guild_state.birthdays.get(uid)
@@ -319,11 +260,10 @@ class BirthdaySet(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
-        if not await _check_permission(ctx, guild, cfg.register_role, "set"):
+        if not await gc.check_permission(ctx, cfg.register_role, "set"):
             return
 
         await ctx.respond(
@@ -343,11 +283,10 @@ class BirthdayWishlist(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
-        if not await _check_permission(ctx, guild, cfg.register_role, "wishlist"):
+        if not await gc.check_permission(ctx, cfg.register_role, "wishlist"):
             return
 
         uid = int(ctx.user.id)
@@ -592,9 +531,8 @@ async def _handle_set_timezone(
         day=day,
         timezone=tz_id,
     )
-    await utils.log_to_guild(
-        bot,
-        guild_id,
+    gc = GuildContext.from_interaction(interaction)
+    await gc.log(
         f"🎂 {interaction.user.mention} {action} their birthday: "
         f"{MONTH_NAMES[month]} {day}",
     )
@@ -665,12 +603,11 @@ class BirthdaySetFor(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
 
-        if not await _check_permission(ctx, guild, cfg.manage_role, "set-for"):
+        if not await gc.check_permission(ctx, cfg.manage_role, "set-for"):
             return
 
         error = _validate_date(self.month, self.day)
@@ -688,7 +625,7 @@ class BirthdaySetFor(
             or (existing.wishlist_url if existing else None),
         )
         guild_state.birthdays[uid] = entry
-        guild_state.guild_name = guild.name
+        guild_state.guild_name = gc.name
         state.save(guild_state)
 
         action = "updated" if existing else "registered"
@@ -700,16 +637,14 @@ class BirthdaySetFor(
 
         logger.info(
             "Birthday set for other user",
-            guild=guild.name,
+            guild=gc.name,
             user=ctx.user.username,
             action=action,
             target=self.user.username,
             month=MONTH_NAMES[self.month],
             day=self.day,
         )
-        await utils.log_to_guild(
-            bot,
-            ctx.guild_id,
+        await gc.log(
             f"🎂 {ctx.user.mention} {action} birthday for {self.user.mention}: "
             f"{MONTH_NAMES[self.month]} {self.day}",
         )
@@ -723,11 +658,10 @@ class BirthdayRemove(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
-        if not await _check_permission(ctx, guild, cfg.register_role, "remove"):
+        if not await gc.check_permission(ctx, cfg.register_role, "remove"):
             return
 
         uid = int(ctx.user.id)
@@ -749,14 +683,10 @@ class BirthdayRemove(
 
         logger.info(
             "Removed own birthday",
-            guild=guild_state.guild_name,
+            guild=gc.name,
             user=ctx.user.username,
         )
-        await utils.log_to_guild(
-            bot,
-            ctx.guild_id,
-            f"🎂 {ctx.user.mention} removed their birthday entry",
-        )
+        await gc.log(f"🎂 {ctx.user.mention} removed their birthday entry")
 
 
 class BirthdayRemoveFor(
@@ -769,12 +699,11 @@ class BirthdayRemoveFor(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
 
-        if not await _check_permission(ctx, guild, cfg.manage_role, "remove-for"):
+        if not await gc.check_permission(ctx, cfg.manage_role, "remove-for"):
             return
 
         uid = int(self.user.id)
@@ -786,7 +715,7 @@ class BirthdayRemoveFor(
             return
 
         del guild_state.birthdays[uid]
-        guild_state.guild_name = guild.name
+        guild_state.guild_name = gc.name
         state.save(guild_state)
 
         await ctx.respond(
@@ -796,14 +725,12 @@ class BirthdayRemoveFor(
 
         logger.info(
             "Removed birthday for other user",
-            guild=guild.name,
+            guild=gc.name,
             user=ctx.user.username,
             target=self.user.username,
         )
-        await utils.log_to_guild(
-            bot,
-            ctx.guild_id,
-            f"🎂 {ctx.user.mention} removed birthday entry for {self.user.mention}",
+        await gc.log(
+            f"🎂 {ctx.user.mention} removed birthday entry for {self.user.mention}"
         )
 
 
@@ -815,12 +742,11 @@ class BirthdayList(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        bot = _get_bot(ctx)
-        guild = await utils.get_guild(ctx, bot)
+        gc = GuildContext.from_ctx(ctx)
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
 
-        if not await _check_permission(ctx, guild, cfg.list_role, "list"):
+        if not await gc.check_permission(ctx, cfg.list_role, "list"):
             return
 
         if not guild_state.birthdays:

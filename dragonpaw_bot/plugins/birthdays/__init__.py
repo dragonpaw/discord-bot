@@ -19,7 +19,7 @@ from dragonpaw_bot.plugins.birthdays.models import (
     BirthdayEntry,
     BirthdayGuildConfig,
 )
-from dragonpaw_bot.utils import InteractionHandler, ModalHandler
+from dragonpaw_bot.utils import GuildContext, InteractionHandler, ModalHandler
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -51,23 +51,20 @@ loader.command(birthday_group)
 
 
 async def announce_birthday(
-    bot: DragonpawBot,
-    guild: hikari.Guild,
+    gc: GuildContext,
     member: hikari.Member,
     entry: BirthdayEntry,
     cfg: BirthdayGuildConfig,
 ) -> None:
     """Post announcement and assign birthday role for a member."""
-    log = logger.bind(guild=guild.name, user=member.username)
+    log = gc.logger.bind(user=member.username)
     # Post announcement embed
     if cfg.announcement_channel:
-        channel = await utils.guild_channel_by_name(
-            bot, guild, cfg.announcement_channel
-        )
+        channel = await utils.guild_channel_by_name(gc, cfg.announcement_channel)
         if channel:
             try:
                 embed = commands.build_announcement_embed(member, entry)
-                await bot.rest.create_message(
+                await gc.bot.rest.create_message(
                     channel=channel.id,
                     content="@everyone",
                     embed=embed,
@@ -84,61 +81,55 @@ async def announce_birthday(
 
     # Assign birthday role
     if cfg.birthday_role:
-        role = await utils.guild_role_by_name(bot, guild, cfg.birthday_role)
+        role = await utils.guild_role_by_name(gc, cfg.birthday_role)
         if role:
             try:
-                await bot.rest.add_role_to_member(guild.id, member.id, role.id)
+                await gc.bot.rest.add_role_to_member(gc.guild_id, member.id, role.id)
                 log.info("Assigned birthday role", role=cfg.birthday_role)
             except hikari.HTTPError as exc:
                 log.warning("Failed to assign birthday role", error=str(exc))
         else:
             log.warning("Birthday role not found", role=cfg.birthday_role)
 
-    await utils.log_to_guild(
-        bot,
-        guild.id,
-        f"🎂 Happy Birthday to {member.mention}!",
-    )
+    await gc.log(f"🎂 Happy Birthday to {member.mention}!")
 
 
 async def cleanup_birthday_role(
-    bot: DragonpawBot,
-    guild: hikari.Guild,
+    gc: GuildContext,
     member: hikari.Member,
     cfg: BirthdayGuildConfig,
 ) -> None:
     """Remove birthday role from a member whose birthday was yesterday."""
     if not cfg.birthday_role:
         return
-    role = await utils.guild_role_by_name(bot, guild, cfg.birthday_role)
+    role = await utils.guild_role_by_name(gc, cfg.birthday_role)
     if not role:
         return
-    log = logger.bind(guild=guild.name, user=member.username)
+    log = gc.logger.bind(user=member.username)
     try:
-        await bot.rest.remove_role_from_member(guild.id, member.id, role.id)
+        await gc.bot.rest.remove_role_from_member(gc.guild_id, member.id, role.id)
         log.info("Removed birthday role (birthday over)")
     except hikari.HTTPError as exc:
         log.warning("Failed to remove birthday role", error=str(exc))
 
 
 async def send_week_ahead_dm(
-    bot: DragonpawBot,
-    guild: hikari.Guild,
+    gc: GuildContext,
     guild_state: state.BirthdayGuildState,
     uid: int,
     entry: BirthdayEntry,
 ) -> None:
     """Send a week-ahead DM reminder to a member, removing them if they left."""
-    log = logger.bind(guild=guild.name, user_id=uid)
+    log = gc.logger.bind(user_id=uid)
     try:
-        member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
+        member = await gc.bot.rest.fetch_member(gc.guild_id, hikari.Snowflake(uid))
     except hikari.NotFoundError:
         log.warning("Member left guild, removing birthday entry")
         del guild_state.birthdays[uid]
         state.save(guild_state)
         return
 
-    member_log = logger.bind(guild=guild.name, user=member.username)
+    member_log = gc.logger.bind(user=member.username)
     wishlist_line = (
         f"Your current wishlist: {entry.wishlist_url}"
         if entry.wishlist_url
@@ -158,21 +149,21 @@ async def send_week_ahead_dm(
         member_log.warning("Failed to DM birthday reminder", error=str(exc))
 
 
-async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> None:
+async def process_guild_birthdays(gc: GuildContext) -> None:
     """Process birthday announcements, role cleanup, and reminders for one guild.
 
     Runs hourly. For each user, computes "today" in their local timezone and only
     processes events during the user's midnight hour (hour 0).
     """
-    log = logger.bind(guild=guild.name)
-    guild_id = int(guild.id)
+    log = gc.logger
+    guild_id = int(gc.guild_id)
     guild_state = state.load(guild_id)
 
     if not guild_state.birthdays:
         log.debug("No birthday entries, skipping")
         return
 
-    guild_state.guild_name = guild.name
+    guild_state.guild_name = gc.name
     cfg = guild_state.config
 
     log.debug("Hourly birthday check", entry_count=len(guild_state.birthdays))
@@ -196,13 +187,15 @@ async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> Non
                 log.debug("Already announced today, skipping", user_id=uid)
                 continue
             try:
-                member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
+                member = await gc.bot.rest.fetch_member(
+                    gc.guild_id, hikari.Snowflake(uid)
+                )
             except hikari.NotFoundError:
                 log.warning("Member left guild, removing birthday entry", user_id=uid)
                 del guild_state.birthdays[uid]
                 state.save(guild_state)
                 continue
-            await announce_birthday(bot, guild, member, entry, cfg)
+            await announce_birthday(gc, member, entry, cfg)
             entry.last_announced = local_today
             changed = True
             await asyncio.sleep(1)
@@ -210,7 +203,9 @@ async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> Non
         # Role cleanup for yesterday's birthdays
         elif cfg.birthday_role and commands.is_birthday_on_date(entry, local_yesterday):
             try:
-                member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
+                member = await gc.bot.rest.fetch_member(
+                    gc.guild_id, hikari.Snowflake(uid)
+                )
             except hikari.NotFoundError:
                 log.warning(
                     "Member left guild during role cleanup, removing entry",
@@ -219,11 +214,11 @@ async def process_guild_birthdays(bot: DragonpawBot, guild: hikari.Guild) -> Non
                 del guild_state.birthdays[uid]
                 changed = True
                 continue
-            await cleanup_birthday_role(bot, guild, member, cfg)
+            await cleanup_birthday_role(gc, member, cfg)
 
         # Week-ahead DM reminder
         if commands.is_birthday_on_date(entry, local_week_ahead):
-            await send_week_ahead_dm(bot, guild, guild_state, uid, entry)
+            await send_week_ahead_dm(gc, guild_state, uid, entry)
             await asyncio.sleep(1)
 
     if changed:
@@ -238,7 +233,8 @@ async def hourly_birthdays(bot: hikari.GatewayBot) -> None:
     logger.debug("Birthday hourly run", guild_count=len(guilds))
     for guild in guilds:
         try:
-            await process_guild_birthdays(bot, guild)
+            gc = GuildContext.from_guild(bot, guild)
+            await process_guild_birthdays(gc)
         except Exception:
             logger.exception("Error processing birthdays for guild", guild=guild.name)
 
@@ -279,6 +275,7 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
         )
         return
 
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
     guild = event.get_guild()
     guild_name = guild.name if guild else str(event.guild_id)
     logger.warning(
@@ -287,9 +284,12 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
         user_id=uid,
     )
 
-    bot: DragonpawBot = event.app  # type: ignore[assignment]
-    await utils.log_to_guild(
-        bot,
-        event.guild_id,
-        f"🎂 Removed birthday entry for departed member <@{uid}>",
+    gs = bot.state(event.guild_id)
+    log_channel_id = gs.log_channel_id if gs else None
+    gc = GuildContext(
+        bot=bot,
+        guild_id=event.guild_id,
+        name=guild_name,
+        log_channel_id=log_channel_id,
     )
+    await gc.log(f"🎂 Removed birthday entry for departed member <@{uid}>")
