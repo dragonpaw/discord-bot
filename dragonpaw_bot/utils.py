@@ -244,7 +244,9 @@ async def purge_old_messages(  # noqa: PLR0913
     to_single: list[tuple[hikari.Snowflake, datetime]] = []
 
     try:
-        async for msg in bot.rest.fetch_messages(channel=hikari.Snowflake(channel_id), before=cutoff):
+        async for msg in bot.rest.fetch_messages(
+            channel=hikari.Snowflake(channel_id), before=cutoff
+        ):
             if msg.created_at > bulk_cutoff:
                 to_bulk.append(msg.id)
             else:
@@ -260,7 +262,9 @@ async def purge_old_messages(  # noqa: PLR0913
 
     for i in range(0, len(to_bulk), 100):
         try:
-            await bot.rest.delete_messages(hikari.Snowflake(channel_id), to_bulk[i : i + 100])
+            await bot.rest.delete_messages(
+                hikari.Snowflake(channel_id), to_bulk[i : i + 100]
+            )
         except (hikari.ForbiddenError, hikari.NotFoundError) as exc:
             logger.warning(
                 "Bulk delete failed",
@@ -282,7 +286,9 @@ async def purge_old_messages(  # noqa: PLR0913
                 total=len(to_single),
             )
         try:
-            await bot.rest.delete_message(channel=hikari.Snowflake(channel_id), message=msg_id)
+            await bot.rest.delete_message(
+                channel=hikari.Snowflake(channel_id), message=msg_id
+            )
         except hikari.NotFoundError:
             pass  # Already gone
         except hikari.ForbiddenError as exc:

@@ -4,13 +4,13 @@ A 52-week guided journal program for submissives. Participants sign up, receive 
 
 ### Per-Server Configuration
 
-All settings are configurable per server via `/subday config`, `/subday prize-roles`, and `/subday prizes` (owner only). Settings are stored in the guild's `SubDayGuildState` and persisted to YAML. Old state files without a `config` key automatically get defaults via Pydantic.
+All settings are configurable per server via `/config subday settings`, `/config subday prize-roles`, and `/config subday prizes` (owner only). Settings are stored in the guild's `SubDayGuildState` and persisted to YAML. Old state files without a `config` key automatically get defaults via Pydantic.
 
 All role fields default to None (guild-owner-only access) and channel fields default to None (disabled) until configured. `enroll_role` supports multiple roles (OR logic: any match grants access); old single-string values are automatically migrated to a list.
 
 The guild owner always passes role permission checks (enroll, complete, backfill), regardless of whether they have the required role.
 
-Notifications (completions, milestones, signups, removals, owner accept/deny, config changes) are sent to the guild-wide log channel configured via `/logging`.
+Notifications (completions, milestones, signups, removals, owner accept/deny, config changes) are sent to the guild-wide log channel configured via `/config bot logging`.
 
 ### Slash Commands (`/subday`)
 
@@ -22,13 +22,17 @@ Notifications (completions, milestones, signups, removals, owner accept/deny, co
 - **complete @user [week:\<n\>] [sent:\<bool\>]** — Requires `complete_role`. Marks the user's current week done. Cannot complete yourself. DMs a completion embed with star chart. Posts to `achievements_channel` if set. At milestones: assigns role, logs prize info. With optional `week` parameter: requires `backfill_role` (explicit week always = backfill), sets the participant to that week and marks it complete. Auto-enrolls the user if not signed up. With `sent:True` alongside `week`: after marking complete, advances the participant to the next week with `week_sent = True` so the Sunday cron skips the re-send (use when the next prompt was already DM'd manually).
 - **list** — Requires `complete_role`. Shows all participants + progress with status icons.
 - **remove @user** — Requires `complete_role`. Removes a participant.
-- **config** — Owner only. Shows current settings with interactive select menus. Changes save immediately on each selection.
+
+
+### Config Commands (`/config subday`)
+
+- **settings** — Owner only. Shows current settings with interactive select menus. Changes save immediately on each selection.
 - **prize-roles** — Owner only. Shows 4 role select menus (one per milestone week). Deselect to disable role assignment for that milestone.
 - **prizes** — Owner only. Sets milestone prize descriptions. With no options, shows current prizes.
 
 ### Config Settings
 
-**Roles and channels** (`/subday config`):
+**Roles and channels** (`/config subday settings`):
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -37,7 +41,7 @@ Notifications (completions, milestones, signups, removals, owner accept/deny, co
 | Backfill role | Role select | _None (owner-only)_ | Role allowed to backfill weeks |
 | Achievements channel | Channel select | _None (disabled)_ | Channel for public achievement posts |
 
-**Milestone roles** (`/subday prize-roles`):
+**Milestone roles** (`/config subday prize-roles`):
 
 | Week | Default Role |
 |------|-------------|
@@ -48,7 +52,7 @@ Notifications (completions, milestones, signups, removals, owner accept/deny, co
 
 Setting a role to `None` disables role assignment for that milestone (the achievement embed still posts).
 
-**Milestone prizes** (`/subday prizes`):
+**Milestone prizes** (`/config subday prizes`):
 
 | Week | Default Prize |
 |------|--------------|
@@ -121,7 +125,8 @@ Submissives can register an owner via `/subday owner @user`. The owner receives 
 |------|---------|
 | `__init__.py` | Extension entry point (lightbulb Loader), component interaction listener with error boundaries, Sunday cron task |
 | `chart.py` | Star chart image generation (Pillow) |
-| `commands.py` | All slash commands, achievement embeds, milestone logic, config/prizes commands, component interaction handlers |
+| `commands.py` | Non-config slash commands, achievement embeds, milestone logic, component interaction handlers |
+| `config.py` | Config commands (`/config subday`), config interaction handler, config UI helpers |
 | `constants.py` | Shared constants: `TOTAL_WEEKS`, `MILESTONE_WEEKS`, `WEEKS_DIR`, interaction ID prefixes |
 | `models.py` | Pydantic models: `SubDayParticipant`, `SubDayGuildConfig`, `SubDayGuildState` |
 | `prompts.py` | Parses weekly markdown files, builds prompt embeds |
@@ -142,5 +147,5 @@ Persisted as `state/subday_{guild_id}.yaml`, separate from the main guild state.
 
 ### Required Discord Setup
 
-- Roles: Milestone roles as configured via `/subday prize-roles`, plus any permission roles configured via `/subday config`
-- Channels: `achievements_channel` via `/subday config`; guild-wide log channel via `/logging`
+- Roles: Milestone roles as configured via `/config subday prize-roles`, plus any permission roles configured via `/config subday settings`
+- Channels: `achievements_channel` via `/config subday settings`; guild-wide log channel via `/config bot logging`

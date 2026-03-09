@@ -4,11 +4,11 @@ Tracks member birthdays and announces them in a configured channel. Users can se
 
 ### Per-Server Configuration
 
-All settings are configurable per server via `/birthday config` (owner only). Settings are stored in `BirthdayGuildState` and persisted to YAML. Role fields default to None (guild-owner-only access) and channel fields default to None (disabled) until configured.
+All settings are configurable per server via `/config birthday settings` (owner only). Settings are stored in `BirthdayGuildState` and persisted to YAML. Role fields default to None (guild-owner-only access) and channel fields default to None (disabled) until configured.
 
 The guild owner (i.e. the Discord server owner, not a SubDay "owner") always passes role permission checks regardless of whether they have the required role.
 
-Notifications (registrations, removals, config changes) are sent to the guild-wide log channel configured via `/logging`.
+Notifications (registrations, removals, config changes) are sent to the guild-wide log channel configured via `/config bot logging`.
 
 ### Slash Commands (`/birthday`)
 
@@ -19,9 +19,13 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 - **remove** — Remove your own birthday entry. Requires `register_role`.
 - **remove-for @user** — Requires `manage_role`. Remove another user's birthday entry.
 - **list** — Requires `list_role`. Shows all registered birthdays grouped by month, sorted by day. Includes wishlist links where set.
-- **config** — Owner only. Shows current settings with interactive select menus. Each menu displays the current configured value (not None/blank) as its default selection. Changes save immediately on each selection.
 
-### Config Settings (`/birthday config`)
+
+### Config Commands (`/config birthday`)
+
+- **settings** — Owner only. Shows current settings with interactive select menus. Each menu displays the current configured value (not None/blank) as its default selection. Changes save immediately on each selection.
+
+### Config Settings (`/config birthday settings`)
 
 - **Register role(s)** (role multi-select, default: _None/owner-only_) — Role(s) allowed to self-register, view status, update wishlist, and remove own birthday
 - **Manage role** (role select, default: _None/owner-only_) — Role allowed to set/remove birthdays for others
@@ -73,7 +77,8 @@ Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild sta
 ### File Structure
 
 - **`__init__.py`** — Extension entry point (lightbulb Loader), hourly cron task, member leave listener
-- **`commands.py`** — All slash commands, config interaction handlers, announcement embeds
+- **`commands.py`** — Non-config slash commands, announcement embeds
+- **`config.py`** — Config command (`/config birthday settings`), config interaction handler, config UI helpers
 - **`models.py`** — Pydantic models: `BirthdayEntry`, `BirthdayGuildConfig`, `BirthdayGuildState`
 - **`state.py`** — YAML state persistence (load/save)
 - **`constants.py`** — Interaction ID prefixes and timezone region data
@@ -96,8 +101,8 @@ All log messages use structlog with `guild=` and `user=` keyword arguments. Inte
 
 ### Required Discord Setup
 
-- Announcement channel via `/birthday config`
-- Birthday role via `/birthday config` (optional)
-- Permission roles via `/birthday config` (optional, defaults to owner-only)
-- Guild-wide log channel via `/logging` (optional)
+- Announcement channel via `/config birthday settings`
+- Birthday role via `/config birthday settings` (optional)
+- Permission roles via `/config birthday settings` (optional, defaults to owner-only)
+- Guild-wide log channel via `/config bot logging` (optional)
 - Bot needs Manage Roles permission if birthday role is configured

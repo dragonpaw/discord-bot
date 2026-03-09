@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Slash commands: /config cleanup add|remove|status"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -146,7 +147,8 @@ class CleanupStatus(
 
         if not st.channels:
             await ctx.respond(
-                "No auto-cleanup channels configured.", flags=hikari.MessageFlag.EPHEMERAL
+                "No auto-cleanup channels configured.",
+                flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
 

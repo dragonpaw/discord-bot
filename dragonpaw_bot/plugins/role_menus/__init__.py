@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-import hikari
 import lightbulb
 import structlog
 
@@ -15,9 +12,6 @@ from dragonpaw_bot.plugins.role_menus.commands import (
 )
 from dragonpaw_bot.plugins.role_menus.constants import ROLE_MENU_PREFIX
 from dragonpaw_bot.utils import InteractionHandler
-
-if TYPE_CHECKING:
-    from dragonpaw_bot.bot import DragonpawBot
 
 __all__ = [
     "INTERACTION_HANDLERS",
@@ -33,42 +27,3 @@ INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
 }
 
 loader = lightbulb.Loader()
-
-roles_group = lightbulb.Group("roles", "Role menu management")
-loader.command(roles_group)
-
-
-@roles_group.register
-class RolesConfigCommand(
-    lightbulb.SlashCommand,
-    name="config",
-    description="Configure role menus via a URL to a TOML file.",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_ROLES)],
-):
-    url = lightbulb.string("url", "Link to the config you wish to use")
-
-    @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:
-        if not ctx.guild_id:
-            logger.error("Interaction without a guild")
-            return
-
-        await ctx.respond("Config loading now...", flags=hikari.MessageFlag.EPHEMERAL)
-
-        bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
-        guild = await bot.rest.fetch_guild(guild=ctx.guild_id)
-        log = logger.bind(guild=guild.name, user=ctx.user.username)
-        log.info("Setting up guild with file", url=self.url)
-        errors = await configure_guild(bot=bot, guild=guild, url=self.url)
-
-        if errors:
-            error_lines = "\n".join(f"- {e}" for e in errors)
-            await ctx.respond(
-                f"⚠️ **Config loaded with warnings:**\n{error_lines}",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-        else:
-            await ctx.respond(
-                "✅ Config loaded successfully.",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Slash commands: /config media add|remove|status"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -109,7 +110,9 @@ class MediaRemove(
     description="Stop enforcing media-only policy in a channel.",
     hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
 ):
-    channel = lightbulb.channel("channel", "Channel to remove from media-only enforcement")
+    channel = lightbulb.channel(
+        "channel", "Channel to remove from media-only enforcement"
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:

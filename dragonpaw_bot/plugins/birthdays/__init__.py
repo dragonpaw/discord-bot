@@ -10,6 +10,7 @@ import structlog
 
 from dragonpaw_bot import utils
 from dragonpaw_bot.plugins.birthdays import commands, state
+from dragonpaw_bot.plugins.birthdays import config as birthday_config
 from dragonpaw_bot.plugins.birthdays.constants import (
     BIRTHDAY_CONFIG_PREFIX,
     BIRTHDAY_PREFIX,
@@ -28,7 +29,7 @@ __all__ = ["INTERACTION_HANDLERS", "MODAL_HANDLERS"]
 logger = structlog.get_logger(__name__)
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
-    BIRTHDAY_CONFIG_PREFIX: commands.handle_config_interaction,
+    BIRTHDAY_CONFIG_PREFIX: birthday_config.handle_config_interaction,
     BIRTHDAY_PREFIX: commands.handle_tz_interaction,
 }
 

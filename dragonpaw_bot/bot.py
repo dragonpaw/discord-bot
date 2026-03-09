@@ -17,10 +17,13 @@ from dragonpaw_bot import structs
 from dragonpaw_bot.logging import configure_logging
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
+from dragonpaw_bot.plugins.birthdays import config as birthday_config
 from dragonpaw_bot.plugins.channel_cleanup import config as cleanup_config
 from dragonpaw_bot.plugins.media_channels import config as media_config
 from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
+from dragonpaw_bot.plugins.role_menus import config as roles_config
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
+from dragonpaw_bot.plugins.subday import config as subday_config
 from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 configure_logging()
@@ -268,15 +271,15 @@ async def on_guild_join(event: hikari.GuildJoinEvent):
 loader = lightbulb.Loader()
 
 _config_group = lightbulb.Group("config", "Bot configuration")
+_bot_sub = _config_group.subgroup("bot", "Bot-wide settings")
 _media_sub = _config_group.subgroup("media", "Media-only channel settings")
 _cleanup_sub = _config_group.subgroup("cleanup", "Auto-expiry channel settings")
-media_config.register(_media_sub)
-cleanup_config.register(_cleanup_sub)
-loader.command(_config_group)
+_subday_sub = _config_group.subgroup("subday", "SubDay journal program settings")
+_birthday_sub = _config_group.subgroup("birthday", "Birthday tracking settings")
+_roles_sub = _config_group.subgroup("roles", "Role menu settings")
 
 
-@loader.command
-class Logging(
+class BotLogging(
     lightbulb.SlashCommand,
     name="logging",
     description="Set or clear the bot's log channel for this server.",
@@ -320,6 +323,15 @@ class Logging(
             )
 
 
+_bot_sub.register(BotLogging)
+media_config.register(_media_sub)
+cleanup_config.register(_cleanup_sub)
+subday_config.register(_subday_sub)
+birthday_config.register(_birthday_sub)
+roles_config.register(_roles_sub)
+loader.command(_config_group)
+
+
 async def _respond_interaction_error(
     interaction: hikari.ComponentInteraction | hikari.ModalInteraction,
 ) -> None:
@@ -361,7 +373,9 @@ async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None
     )
     structlog.contextvars.bind_contextvars(
         guild=cached_guild.name if cached_guild else str(interaction.guild_id),
-        user=interaction.member.display_name if interaction.member else interaction.user.username,
+        user=interaction.member.display_name
+        if interaction.member
+        else interaction.user.username,
         custom_id=cid,
     )
 

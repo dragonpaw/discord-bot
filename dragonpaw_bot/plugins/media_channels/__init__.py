@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Media channels plugin: enforces media-only policy in configured channels."""
+
 from __future__ import annotations
 
 import asyncio
@@ -34,7 +35,10 @@ def _has_media(message: hikari.Message) -> bool:
 
 
 async def _delete_after(
-    bot: DragonpawBot, channel_id: hikari.Snowflake, message_id: hikari.Snowflake, delay: float
+    bot: DragonpawBot,
+    channel_id: hikari.Snowflake,
+    message_id: hikari.Snowflake,
+    delay: float,
 ) -> None:
     await asyncio.sleep(delay)
     try:
@@ -58,7 +62,9 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
     msg = event.message
 
     guild_st = media_state.load(int(event.guild_id))
-    entry = next((c for c in guild_st.channels if c.channel_id == event.channel_id), None)
+    entry = next(
+        (c for c in guild_st.channels if c.channel_id == event.channel_id), None
+    )
     if entry is None:
         return
 
@@ -89,16 +95,20 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
     )
 
     try:
-        notice = await bot.rest.create_message(channel=event.channel_id, content=notice_text)
+        notice = await bot.rest.create_message(
+            channel=event.channel_id, content=notice_text
+        )
         task = asyncio.create_task(
             _delete_after(bot, event.channel_id, notice.id, delay=15.0)
         )
         task.add_done_callback(
-            lambda t: logger.warning(
-                "Unexpected error deleting notice message", error=str(t.exception())
+            lambda t: (
+                logger.warning(
+                    "Unexpected error deleting notice message", error=str(t.exception())
+                )
+                if not t.cancelled() and t.exception() is not None
+                else None
             )
-            if not t.cancelled() and t.exception() is not None
-            else None
         )
     except hikari.HTTPError as exc:
         logger.warning(

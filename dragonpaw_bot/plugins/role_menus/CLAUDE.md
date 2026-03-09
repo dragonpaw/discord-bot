@@ -1,10 +1,10 @@
 ## Role Menus Plugin
 
-Provides role selection using Discord's text select menus (dropdowns). Server admins configure role menus via TOML config files loaded through `/roles config`. Each menu appears as an embed with a dropdown in a designated channel.
+Provides role selection using Discord's text select menus (dropdowns). Server admins configure role menus via TOML config files loaded through `/config roles setup`. Each menu appears as an embed with a dropdown in a designated channel.
 
 ### How It Works
 
-1. Admin provides a TOML config URL via `/roles config`
+1. Admin provides a TOML config URL via `/config roles setup`
 2. Bot parses the flat TOML format directly into a `RolesConfig`
 3. Bot deletes old messages in the role channel and posts new embeds with select menus
 4. Members pick roles from dropdowns; the bot adds/removes roles accordingly
@@ -56,6 +56,7 @@ Persisted as `state/role_menus_{guild_id}.yaml`, separate from the main guild st
 
 - **`__init__.py`** — Extension entry point (lightbulb Loader), `INTERACTION_HANDLERS` and `parse_role_config` exports
 - **`commands.py`** — `parse_role_config()`, embed building, select menu building, `configure_role_menus()`, `handle_role_menu_interaction()`
+- **`config.py`** — Config command (`/config roles setup`), `register()` for `/config` group integration
 - **`models.py`** — Pydantic models: config (`RoleMenuOptionConfig`, `RoleMenuConfig`, `RolesConfig`) and state (`RoleMenuState`, `RoleMenuGuildState`)
 - **`state.py`** — YAML state persistence (load/save) with in-memory cache
 - **`constants.py`** — `ROLE_MENU_PREFIX` interaction ID prefix

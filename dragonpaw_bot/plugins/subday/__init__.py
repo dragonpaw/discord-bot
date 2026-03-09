@@ -9,6 +9,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.plugins.subday import commands, prompts, state
+from dragonpaw_bot.plugins.subday import config as subday_config
 from dragonpaw_bot.plugins.subday.constants import (
     MILESTONE_WEEKS,
     SUBDAY_CFG_ROLE_PREFIX,
@@ -30,8 +31,8 @@ logger = structlog.get_logger(__name__)
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     SUBDAY_OWNER_REQUEST_PREFIX: commands.handle_owner_interaction,
     SUBDAY_SIGNUP_ID: commands.handle_signup_interaction,
-    SUBDAY_CONFIG_PREFIX: commands.handle_config_interaction,
-    SUBDAY_CFG_ROLE_PREFIX: commands.handle_config_interaction,
+    SUBDAY_CONFIG_PREFIX: subday_config.handle_config_interaction,
+    SUBDAY_CFG_ROLE_PREFIX: subday_config.handle_config_interaction,
 }
 
 loader = lightbulb.Loader()

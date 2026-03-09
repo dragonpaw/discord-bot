@@ -20,7 +20,9 @@ logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
 
 
-async def _purge_channel(bot: DragonpawBot, guild_name: str, entry: CleanupChannelEntry) -> None:
+async def _purge_channel(
+    bot: DragonpawBot, guild_name: str, entry: CleanupChannelEntry
+) -> None:
     try:
         deleted = await utils.purge_old_messages(
             bot, guild_name, entry.channel_name, entry.channel_id, entry.expiry_minutes
