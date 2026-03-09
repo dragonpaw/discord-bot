@@ -243,7 +243,9 @@ async def _try_post_achievement_embed(
         embed.set_image(chart_bytes)
         await achievements.send(embed=embed)
     except hikari.HTTPError as exc:
-        logger.warning("Failed to post achievement", channel=channel_name, error=str(exc))
+        logger.warning(
+            "Failed to post achievement", channel=channel_name, error=str(exc)
+        )
 
 
 async def _post_achievement(  # noqa: PLR0913
@@ -293,7 +295,9 @@ async def _post_achievement(  # noqa: PLR0913
     # Regular completion — just post the embed
     if week not in milestone_roles:
         embed = _regular_completion_embed(target, week)
-        await _try_post_achievement_embed(achievements, embed, chart_bytes, cfg.achievements_channel)
+        await _try_post_achievement_embed(
+            achievements, embed, chart_bytes, cfg.achievements_channel
+        )
         return
 
     role_name = milestone_roles[week]
@@ -327,7 +331,9 @@ async def _post_achievement(  # noqa: PLR0913
             f"Please arrange their prize: **{prize}**."
         )
 
-    await _try_post_achievement_embed(achievements, embed, chart_bytes, cfg.achievements_channel)
+    await _try_post_achievement_embed(
+        achievements, embed, chart_bytes, cfg.achievements_channel
+    )
 
     # Assign milestone role (skip if None)
     if role_name:
@@ -1009,7 +1015,12 @@ async def _handle_owner_deny(
     )
 
     await _notify_sub_of_owner_decision(
-        bot, guild_state.guild_name, guild_id, sub_user_id, owner_user_id, approved=False
+        bot,
+        guild_state.guild_name,
+        guild_id,
+        sub_user_id,
+        owner_user_id,
+        approved=False,
     )
 
 
@@ -1104,6 +1115,7 @@ def _prepare_backfill(
     guild_state: state.SubDayGuildState,
     target_id: int,
     week: int,
+    sent: bool | None = None,
 ) -> tuple[SubDayParticipant, bool]:
     """Auto-enroll if needed and set the participant's week. Returns (participant, auto_enrolled)."""
     if target_id in guild_state.participants:
@@ -1118,7 +1130,7 @@ def _prepare_backfill(
         auto_enrolled = True
 
     participant.current_week = week
-    participant.week_sent = False
+    participant.week_sent = bool(sent)
     return participant, auto_enrolled
 
 
@@ -1161,7 +1173,7 @@ class SubDayComplete(
     )
     sent = lightbulb.boolean(
         "sent",
-        "Backfill only: mark the next week's prompt as already sent",
+        "Backfill only: mark the week's prompt as already sent",
         default=None,
     )
 
@@ -1177,12 +1189,9 @@ class SubDayComplete(
         target: hikari.Member = self.user  # type: ignore[assignment]
         target_id = int(target.id)
 
-        # If the requested week matches the participant's current week, fall back
-        # to normal complete so the reviewer only needs complete_role, not backfill_role.
         requested_week: int | None = self.week
         has_explicit_week = requested_week is not None
-        existing = guild_state.participants.get(target_id)
-        is_backfill = bool(requested_week and (not existing or existing.current_week != requested_week))
+        is_backfill = has_explicit_week
 
         required_role = cfg.backfill_role if is_backfill else cfg.complete_role
         action = "backfill" if is_backfill else "complete"
@@ -1200,7 +1209,9 @@ class SubDayComplete(
             return
 
         if is_backfill:
-            participant, auto_enrolled = _prepare_backfill(guild_state, target_id, requested_week)  # type: ignore[arg-type]
+            participant, auto_enrolled = _prepare_backfill(
+                guild_state, target_id, requested_week, self.sent
+            )  # type: ignore[arg-type]
         else:
             error = _validate_normal_complete(guild_state, target, target_id)
             if error:
@@ -1213,12 +1224,6 @@ class SubDayComplete(
         participant.week_completed = True
         participant.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
 
-        sent_next = bool(self.sent and has_explicit_week and participant.current_week < TOTAL_WEEKS)
-        if sent_next:
-            participant.current_week += 1
-            participant.week_completed = False
-            participant.week_sent = True
-
         state.save(guild_state)
 
         # Respond first to avoid interaction timeout, then do async work
@@ -1227,10 +1232,10 @@ class SubDayComplete(
                 f"Enrolled {target.mention} and completed "
                 f"**Week {week}** of Where I am Led."
             )
-        elif sent_next:
+        elif is_backfill and self.sent:
             response = (
-                f"Marked {target.mention} as complete for **Week {week}**, "
-                f"and advanced to Week {week + 1} (prompt already sent — won't re-send on Sunday)."
+                f"Marked {target.mention} as complete for "
+                f"**Week {week}** (prompt marked as sent)."
             )
         else:
             response = f"Marked {target.mention} as complete for **Week {week}**."
@@ -1248,15 +1253,9 @@ class SubDayComplete(
             if is_backfill:
                 staff_msg = (
                     f"⏩ {ctx.member.mention} backfilled {target.mention} "
-                    f"to **Week {week}** (complete)"
-                    + (f", advanced to Week {week + 1} (prompt already sent)" if sent_next else "")
-                    + "."
-                )
-            elif sent_next:
-                staff_msg = (
-                    f"✅ {ctx.member.mention} marked {target.mention} "
-                    f"complete for **Week {week}**, "
-                    f"and advanced to Week {week + 1} (prompt already sent)."
+                    f"to **Week {week}** (complete"
+                    + (", prompt marked as sent" if self.sent else "")
+                    + ")."
                 )
             else:
                 staff_msg = (

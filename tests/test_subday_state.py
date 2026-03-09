@@ -142,73 +142,62 @@ def test_graduated_participant():
     assert p.current_week >= 52
 
 
-def test_sent_next_advances_week_and_sets_week_sent():
-    """Backfill with sent=True advances to next week with week_sent=True."""
-    from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
+def test_prepare_backfill_sets_week_sent_true():
+    """Backfill with sent=True sets week_sent=True on the participant."""
+    from dragonpaw_bot.plugins.subday.commands import _prepare_backfill
+    from dragonpaw_bot.plugins.subday.models import SubDayGuildState
 
-    p = _sample_participant(current_week=9)
-    p.week_completed = True
-    p.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
-    # Simulate sent_next logic (backfill week 9, sent=True, week < TOTAL_WEEKS)
-    p.current_week += 1
-    p.week_completed = False
-    p.week_sent = True
+    guild_state = SubDayGuildState(guild_id=1, guild_name="test")
+    participant, auto_enrolled = _prepare_backfill(guild_state, 123, week=9, sent=True)
 
-    assert p.current_week == 10
-    assert p.week_completed is False
-    assert p.week_sent is True
+    assert participant.current_week == 9
+    assert participant.week_sent is True
+    assert auto_enrolled is True
 
 
-def test_sent_next_ignored_at_total_weeks():
-    """Backfill with sent=True on week 52 does not advance past 52."""
-    from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
+def test_prepare_backfill_sets_week_sent_false_by_default():
+    """Backfill without sent sets week_sent=False."""
+    from dragonpaw_bot.plugins.subday.commands import _prepare_backfill
+    from dragonpaw_bot.plugins.subday.models import SubDayGuildState
 
-    p = _sample_participant(current_week=TOTAL_WEEKS)
-    p.week_completed = True
-    # sent_next condition: current_week < TOTAL_WEEKS → False, so no advancement
-    sent_next = bool(True and True and p.current_week < TOTAL_WEEKS)
-    assert sent_next is False
-    assert p.current_week == TOTAL_WEEKS
-    assert p.week_completed is True
+    guild_state = SubDayGuildState(guild_id=1, guild_name="test")
+    participant, _ = _prepare_backfill(guild_state, 123, week=9)
 
-
-def test_sent_next_false_without_backfill():
-    """sent=True with no explicit week → sent_next is False."""
-    p = _sample_participant(current_week=5)
-    has_explicit_week = False
-    sent_next = bool(True and has_explicit_week and p.current_week < 52)
-    assert sent_next is False
+    assert participant.current_week == 9
+    assert participant.week_sent is False
 
 
-def test_sent_next_fires_when_week_matches_current():
-    """sent:True with week==current_week advances participant even after optimization."""
-    # Participant is on week 10; reviewer runs /subday complete @user week:10 sent:True
-    # The optimization sets backfill_week=None, but has_explicit_week stays True.
-    p = _sample_participant(current_week=10)
-    p.week_completed = True
-    p.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
+def test_prepare_backfill_sent_none_means_false():
+    """Backfill with sent=None sets week_sent=False."""
+    from dragonpaw_bot.plugins.subday.commands import _prepare_backfill
+    from dragonpaw_bot.plugins.subday.models import SubDayGuildState
 
-    has_explicit_week = True  # self.week (10) was not None before the optimization
-    from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
+    guild_state = SubDayGuildState(guild_id=1, guild_name="test")
+    participant, _ = _prepare_backfill(guild_state, 123, week=5, sent=None)
 
-    sent_next = bool(True and has_explicit_week and p.current_week < TOTAL_WEEKS)
-    assert sent_next is True
-
-    if sent_next:
-        p.current_week += 1
-        p.week_completed = False
-        p.week_sent = True
-
-    assert p.current_week == 11
-    assert p.week_completed is False
-    assert p.week_sent is True
+    assert participant.week_sent is False
 
 
-def test_sent_next_participant_skipped_by_sunday_cron():
-    """After sent_next, week_completed=False causes Sunday cron to skip participant."""
+def test_prepare_backfill_existing_participant():
+    """Backfill on existing participant updates week and returns auto_enrolled=False."""
+    from dragonpaw_bot.plugins.subday.commands import _prepare_backfill
+    from dragonpaw_bot.plugins.subday.models import SubDayGuildState
+
+    guild_state = SubDayGuildState(guild_id=1, guild_name="test")
+    # First call auto-enrolls
+    _prepare_backfill(guild_state, 123, week=3)
+    # Second call updates existing
+    participant, auto_enrolled = _prepare_backfill(guild_state, 123, week=9, sent=True)
+
+    assert participant.current_week == 9
+    assert participant.week_sent is True
+    assert auto_enrolled is False
+
+
+def test_week_sent_participant_skipped_by_sunday_cron():
+    """A participant with week_sent=True and week_completed=False is skipped by cron."""
     p = _sample_participant(current_week=10, week_completed=False, week_sent=True)
     # The cron skips participants where week_completed is False
     assert not p.week_completed
     assert p.week_sent is True
-    # Current week unchanged (cron didn't advance)
     assert p.current_week == 10
