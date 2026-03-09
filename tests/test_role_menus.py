@@ -328,18 +328,18 @@ def test_build_summary_both():
 
 
 def test_build_summary_no_changes():
-    assert _build_summary([], [], []) == "No role changes."
+    assert _build_summary([], [], []) == "No changes this time! Your roles are just the way you left them 🐾"
 
 
 def test_build_summary_with_failures():
     result = _build_summary(["Red"], [], ["Admin"])
-    assert "Failed (permission error): **Admin**" in result
+    assert "Couldn't change: **Admin** (permission error)" in result
     assert "Added: **Red**" in result
 
 
 def test_build_summary_only_failures():
     result = _build_summary([], [], ["Admin"])
-    assert result == "Failed (permission error): **Admin**"
+    assert result == "Couldn't change: **Admin** (permission error) — poke an admin! 🐾"
 
 
 def test_build_menu_embed_multi_select():

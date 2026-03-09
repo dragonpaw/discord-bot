@@ -165,7 +165,7 @@ class GuildContext:
             required=label,
         )
         await ctx.respond(
-            f"You need {label} to use this command.",
+            f"*little puff of smoke* 🐉 You need {label} to use this command!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return False
@@ -177,7 +177,7 @@ class GuildContext:
             return True
         self.logger.warning("Admin command denied, not guild owner")
         await ctx.respond(
-            "Only the server owner can use this command.",
+            "*guards the treasure* 🐉 Only the server owner can use this command!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return False

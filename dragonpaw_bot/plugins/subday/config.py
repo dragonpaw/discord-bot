@@ -311,7 +311,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     if interaction.user.id != guild.owner_id:
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="Only the server owner can change these settings.",
+            content="*guards the treasure* 🐉 Only the server owner can change these settings!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return

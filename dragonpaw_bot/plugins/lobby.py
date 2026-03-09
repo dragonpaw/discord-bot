@@ -161,7 +161,7 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
 
     # Respond immediately per Discord 3-second timeout rule
     await interaction.create_initial_response(
-        content="Thank you. Removing your lobby role now.",
+        content="*happy tail wag* 🐉 Welcome in! Let me get that lobby role off you~",
         response_type=hikari.ResponseType.MESSAGE_CREATE,
         flags=hikari.MessageFlag.EPHEMERAL,
     )

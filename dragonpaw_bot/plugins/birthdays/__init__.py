@@ -133,14 +133,14 @@ async def send_week_ahead_dm(
     wishlist_line = (
         f"Your current wishlist: {entry.wishlist_url}"
         if entry.wishlist_url
-        else "You don't have a wishlist set."
+        else "You don't have a wishlist set yet — add one with `/birthday wishlist <url>`!"
     )
     try:
         dm = await member.user.fetch_dm_channel()
         await dm.send(
-            f"🎂 Your birthday is in 7 days! ({commands.MONTH_NAMES[entry.month]} {entry.day})\n\n"
+            f"*excited dragon dance* 🐉🎂 Your birthday is in 7 days!! ({commands.MONTH_NAMES[entry.month]} {entry.day})\n\n"
             f"{wishlist_line}\n"
-            f"Update your wishlist with `/birthday wishlist <url>`"
+            f"Update your wishlist with `/birthday wishlist <url>` so your friends know what to get you~ 🎁"
         )
         member_log.debug("Sent week-ahead birthday DM")
     except hikari.ForbiddenError:

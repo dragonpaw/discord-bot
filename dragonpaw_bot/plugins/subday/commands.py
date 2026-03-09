@@ -326,8 +326,8 @@ def _do_signup(
     state.save(guild_state)
 
     return (
-        "You've been signed up for **Where I am Led**! "
-        "Check your DMs for your first prompt."
+        "🐉 Rawr, you're in! You've been signed up for **Where I am Led**! "
+        "Check your DMs for your first prompt~ 💜"
     )
 
 
@@ -396,7 +396,7 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
         )
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="Something went wrong processing your signup. Please try again.",
+            content="*sad dragon noises* 🐉 Something went wrong with your signup. Please try again!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
@@ -419,7 +419,7 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
         )
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content=f"You need {label} to sign up.",
+            content=f"*little puff of smoke* 🐉 You need {label} to sign up!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
@@ -428,7 +428,7 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
         content=msg
-        or "You are already signed up! Use `/subday status` to check your progress.",
+        or "You're already signed up, silly! 🐉 Use `/subday status` to check your progress~",
         flags=hikari.MessageFlag.EPHEMERAL,
     )
     if msg:
@@ -693,8 +693,8 @@ class SubDayStatus(
 
         if not own_participant and not owned_subs:
             await ctx.respond(
-                "You're not signed up for Where I am Led. "
-                "Use `/subday signup` to get started!",
+                "🐉 You're not signed up for Where I am Led yet! "
+                "Use `/subday signup` to get started~",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -740,8 +740,8 @@ class SubDayOwner(
 
         if user_id not in guild_state.participants:
             await ctx.respond(
-                "You must be signed up for Where I am Led to use this command. "
-                "Use `/subday signup` to get started!",
+                "🐉 You're not signed up for Where I am Led yet! "
+                "Use `/subday signup` to get started~",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -759,7 +759,7 @@ class SubDayOwner(
                 state.save(guild_state)
                 log.info("Cleared owner")
             await ctx.respond(
-                "Your owner has been cleared.",
+                "🐉 Got it! Your owner has been cleared 🐾",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -769,7 +769,7 @@ class SubDayOwner(
         # Can't set self
         if target_id == user_id:
             await ctx.respond(
-                "You can't set yourself as your own owner.",
+                "*bonks you gently* 🐉 You can't be your own owner, silly!",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -777,7 +777,7 @@ class SubDayOwner(
         # Already confirmed owner
         if participant.owner_id == target_id:
             await ctx.respond(
-                f"{target.mention} is already your owner.",
+                f"🐉 {target.mention} is already your owner! You're all set~ 🐾",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -787,7 +787,7 @@ class SubDayOwner(
             await gc.bot.rest.fetch_member(ctx.guild_id, target_id)
         except hikari.NotFoundError:
             await ctx.respond(
-                f"{target.mention} is not a member of this server.",
+                f"🐉 {target.mention} doesn't seem to be in this server!",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -828,8 +828,8 @@ class SubDayOwner(
                 error=str(exc),
             )
             await ctx.respond(
-                f"I couldn't send a DM to {target.mention}. "
-                "They may have DMs disabled. The request was not sent.",
+                f"*sad puff* 🐉 I couldn't send a DM to {target.mention} — "
+                "they might have DMs disabled. The request wasn't sent!",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -837,8 +837,8 @@ class SubDayOwner(
         state.save(guild_state)
         log.info("Sent owner request", target=target.username)
         await ctx.respond(
-            f"An owner request has been sent to {target.mention}. "
-            "They'll need to accept it via DM.",
+            f"🐉 Done! I've sent an owner request to {target.mention}. "
+            "They'll need to accept it in their DMs~ 💜",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
@@ -852,10 +852,10 @@ async def _notify_sub_of_owner_decision(  # noqa: PLR0913
     approved: bool,
 ) -> None:
     dm_text = (
-        f"<@{owner_user_id}> has **accepted** your owner request! "
-        "They'll now receive copies of your weekly prompts. 💜"
+        f"*excited bouncing* 🐉 <@{owner_user_id}> has **accepted** your owner request! "
+        "They'll get copies of your weekly prompts now~ 💜"
         if approved
-        else f"<@{owner_user_id}> has **declined** your owner request."
+        else f"🐉 <@{owner_user_id}> has declined your owner request. That's okay! 🐾"
     )
     log_text = (
         f"🤝 **SubDay owner accepted** — <@{owner_user_id}> accepted ownership of <@{sub_user_id}>"
@@ -909,7 +909,7 @@ async def _handle_owner_approve(
         state.save(guild_state)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="You're no longer in that server, so the request has been cancelled.",
+            content="🐉 It looks like you're no longer in that server, so the request has been cancelled.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
@@ -927,7 +927,7 @@ async def _handle_owner_approve(
 
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
-        content=f"You've accepted! You're now the owner for <@{sub_user_id}>.",
+        content=f"🐉 You've accepted! You're now the owner for <@{sub_user_id}>~ 💜",
         flags=hikari.MessageFlag.EPHEMERAL,
     )
 
@@ -959,7 +959,7 @@ async def _handle_owner_deny(
 
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
-        content="You've declined the request.",
+        content="🐉 Understood! The request has been declined.",
         flags=hikari.MessageFlag.EPHEMERAL,
     )
 
@@ -985,7 +985,7 @@ async def handle_owner_interaction(interaction: hikari.ComponentInteraction) -> 
         logger.warning("Unrecognized owner interaction custom_id", custom_id=cid)
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="This button is no longer valid.",
+            content="*confused head tilt* 🐉 This button doesn't seem to work anymore!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
@@ -1000,7 +1000,7 @@ async def handle_owner_interaction(interaction: hikari.ComponentInteraction) -> 
     if not participant:
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="This person is no longer enrolled in the program.",
+            content="🐉 This person isn't in the program anymore!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
@@ -1011,13 +1011,13 @@ async def handle_owner_interaction(interaction: hikari.ComponentInteraction) -> 
         if participant.owner_id == owner_user_id:
             await interaction.create_initial_response(
                 response_type=hikari.ResponseType.MESSAGE_CREATE,
-                content="You're already their owner!",
+                content="🐉 You're already their owner! All good~ 🐾",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="This request is no longer valid (they may have changed their mind).",
+            content="🐉 This request isn't valid anymore — they may have changed their mind.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
@@ -1051,7 +1051,7 @@ class SubDaySignup(
         msg = _do_signup(gc.bot, ctx.guild_id, ctx.user)
         if msg is None:
             await ctx.respond(
-                "You are already signed up! Use `/subday status` to check your progress.",
+                "You're already signed up, silly! 🐉 Use `/subday status` to check your progress~",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -1088,19 +1088,19 @@ def _validate_normal_complete(
 ) -> str | None:
     """Validate that a normal (non-backfill) completion is possible. Returns error message or None."""
     if target_id not in guild_state.participants:
-        return f"{target.mention} is not signed up for Where I am Led."
+        return f"🐉 {target.mention} isn't signed up for Where I am Led!"
 
     participant = guild_state.participants[target_id]
 
     if participant.week_completed:
         return (
-            f"{target.mention} has already completed week "
-            f"{participant.current_week}. "
-            "They'll receive their next prompt on Sunday."
+            f"🐉 {target.mention} already finished week "
+            f"{participant.current_week}! "
+            "They'll get their next prompt on Sunday~"
         )
 
     if participant.current_week > TOTAL_WEEKS:
-        return f"{target.mention} has already graduated!"
+        return f"🎓 {target.mention} has already graduated! 🐉✨"
 
     return None
 
@@ -1150,7 +1150,7 @@ class SubDayComplete(
         if target.id == ctx.user.id:
             logger.debug("SubDay self-completion blocked", user=ctx.user.username)
             await ctx.respond(
-                "You cannot mark your own work as complete.",
+                "*wags claw* 🐉 You can't mark your own work as complete — get someone else to check it!",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -1258,7 +1258,7 @@ class SubDayList(
 
         if not guild_state.participants:
             await ctx.respond(
-                "No one is currently signed up for Where I am Led.",
+                "🐉 No one has signed up for Where I am Led yet!",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -1306,7 +1306,7 @@ class SubDayRemove(
 
         if target_id not in guild_state.participants:
             await ctx.respond(
-                f"{target.mention} is not signed up for Where I am Led.",
+                f"🐉 {target.mention} isn't signed up for Where I am Led!",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -1323,7 +1323,7 @@ class SubDayRemove(
         state.save(guild_state)
 
         await ctx.respond(
-            f"Removed {target.mention} from Where I am Led.",
+            f"🐉 {target.mention} has been removed from Where I am Led 🐾",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         logger.info(

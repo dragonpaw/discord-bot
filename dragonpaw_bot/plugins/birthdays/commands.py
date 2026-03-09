@@ -57,7 +57,9 @@ MONTH_NAMES = [
 # ---------------------------------------------------------------------------- #
 
 
-_WISHLIST_URL_ERROR = "Wishlist must be a URL starting with `https://` or `http://`."
+_WISHLIST_URL_ERROR = (
+    "🐉 Wishlists need to be a URL starting with `https://` or `http://`!"
+)
 
 
 def _is_valid_wishlist_url(url: str) -> bool:
@@ -68,10 +70,10 @@ def _is_valid_wishlist_url(url: str) -> bool:
 def _validate_date(month: int, day: int) -> str | None:
     """Validate month/day. Returns error message or None if valid."""
     if month < 1 or month > _MONTHS_IN_YEAR:
-        return "Month must be between 1 and 12."
+        return "🐉 Month must be between 1 and 12!"
     max_day = _LEAP_DAY if month == _FEB else calendar.monthrange(2000, month)[1]
     if day < 1 or day > max_day:
-        return f"Day must be between 1 and {max_day} for {MONTH_NAMES[month]}."
+        return f"🐉 Day must be between 1 and {max_day} for {MONTH_NAMES[month]}!"
     return None
 
 
@@ -190,7 +192,7 @@ class BirthdayStatus(
 
         if not entry:
             await ctx.respond(
-                "You don't have a birthday registered. Use `/birthday set` to add one.",
+                "🐉 I don't have your birthday yet! Use `/birthday set` so I know when to celebrate you~ 🎂",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -302,7 +304,7 @@ class BirthdayWishlist(
 
         if not entry:
             await ctx.respond(
-                "You don't have a birthday registered yet. Use `/birthday set` first.",
+                "🐉 You need to register your birthday first! Use `/birthday set`~ 🎂",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -310,7 +312,7 @@ class BirthdayWishlist(
         if self.url is None:
             current = entry.wishlist_url or "_No wishlist set_"
             await ctx.respond(
-                f"Your current wishlist: {current}",
+                f"🐉 Your current wishlist: {current}",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -325,7 +327,7 @@ class BirthdayWishlist(
         entry.wishlist_url = self.url
         state.save(guild_state)
         await ctx.respond(
-            f"Wishlist updated: {self.url}",
+            f"🐉 Wishlist updated! {self.url} 🎁",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         logger.info(
@@ -543,9 +545,9 @@ async def _handle_set_timezone(
     action = "updated" if existing else "registered"
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_UPDATE,
-        content=f"🎂 Birthday {action}! **{MONTH_NAMES[month]} {day}** "
+        content=f"🐉🎂 Birthday {action}! **{MONTH_NAMES[month]} {day}** "
         f"(timezone: **{tz_id}**)\n"
-        f"Your birthday will be announced at midnight in your local time.",
+        f"I'll announce it at midnight in your local time — I can't wait to celebrate! ✨",
         components=[],
     )
     logger.info(
@@ -661,7 +663,7 @@ class BirthdaySetFor(
 
         action = "updated" if existing else "registered"
         await ctx.respond(
-            f"🎂 Birthday {action} for {self.user.mention}: "
+            f"🐉🎂 Birthday {action} for {self.user.mention}: "
             f"**{MONTH_NAMES[self.month]} {self.day}**",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
@@ -699,7 +701,7 @@ class BirthdayRemove(
 
         if uid not in guild_state.birthdays:
             await ctx.respond(
-                "You don't have a birthday registered.",
+                "🐉 You don't have a birthday registered! Nothing to remove~ 🐾",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -708,7 +710,7 @@ class BirthdayRemove(
         state.save(guild_state)
 
         await ctx.respond(
-            "Your birthday entry has been removed.",
+            "🐉 Your birthday entry has been removed. I'll miss celebrating you! 🐾",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
@@ -740,7 +742,7 @@ class BirthdayRemoveFor(
         uid = int(self.user.id)
         if uid not in guild_state.birthdays:
             await ctx.respond(
-                f"{self.user.mention} doesn't have a birthday registered.",
+                f"🐉 {self.user.mention} doesn't have a birthday registered!",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -750,7 +752,7 @@ class BirthdayRemoveFor(
         state.save(guild_state)
 
         await ctx.respond(
-            f"Birthday entry removed for {self.user.mention}.",
+            f"🐉 Birthday entry removed for {self.user.mention} 🐾",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
@@ -782,7 +784,7 @@ class BirthdayList(
 
         if not guild_state.birthdays:
             await ctx.respond(
-                "No birthdays registered yet.",
+                "🐉 No birthdays registered yet! Tell your friends to use `/birthday set`~ 🎂",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -822,7 +824,7 @@ def build_announcement_embed(
     member: hikari.Member, entry: BirthdayEntry
 ) -> hikari.Embed:
     """Build the birthday announcement embed posted in the announcement channel."""
-    description = f"🎂 Happy Birthday, {member.mention}! 🎂"
+    description = f"🐉🎂 Happy Birthday, {member.mention}!! 🎂🐉"
     embed = hikari.Embed(
         title="🎂 Happy Birthday!",
         description=description,

@@ -294,8 +294,14 @@ def _build_summary(added: list[str], removed: list[str], failed: list[str]) -> s
     if removed:
         parts.append(f"Removed: **{', '.join(removed)}**")
     if failed:
-        parts.append(f"Failed (permission error): **{', '.join(failed)}**")
-    return ". ".join(parts) if parts else "No role changes."
+        parts.append(
+            f"Couldn't change: **{', '.join(failed)}** (permission error) — poke an admin! 🐾"
+        )
+    return (
+        ". ".join(parts)
+        if parts
+        else "No changes this time! Your roles are just the way you left them 🐾"
+    )
 
 
 async def handle_role_menu_interaction(
@@ -316,7 +322,7 @@ async def handle_role_menu_interaction(
         logger.warning("Role menu interaction but no menus in state")
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="This role menu is outdated. Please ask an admin to re-run `/config`.",
+            content="*confused dragon noises* 🐉 This menu seems outdated! Could you ask an admin to re-run `/config`?",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
@@ -325,7 +331,7 @@ async def handle_role_menu_interaction(
     if not menu_state:
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="This role menu is no longer recognized. It may need to be reconfigured.",
+            content="*tilts head* 🐉 I don't recognize this menu anymore. It might need an admin to reconfigure it!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return

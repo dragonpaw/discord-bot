@@ -283,7 +283,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     guild = await bot.rest.fetch_guild(guild_id)
     if interaction.user.id != guild.owner_id:
         await interaction.edit_initial_response(
-            content="Only the server owner can change these settings.",
+            content="*guards the treasure* 🐉 Only the server owner can change these settings!",
             embeds=[],
             components=[],
         )
