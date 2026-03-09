@@ -86,7 +86,7 @@ Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild sta
 ### Error Handling
 
 - **DM failures:** Week-ahead reminder DMs catch `ForbiddenError` and log a warning. The cron continues for other users.
-- **Guild log channel:** All notifications use `utils.log_to_guild()`, which silently skips if no log channel is configured.
+- **Guild log channel:** All notifications use `gc.log()` (on `GuildContext`), which silently skips if no log channel is configured.
 - **Announcement channel:** Post failures are logged as warnings but don't crash the cron.
 - **Birthday role:** Role assignment/removal failures are caught and logged.
 - **Hourly cron:** Per-guild error isolation — one guild's failure doesn't abort processing for other guilds.

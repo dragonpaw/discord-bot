@@ -140,7 +140,7 @@ Persisted as `state/subday_{guild_id}.yaml`, separate from the main guild state.
 ### Error Handling
 
 - **Interaction listener** (`__init__.py`): Both signup and config interaction handlers are wrapped in try/except. On failure, an ephemeral error message is sent to the user (with a fallback if the interaction already expired).
-- **Guild log channel**: All notifications use `utils.log_to_guild()`, which silently skips if no log channel is configured and handles HTTP errors gracefully.
+- **Guild log channel**: All notifications use `gc.log()` (on `GuildContext`), which silently skips if no log channel is configured and handles HTTP errors gracefully.
 - **Achievement posts**: Wrapped in try/except so channel permission issues don't crash the completion flow.
 - **Channel permission checks** (`utils.py`): `check_channel_perms` handles both `ForbiddenError` (can't view channel) and `NotFoundError` (channel deleted) gracefully.
 - **Sunday cron task**: Per-guild error isolation — one guild's failure doesn't abort processing for other guilds.

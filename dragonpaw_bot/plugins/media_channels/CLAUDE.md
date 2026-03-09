@@ -28,7 +28,7 @@ Requires the `MESSAGE_CONTENT` privileged intent (enabled in Discord Developer P
 3. If it's text-only → delete it.
 4. Post a playful dragon notice mentioning the user (with optional redirect hint).
 5. Auto-delete the notice after 15 seconds.
-6. Log the action to the guild's log channel via `utils.log_to_guild()`.
+6. Log the action to the guild's log channel via `gc.log()`.
 
 ### Notice Copy
 
@@ -41,7 +41,7 @@ thoughts in #redirect? 🐾
 
 ### Hourly Cleanup Cron
 
-Runs at `:30` past each hour. For each media channel with `expiry_minutes` set, calls `utils.purge_old_messages()` to bulk- or single-delete messages older than the configured duration. Per-guild error isolation.
+Runs at `:30` past each hour. For each media channel with `expiry_minutes` set, calls `ChannelContext.purge_old_messages()` to bulk- or single-delete messages older than the configured duration. Per-guild error isolation.
 
 ### File Structure
 

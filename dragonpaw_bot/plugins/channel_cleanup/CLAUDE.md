@@ -14,7 +14,7 @@ State is persisted to `state/channel_cleanup_{guild_id}.yaml`.
 
 ### Hourly Cleanup Cron
 
-Runs at the top of each hour (`0 * * * *`). For each configured channel, calls `utils.purge_old_messages()` to delete messages older than the configured duration. Uses bulk delete (up to 100 messages per call) for messages younger than 14 days, and single deletes for older messages (Discord limitation). Per-guild error isolation — one guild's failure doesn't abort others.
+Runs at the top of each hour (`0 * * * *`). For each configured channel, calls `ChannelContext.purge_old_messages()` to delete messages older than the configured duration. Uses bulk delete (up to 100 messages per call) for messages younger than 14 days, and single deletes for older messages (Discord limitation). Per-guild error isolation — one guild's failure doesn't abort others.
 
 ### File Structure
 

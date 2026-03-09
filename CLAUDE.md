@@ -50,7 +50,9 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **`duration.py`** — Shared `parse_duration_minutes()` and `format_duration()` helpers used by plugin config commands.
 
-**`utils.py`** — Discord helpers: deleting bot messages, looking up channels/roles/emojis by name, checking member roles, and `log_to_guild()` for sending notifications to a guild's configured log channel.
+**`context.py`** — `GuildContext` and `ChannelContext` dataclasses that bundle bot + guild info for convenient access throughout plugins. `GuildContext` provides factory methods (`from_ctx`, `from_interaction`, `from_guild`), permission checks, and `gc.log()` for sending notifications to the guild's configured log channel. `ChannelContext` extends it with channel-level operations like `purge_old_messages()` and `delete_my_messages()`. Also contains standalone permission helpers (`member_has_role`, `has_permission`, `has_any_role_permission`) and `check_channel_perms`.
+
+**`utils.py`** — Discord helpers: looking up channels/roles/emojis by name.
 
 **`http.py`** — Async HTTP client for fetching TOML configs, with special GitHub Gist URL handling.
 
@@ -58,7 +60,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **Config flow:** Server admins use the `/config roles setup` slash command with a URL to a role-menu TOML file. The bot fetches and parses it directly into a `RolesConfig`, sets up role menus, then persists `GuildState` to disk as YAML. The `/config bot logging` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/config roles setup` reloads.
 
-**Guild logging:** `utils.log_to_guild()` sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji.
+**Guild logging:** `gc.log()` (on `GuildContext`) sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji.
 
 **State serialization note:** Role menu state is now persisted separately in `state/role_menus_{guild_id}.yaml`. The main `GuildState` YAML is straightforward Pydantic JSON-mode serialization. Legacy YAML files containing `role_emojis`/`role_names`/`role_channel_id` are automatically stripped on load.
 
@@ -69,7 +71,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 ## Key Conventions
 
 - Uses `uvloop` as the async event loop
-- **Discord interaction timeout:** Discord gives 3 seconds to respond to an interaction before it expires. Always call `ctx.respond()` (or `interaction.create_initial_response()`) **before** any slow work like sending DMs, posting to channels, assigning roles, or calling `log_to_guild()`. Do the fast stuff (state save, build response), respond, then do async work after.
+- **Discord interaction timeout:** Discord gives 3 seconds to respond to an interaction before it expires. Always call `ctx.respond()` (or `interaction.create_initial_response()`) **before** any slow work like sending DMs, posting to channels, assigning roles, or calling `gc.log()`. Do the fast stuff (state save, build response), respond, then do async work after.
 - **lightbulb v3 patterns:**
   - Extensions use `lightbulb.Loader()` (not `Plugin`)
   - Commands are class-based, inheriting from `lightbulb.SlashCommand` with `@lightbulb.invoke` on the invoke method
