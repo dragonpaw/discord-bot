@@ -230,6 +230,8 @@ class ChannelContext(GuildContext):
             async for msg in self.bot.rest.fetch_messages(
                 channel=self.channel_id, before=cutoff
             ):
+                if msg.is_pinned:
+                    continue
                 if msg.created_at > bulk_cutoff:
                     to_bulk.append(msg.id)
                 else:

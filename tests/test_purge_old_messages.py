@@ -10,11 +10,12 @@ CHANNEL = "test-channel"
 CHANNEL_ID = 42
 
 
-def _msg(age_hours: float) -> Mock:
+def _msg(age_hours: float, *, pinned: bool = False) -> Mock:
     """Create a mock message with a created_at offset from now."""
     msg = Mock(spec=hikari.Message)
     msg.id = hikari.Snowflake(int(age_hours * 1000))
     msg.created_at = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+    msg.is_pinned = pinned
     return msg
 
 
@@ -182,6 +183,29 @@ async def test_single_delete_limit_caps_deletes():
     count = await cc.purge_old_messages(expiry_minutes=60)
     assert count == 1000  # Capped; remainder picked up next run
     assert cc.bot.rest.delete_message.call_count == 1000
+
+
+async def test_pinned_messages_are_skipped():
+    pinned = _msg(age_hours=48, pinned=True)
+    normal = _msg(age_hours=49)
+    cc = _make_cc(pinned, normal)
+    count = await cc.purge_old_messages(expiry_minutes=60)
+    assert count == 1
+    # Only the non-pinned message should be in the bulk delete
+    cc.bot.rest.delete_messages.assert_called_once()
+    (call_args,) = cc.bot.rest.delete_messages.call_args_list
+    assert normal.id in call_args[0][1]
+    assert pinned.id not in call_args[0][1]
+
+
+async def test_pinned_old_messages_are_skipped():
+    """Pinned messages older than 14 days should also be skipped."""
+    pinned = _msg(age_hours=24 * 20, pinned=True)
+    normal = _msg(age_hours=24 * 20)
+    cc = _make_cc(pinned, normal)
+    count = await cc.purge_old_messages(expiry_minutes=60)
+    assert count == 1
+    cc.bot.rest.delete_message.assert_called_once()
 
 
 async def test_single_delete_limit_custom():
