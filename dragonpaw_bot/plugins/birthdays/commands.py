@@ -57,6 +57,14 @@ MONTH_NAMES = [
 # ---------------------------------------------------------------------------- #
 
 
+_WISHLIST_URL_ERROR = "Wishlist must be a URL starting with `https://` or `http://`."
+
+
+def _is_valid_wishlist_url(url: str) -> bool:
+    """Check if a string looks like a valid wishlist URL."""
+    return url.startswith(("https://", "http://"))
+
+
 def _validate_date(month: int, day: int) -> str | None:
     """Validate month/day. Returns error message or None if valid."""
     if month < 1 or month > _MONTHS_IN_YEAR:
@@ -194,7 +202,7 @@ class BirthdayStatus(
         )
         wishlist = (
             f"[Wishlist]({entry.wishlist_url})"
-            if entry.wishlist_url
+            if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
             else "_No wishlist set_"
         )
         tz_display = entry.timezone or "UTC"
@@ -303,6 +311,13 @@ class BirthdayWishlist(
             current = entry.wishlist_url or "_No wishlist set_"
             await ctx.respond(
                 f"Your current wishlist: {current}",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        if not _is_valid_wishlist_url(self.url):
+            await ctx.respond(
+                _WISHLIST_URL_ERROR,
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -420,12 +435,21 @@ async def _handle_set_day(interaction: hikari.ModalInteraction, field: str) -> N
         )
         return
 
-    # Stash wishlist URL for the final save step
+    # Validate and stash wishlist URL for the final save step
+    cleaned_wishlist: str | None = None
+    if wishlist_url and wishlist_url.strip():
+        cleaned_wishlist = wishlist_url.strip()
+        if not _is_valid_wishlist_url(cleaned_wishlist):
+            await interaction.create_initial_response(
+                response_type=hikari.ResponseType.MESSAGE_CREATE,
+                content=f"{_WISHLIST_URL_ERROR} {_RETRY_MSG}",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
     if interaction.guild_id:
         key = (int(interaction.guild_id), int(interaction.user.id))
-        _pending_wishlists[key] = (
-            wishlist_url.strip() if wishlist_url and wishlist_url.strip() else None
-        )
+        _pending_wishlists[key] = cleaned_wishlist
 
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
@@ -615,6 +639,13 @@ class BirthdaySetFor(
             await ctx.respond(error, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
+        if self.wishlist_url and not _is_valid_wishlist_url(self.wishlist_url):
+            await ctx.respond(
+                _WISHLIST_URL_ERROR,
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
         uid = int(self.user.id)
         existing = guild_state.birthdays.get(uid)
         entry = BirthdayEntry(
@@ -767,7 +798,9 @@ class BirthdayList(
             lines.append(f"**{MONTH_NAMES[month_num]}**")
             for entry in entries:
                 wishlist = (
-                    f" — [Wishlist]({entry.wishlist_url})" if entry.wishlist_url else ""
+                    f" — [Wishlist]({entry.wishlist_url})"
+                    if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
+                    else ""
                 )
                 tz = f" ({entry.timezone})" if entry.timezone else ""
                 lines.append(f"  {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
@@ -795,7 +828,7 @@ def build_announcement_embed(
         description=description,
         color=SOLARIZED_YELLOW,
     )
-    if entry.wishlist_url:
+    if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url):
         embed.add_field(
             name="🎁 Wishlist",
             value=f"[Click here]({entry.wishlist_url})",
