@@ -63,6 +63,7 @@ OAUTH_PERMISSIONS = (
     | hikari.Permissions.USE_APPLICATION_COMMANDS
 ).value
 CLIENT_ID = environ["CLIENT_ID"]
+BUILD_TAG = environ.get("BUILD_TAG", "dev")
 OAUTH_URL = "https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&permissions={OAUTH_PERMISSIONS}&scope=applications.commands%20bot"
 INTENTS = (
     hikari.Intents.GUILD_MESSAGES
@@ -87,7 +88,7 @@ class DragonpawBot(hikari.GatewayBot):
         )
         self._state: dict[hikari.Snowflake, structs.GuildState] = {}
         self.user_id: hikari.Snowflake | None = None
-        logger.info("Starting bot", test_guilds=TEST_GUILDS)
+        logger.info("Starting bot", build=BUILD_TAG, test_guilds=TEST_GUILDS)
 
     def state(self, guild_id: hikari.Snowflake) -> structs.GuildState | None:
         # If we don't have a state in-memory, maybe there is one on disk?
@@ -216,7 +217,7 @@ def state_load_yaml(guild_id: hikari.Snowflake) -> structs.GuildState | None:
 @bot.listen(hikari.ShardReadyEvent)
 async def on_ready(event: hikari.ShardReadyEvent) -> None:
     """Post-initialization for the bot."""
-    logger.info("Connected to Discord", user=str(event.my_user))
+    logger.info("Connected to Discord", user=str(event.my_user), build=BUILD_TAG)
     logger.info(
         "OAuth URL",
         url=OAUTH_URL.format(CLIENT_ID=CLIENT_ID, OAUTH_PERMISSIONS=OAUTH_PERMISSIONS),
