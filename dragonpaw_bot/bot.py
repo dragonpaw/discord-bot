@@ -224,10 +224,20 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
     bot.user_id = event.my_user.id
 
     flags = event.application_flags
-    if (
-        INTENTS & hikari.Intents.GUILD_MEMBERS
-        and not flags & hikari.ApplicationFlags.GUILD_MEMBERS_INTENT
-    ):
+    # Discord sets different flags for verified vs unverified bots:
+    # - *_INTENT flags are set for verified bots (75+ guilds)
+    # - *_INTENT_LIMITED flags are set for unverified bots
+    # We need to check both to avoid false warnings.
+    _MEMBERS_FLAGS = (
+        hikari.ApplicationFlags.GUILD_MEMBERS_INTENT
+        | hikari.ApplicationFlags.VERIFIED_FOR_GUILD_MEMBERS_INTENT
+    )
+    _CONTENT_FLAGS = (
+        hikari.ApplicationFlags.MESSAGE_CONTENT_INTENT
+        | hikari.ApplicationFlags.MESSAGE_CONTENT_INTENT_LIMITED
+    )
+
+    if INTENTS & hikari.Intents.GUILD_MEMBERS and not flags & _MEMBERS_FLAGS:
         logger.warning(
             "GUILD_MEMBERS intent is requested but NOT enabled in the "
             "Discord Developer Portal. Lobby welcome messages and member "
@@ -235,10 +245,7 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
             "Bot > Privileged Gateway Intents > Server Members Intent"
         )
 
-    if (
-        INTENTS & hikari.Intents.MESSAGE_CONTENT
-        and not flags & hikari.ApplicationFlags.MESSAGE_CONTENT_INTENT
-    ):
+    if INTENTS & hikari.Intents.MESSAGE_CONTENT and not flags & _CONTENT_FLAGS:
         logger.warning(
             "MESSAGE_CONTENT intent is requested but NOT enabled in the "
             "Discord Developer Portal. Media channel enforcement will be "
