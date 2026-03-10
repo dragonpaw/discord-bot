@@ -34,10 +34,11 @@ _LEVEL_STYLES: dict[str, tuple[str, str]] = {
 }
 
 _TIMESTAMP_COLOR = _fg(0x66, 0x5C, 0x54)
-_LOGGER_COLOR = _fg(0x83, 0xA5, 0x98)
+_LOGGER_COLOR = _fg(0x66, 0x5C, 0x54)
 _KV_KEY_COLOR = _fg(0xA8, 0x99, 0x84)
 _KV_VALUE_COLOR = _fg(0xEB, 0xDB, 0xB2)
 
+_LOGGER_WIDTH = 45
 _EVENT_WIDTH = 40
 
 
@@ -66,6 +67,10 @@ class GruvboxRenderer:
         if timestamp:
             parts.append(f"{_TIMESTAMP_COLOR}{timestamp}{_RESET}")
 
+        # Logger name (padded for alignment)
+        padded_logger = f"{logger_name:<{_LOGGER_WIDTH}s}"
+        parts.append(f"{_LOGGER_COLOR}{padded_logger}{_RESET}")
+
         # Level badge (padded to 8 chars)
         parts.append(f"[{badge_color}{level:<8s}{_RESET}]")
 
@@ -74,10 +79,6 @@ class GruvboxRenderer:
             f"{event:<{_EVENT_WIDTH}s}" if len(event) < _EVENT_WIDTH else event
         )
         parts.append(f"{event_color}{padded_event}{_RESET}")
-
-        # Logger name as a KV pair
-        if logger_name:
-            parts.append(f"{_LOGGER_COLOR}logger={_RESET}{logger_name}")
 
         # Remaining KV pairs
         for key, value in event_dict.items():
