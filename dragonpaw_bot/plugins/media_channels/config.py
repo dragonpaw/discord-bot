@@ -86,7 +86,7 @@ class MediaAdd(
 
         await ctx.respond("\n".join(parts), flags=hikari.MessageFlag.EPHEMERAL)
         await gc.log(
-            f"⚙️ {ctx.user.username} added <#{self.channel.id}> as a media-only channel.",
+            f"⚙️ {ctx.user.mention} added <#{self.channel.id}> as a media-only channel.",
         )
 
 
@@ -126,7 +126,7 @@ class MediaRemove(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         await gc.log(
-            f"⚙️ {ctx.user.username} removed <#{self.channel.id}> from media-only enforcement.",
+            f"⚙️ {ctx.user.mention} removed <#{self.channel.id}> from media-only enforcement.",
         )
 
 

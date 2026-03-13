@@ -181,7 +181,7 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
         )
         gc = GuildContext.from_interaction(interaction)
         await gc.log(
-            f"🤯 Unable to remove lobby role from **{interaction.user.username}**. "
+            f"🤯 Unable to remove lobby role from **{interaction.user.mention}**. "
             "Check bot role hierarchy permissions.",
         )
 

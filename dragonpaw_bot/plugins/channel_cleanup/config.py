@@ -71,7 +71,7 @@ class CleanupAdd(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         await gc.log(
-            f"⚙️ {ctx.user.username} added <#{self.channel.id}> for auto-cleanup "
+            f"⚙️ {ctx.user.mention} added <#{self.channel.id}> for auto-cleanup "
             f"(expires: {format_duration(expiry_minutes)}).",
         )
 
@@ -110,7 +110,7 @@ class CleanupRemove(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         await gc.log(
-            f"⚙️ {ctx.user.username} removed <#{self.channel.id}> from auto-cleanup.",
+            f"⚙️ {ctx.user.mention} removed <#{self.channel.id}> from auto-cleanup.",
         )
 
 
