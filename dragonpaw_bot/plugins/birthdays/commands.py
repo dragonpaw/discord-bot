@@ -205,7 +205,7 @@ class BirthdayStatus(
             "today! 🎂" if days == 0 else f"in **{days}** day{'s' if days != 1 else ''}"
         )
         wishlist = (
-            f"[Wishlist]({entry.wishlist_url})"
+            f"[Wishlist](<{entry.wishlist_url}>)"
             if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
             else "_No wishlist set_"
         )
@@ -791,6 +791,25 @@ class BirthdayList(
             )
             return
 
+        # Find the next upcoming birthday
+        today = datetime.datetime.now(tz=datetime.UTC).date()
+        today_md = (today.month, today.day)
+
+        def _days_until(entry: BirthdayEntry) -> int:
+            """Days from today until this birthday next occurs."""
+            this_year = today.replace(month=entry.month, day=min(entry.day, 28))
+            try:
+                this_year = today.replace(month=entry.month, day=entry.day)
+            except ValueError:
+                # Feb 29 in a non-leap year — use Feb 28
+                this_year = today.replace(month=entry.month, day=28)
+            if (entry.month, entry.day) < today_md:
+                this_year = this_year.replace(year=today.year + 1)
+            return (this_year - today).days
+
+        next_entry = min(guild_state.birthdays.values(), key=_days_until)
+        next_key = (next_entry.month, next_entry.day)
+
         # Group by month, sorted by day
         by_month: dict[int, list[BirthdayEntry]] = {}
         for entry in guild_state.birthdays.values():
@@ -802,18 +821,20 @@ class BirthdayList(
             lines.append(f"**{MONTH_NAMES[month_num]}**")
             for entry in entries:
                 wishlist = (
-                    f" — [Wishlist]({entry.wishlist_url})"
+                    f" — [Wishlist](<{entry.wishlist_url}>)"
                     if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
                     else ""
                 )
                 tz = f" ({entry.timezone})" if entry.timezone else ""
-                lines.append(f"  {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
+                marker = "⭐" if (entry.month, entry.day) == next_key else "  "
+                lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
 
         embed = hikari.Embed(
             title="🎂 Registered Birthdays",
             description="\n".join(lines),
             color=SOLARIZED_ORANGE,
         )
+        embed.set_footer(text="⭐ = next upcoming birthday")
         await ctx.respond(embed=embed, flags=hikari.MessageFlag.EPHEMERAL)
 
 
@@ -840,7 +861,7 @@ def build_announcement_embed(
         )
         embed.add_field(
             name="🎁 Spoil Them Here!",
-            value=f"[Check out their wishlist!]({entry.wishlist_url})",
+            value=f"[Check out their wishlist!](<{entry.wishlist_url}>)",
             inline=False,
         )
     else:
