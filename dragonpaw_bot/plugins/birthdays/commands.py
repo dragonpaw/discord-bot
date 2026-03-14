@@ -826,7 +826,7 @@ class BirthdayList(
             lines.append(f"**{MONTH_NAMES[month_num]}**")
             for entry in entries:
                 wishlist = (
-                    f"\n    🎁 [wishlist]({quote(entry.wishlist_url, safe=':/')})"
+                    f" 🎁 [wishlist]({quote(entry.wishlist_url, safe=':/')})"
                     if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
                     else ""
                 )
