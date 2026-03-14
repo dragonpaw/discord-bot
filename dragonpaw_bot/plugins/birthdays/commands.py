@@ -205,7 +205,7 @@ class BirthdayStatus(
             "today! 🎂" if days == 0 else f"in **{days}** day{'s' if days != 1 else ''}"
         )
         wishlist = (
-            f"[Wishlist](<{entry.wishlist_url}>)"
+            f"🎁 <{entry.wishlist_url}>"
             if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
             else "_No wishlist set_"
         )
@@ -821,7 +821,7 @@ class BirthdayList(
             lines.append(f"**{MONTH_NAMES[month_num]}**")
             for entry in entries:
                 wishlist = (
-                    f" — [Wishlist](<{entry.wishlist_url}>)"
+                    f"\n    🎁 <{entry.wishlist_url}>"
                     if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
                     else ""
                 )
@@ -861,7 +861,7 @@ def build_announcement_embed(
         )
         embed.add_field(
             name="🎁 Spoil Them Here!",
-            value=f"[Check out their wishlist!](<{entry.wishlist_url}>)",
+            value=f"<{entry.wishlist_url}>",
             inline=False,
         )
     else:
