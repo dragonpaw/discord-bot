@@ -56,7 +56,6 @@ class GruvboxRenderer:
         event = event_dict.pop("event", "")
         stack = event_dict.pop("stack", None)
         exception = event_dict.pop("exception", None)
-        event_dict.pop("exc_info", None)
 
         badge_color, event_color = _LEVEL_STYLES.get(level, _LEVEL_STYLES["info"])
 
@@ -110,6 +109,7 @@ def configure_logging() -> None:
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
     ]
 
     structlog.configure(
