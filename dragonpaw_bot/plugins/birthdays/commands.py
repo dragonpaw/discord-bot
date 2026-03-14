@@ -66,6 +66,15 @@ def _is_valid_wishlist_url(url: str) -> bool:
     return url.startswith(("https://", "http://"))
 
 
+def _clean_wishlist_url(url: str) -> str:
+    """Strip query parameters from a wishlist URL.
+
+    Discord's auto-linker breaks on = in query strings, and the params
+    (e.g. ?ref=wl_share) are just tracking anyway.
+    """
+    return url.split("?", maxsplit=1)[0]
+
+
 def _validate_date(month: int, day: int) -> str | None:
     """Validate month/day. Returns error message or None if valid."""
     if month < 1 or month > _MONTHS_IN_YEAR:
@@ -326,7 +335,7 @@ class BirthdayWishlist(
             )
             return
 
-        entry.wishlist_url = self.url
+        entry.wishlist_url = _clean_wishlist_url(self.url)
         state.save(guild_state)
         await ctx.respond(
             f"🐉 Wishlist updated! {self.url} 🎁",
@@ -442,7 +451,7 @@ async def _handle_set_day(interaction: hikari.ModalInteraction, field: str) -> N
     # Validate and stash wishlist URL for the final save step
     cleaned_wishlist: str | None = None
     if wishlist_url and wishlist_url.strip():
-        cleaned_wishlist = wishlist_url.strip()
+        cleaned_wishlist = _clean_wishlist_url(wishlist_url.strip())
         if not _is_valid_wishlist_url(cleaned_wishlist):
             await interaction.create_initial_response(
                 response_type=hikari.ResponseType.MESSAGE_CREATE,
@@ -656,8 +665,9 @@ class BirthdaySetFor(
             user_id=uid,
             month=self.month,
             day=self.day,
-            wishlist_url=self.wishlist_url
-            or (existing.wishlist_url if existing else None),
+            wishlist_url=_clean_wishlist_url(self.wishlist_url)
+            if self.wishlist_url
+            else (existing.wishlist_url if existing else None),
         )
         guild_state.birthdays[uid] = entry
         guild_state.guild_name = gc.name
@@ -834,8 +844,7 @@ class BirthdayList(
                     marker = "  "
                 lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}")
                 if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url):
-                    url = entry.wishlist_url.split("?")[0]
-                    lines.append(f"    🎁 {url}")
+                    lines.append(f"    🎁 {_clean_wishlist_url(entry.wishlist_url)}")
 
         legend_parts = []
         if today_keys:
@@ -871,7 +880,7 @@ def build_announcement_embed(
         )
         embed.add_field(
             name="🎁 Spoil Them Here!",
-            value=f"{entry.wishlist_url}",
+            value=_clean_wishlist_url(entry.wishlist_url),
             inline=False,
         )
     else:
