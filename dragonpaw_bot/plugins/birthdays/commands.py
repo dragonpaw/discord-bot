@@ -4,7 +4,6 @@ import calendar
 import datetime
 import zoneinfo
 from typing import TYPE_CHECKING
-from urllib.parse import quote
 
 import hikari
 import lightbulb
@@ -820,16 +819,11 @@ class BirthdayList(
         for entry in guild_state.birthdays.values():
             by_month.setdefault(entry.month, []).append(entry)
 
-        lines: list[str] = []
+        lines: list[str] = ["🎂 **Registered Birthdays**"]
         for month_num in sorted(by_month.keys()):
             entries = sorted(by_month[month_num], key=lambda e: e.day)
-            lines.append(f"**{MONTH_NAMES[month_num]}**")
+            lines.append(f"\n## {MONTH_NAMES[month_num]}")
             for entry in entries:
-                wishlist = (
-                    f" 🎁 [wishlist]({quote(entry.wishlist_url, safe=':/')})"
-                    if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
-                    else ""
-                )
                 tz = f" ({entry.timezone})" if entry.timezone else ""
                 entry_md = (entry.month, entry.day)
                 if entry_md in today_keys:
@@ -838,20 +832,19 @@ class BirthdayList(
                     marker = "⭐"
                 else:
                     marker = "  "
-                lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
+                lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}")
+                if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url):
+                    lines.append(f"    🎁 <{entry.wishlist_url}>")
 
         legend_parts = []
         if today_keys:
             legend_parts.append("🎂 = birthday today!")
-        legend_parts.append("⭐ = next upcoming birthday")
+        legend_parts.append("⭐ = next upcoming")
 
-        embed = hikari.Embed(
-            title="🎂 Registered Birthdays",
-            description="\n".join(lines),
-            color=SOLARIZED_ORANGE,
-        )
-        embed.set_footer(text=" · ".join(legend_parts))
-        await ctx.respond(embed=embed, flags=hikari.MessageFlag.EPHEMERAL)
+        lines.append("")
+        lines.append(" · ".join(legend_parts))
+
+        await ctx.respond("\n".join(lines), flags=hikari.MessageFlag.EPHEMERAL)
 
 
 # ---------------------------------------------------------------------------- #
@@ -877,7 +870,7 @@ def build_announcement_embed(
         )
         embed.add_field(
             name="🎁 Spoil Them Here!",
-            value=f"<{entry.wishlist_url}>",
+            value=f"{entry.wishlist_url}",
             inline=False,
         )
     else:
