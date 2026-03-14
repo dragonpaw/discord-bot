@@ -842,9 +842,12 @@ class BirthdayList(
                     marker = "⭐"
                 else:
                     marker = "  "
-                lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}")
-                if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url):
-                    lines.append(f"    🎁 {_clean_wishlist_url(entry.wishlist_url)}")
+                wishlist = (
+                    f" 🎁 [wishlist]({_clean_wishlist_url(entry.wishlist_url)})"
+                    if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
+                    else ""
+                )
+                lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
 
         legend_parts = []
         if today_keys:
