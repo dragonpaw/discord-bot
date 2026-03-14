@@ -214,9 +214,7 @@ class BirthdayStatus(
             "today! 🎂" if days == 0 else f"in **{days}** day{'s' if days != 1 else ''}"
         )
         wishlist = (
-            f"🎁 <{entry.wishlist_url}>"
-            if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
-            else "_No wishlist set_"
+            f"🎁 <{entry.wishlist_url}>" if entry.wishlist_url else "_No wishlist set_"
         )
         tz_display = entry.timezone or "UTC"
 
@@ -844,7 +842,7 @@ class BirthdayList(
                     marker = "  "
                 wishlist = (
                     f" 🎁 [wishlist]({_clean_wishlist_url(entry.wishlist_url)})"
-                    if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
+                    if entry.wishlist_url
                     else ""
                 )
                 lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
@@ -869,7 +867,7 @@ def build_announcement_embed(
     member: hikari.Member, entry: BirthdayEntry
 ) -> hikari.Embed:
     """Build the birthday announcement embed posted in the announcement channel."""
-    if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url):
+    if entry.wishlist_url:
         description = (
             f"*races into the channel, skidding on tiny claws*\n\n"
             f"EVERYONE!! It's {member.mention}'s BIRTHDAY today!! 🎂🎉\n\n"
