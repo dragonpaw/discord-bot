@@ -791,23 +791,27 @@ class BirthdayList(
             )
             return
 
-        # Find the next upcoming birthday
+        # Identify today's birthdays and the next upcoming one
         today = datetime.datetime.now(tz=datetime.UTC).date()
         today_md = (today.month, today.day)
+        today_keys: set[tuple[int, int]] = set()
 
-        def _days_until(entry: BirthdayEntry) -> int:
-            """Days from today until this birthday next occurs."""
-            this_year = today.replace(month=entry.month, day=min(entry.day, 28))
+        def _days_until_future(entry: BirthdayEntry) -> int:
+            """Days from today until this birthday next occurs (excluding today)."""
             try:
                 this_year = today.replace(month=entry.month, day=entry.day)
             except ValueError:
                 # Feb 29 in a non-leap year — use Feb 28
                 this_year = today.replace(month=entry.month, day=28)
-            if (entry.month, entry.day) < today_md:
+            if (entry.month, entry.day) <= today_md:
                 this_year = this_year.replace(year=today.year + 1)
             return (this_year - today).days
 
-        next_entry = min(guild_state.birthdays.values(), key=_days_until)
+        for entry in guild_state.birthdays.values():
+            if (entry.month, entry.day) == today_md:
+                today_keys.add(today_md)
+
+        next_entry = min(guild_state.birthdays.values(), key=_days_until_future)
         next_key = (next_entry.month, next_entry.day)
 
         # Group by month, sorted by day
@@ -821,20 +825,31 @@ class BirthdayList(
             lines.append(f"**{MONTH_NAMES[month_num]}**")
             for entry in entries:
                 wishlist = (
-                    f"\n    🎁 <{entry.wishlist_url}>"
+                    f"\n    🎁 [wishlist]({entry.wishlist_url})"
                     if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url)
                     else ""
                 )
                 tz = f" ({entry.timezone})" if entry.timezone else ""
-                marker = "⭐" if (entry.month, entry.day) == next_key else "  "
+                entry_md = (entry.month, entry.day)
+                if entry_md in today_keys:
+                    marker = "🎂"
+                elif entry_md == next_key:
+                    marker = "⭐"
+                else:
+                    marker = "  "
                 lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
+
+        legend_parts = []
+        if today_keys:
+            legend_parts.append("🎂 = birthday today!")
+        legend_parts.append("⭐ = next upcoming birthday")
 
         embed = hikari.Embed(
             title="🎂 Registered Birthdays",
             description="\n".join(lines),
             color=SOLARIZED_ORANGE,
         )
-        embed.set_footer(text="⭐ = next upcoming birthday")
+        embed.set_footer(text=" · ".join(legend_parts))
         await ctx.respond(embed=embed, flags=hikari.MessageFlag.EPHEMERAL)
 
 
