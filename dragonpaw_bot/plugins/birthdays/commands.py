@@ -834,7 +834,7 @@ class BirthdayList(
                     marker = "  "
                 lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}")
                 if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url):
-                    lines.append(f"    🎁 <{entry.wishlist_url}>")
+                    lines.append(f"    🎁 {entry.wishlist_url}")
 
         legend_parts = []
         if today_keys:
