@@ -9,7 +9,7 @@ import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot.colors import SOLARIZED_ORANGE, SOLARIZED_YELLOW
+from dragonpaw_bot.colors import SOLARIZED_MAGENTA, SOLARIZED_ORANGE
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.birthdays import state
 from dragonpaw_bot.plugins.birthdays.constants import (
@@ -826,16 +826,34 @@ def build_announcement_embed(
     member: hikari.Member, entry: BirthdayEntry
 ) -> hikari.Embed:
     """Build the birthday announcement embed posted in the announcement channel."""
-    description = f"🐉🎂 Happy Birthday, {member.mention}!! 🎂🐉"
-    embed = hikari.Embed(
-        title="🎂 Happy Birthday!",
-        description=description,
-        color=SOLARIZED_YELLOW,
-    )
     if entry.wishlist_url and _is_valid_wishlist_url(entry.wishlist_url):
+        description = (
+            f"*races into the channel, skidding on tiny claws*\n\n"
+            f"EVERYONE!! It's {member.mention}'s BIRTHDAY today!! 🎂🎉\n\n"
+            f"They are *definitely* on the naughty list this year, "
+            f"so let's spoil them rotten! 👀🎁"
+        )
+        embed = hikari.Embed(
+            title="🔥 A BIRTHDAY! A BIRTHDAY!",
+            description=description,
+            color=SOLARIZED_MAGENTA,
+        )
         embed.add_field(
-            name="🎁 Wishlist",
-            value=f"[Click here]({entry.wishlist_url})",
+            name="🎁 Spoil Them Here!",
+            value=f"[Check out their wishlist!]({entry.wishlist_url})",
             inline=False,
+        )
+    else:
+        description = (
+            f"*races into the channel, skidding on tiny claws*\n\n"
+            f"EVERYONE!! It's {member.mention}'s BIRTHDAY today!! 🎂🎉\n\n"
+            f"They are *definitely* on the naughty list this year — "
+            f"and they didn't even set up a wishlist, "
+            f"so you'll just have to surprise them! 🐉💖"
+        )
+        embed = hikari.Embed(
+            title="🔥 A BIRTHDAY! A BIRTHDAY!",
+            description=description,
+            color=SOLARIZED_MAGENTA,
         )
     return embed
