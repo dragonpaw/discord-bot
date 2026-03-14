@@ -1,28 +1,28 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import hikari
 import lightbulb
 import structlog
 
 from dragonpaw_bot import utils
+from dragonpaw_bot.context import GuildContext, check_role_manageable
 from dragonpaw_bot.plugins.birthdays import commands, state
 from dragonpaw_bot.plugins.birthdays import config as birthday_config
 from dragonpaw_bot.plugins.birthdays.constants import (
     BIRTHDAY_CONFIG_PREFIX,
     BIRTHDAY_PREFIX,
 )
-from dragonpaw_bot.plugins.birthdays.models import (
-    BirthdayEntry,
-    BirthdayGuildConfig,
-)
-from dragonpaw_bot.utils import GuildContext, InteractionHandler, ModalHandler
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
+    from dragonpaw_bot.plugins.birthdays.models import (
+        BirthdayEntry,
+        BirthdayGuildConfig,
+    )
+    from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 __all__ = ["INTERACTION_HANDLERS", "MODAL_HANDLERS"]
 
@@ -86,6 +86,13 @@ async def announce_birthday(
             try:
                 await gc.bot.rest.add_role_to_member(gc.guild_id, member.id, role.id)
                 log.info("Assigned birthday role", role=cfg.birthday_role)
+            except hikari.ForbiddenError as exc:
+                log.warning("Failed to assign birthday role", error=str(exc))
+                reason = await check_role_manageable(gc.bot, gc.guild_id, role)
+                await gc.log(
+                    f"⚠️ I can't assign the **{cfg.birthday_role}** role to {member.mention}. "
+                    + (reason or "Please check my permissions.")
+                )
             except hikari.HTTPError as exc:
                 log.warning("Failed to assign birthday role", error=str(exc))
         else:
@@ -228,7 +235,7 @@ async def process_guild_birthdays(gc: GuildContext) -> None:
 @loader.task(lightbulb.crontrigger("5 * * * *"))
 async def hourly_birthdays(bot: hikari.GatewayBot) -> None:
     """Hourly task: announce birthdays at each user's local midnight."""
-    assert isinstance(bot, DragonpawBot)
+    bot = cast("DragonpawBot", bot)
     guilds = list(bot.cache.get_guilds_view().values())
     logger.debug("Birthday hourly run", guild_count=len(guilds))
     for guild in guilds:

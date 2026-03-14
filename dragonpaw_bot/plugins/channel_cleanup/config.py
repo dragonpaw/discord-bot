@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Slash commands: /config cleanup add|remove|status"""
 
 from __future__ import annotations
@@ -7,10 +6,14 @@ import hikari
 import lightbulb
 import structlog
 
+from dragonpaw_bot.context import (
+    CHANNEL_CLEANUP_PERMS,
+    GuildContext,
+    check_channel_perms,
+)
 from dragonpaw_bot.duration import format_duration, parse_duration_minutes
 from dragonpaw_bot.plugins.channel_cleanup import state as cleanup_state
 from dragonpaw_bot.plugins.channel_cleanup.models import CleanupChannelEntry
-from dragonpaw_bot.utils import GuildContext
 
 logger = structlog.get_logger(__name__)
 
@@ -65,9 +68,19 @@ class CleanupAdd(
             expiry_minutes=expiry_minutes,
         )
 
+        missing = await check_channel_perms(
+            gc.bot, ctx.guild_id, self.channel.id, CHANNEL_CLEANUP_PERMS
+        )
+        warning = ""
+        if missing:
+            warning = (
+                f"\n⚠️ I'm missing permissions in that channel: "
+                f"**{', '.join(missing)}**. Cleanup won't work until that's fixed."
+            )
+
         await ctx.respond(
             f"<#{self.channel.id}> will be cleaned of messages older than "
-            f"{format_duration(expiry_minutes)}.",
+            f"{format_duration(expiry_minutes)}.{warning}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         await gc.log(
@@ -135,9 +148,9 @@ class CleanupStatus(
             return
 
         lines = ["**Auto-cleanup channels:**"]
-        for entry in st.channels:
-            lines.append(
-                f"• <#{entry.channel_id}> → expires: {format_duration(entry.expiry_minutes)}"
-            )
+        lines.extend(
+            f"• <#{entry.channel_id}> → expires: {format_duration(entry.expiry_minutes)}"
+            for entry in st.channels
+        )
 
         await ctx.respond("\n".join(lines), flags=hikari.MessageFlag.EPHEMERAL)

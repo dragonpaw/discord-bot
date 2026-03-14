@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import hikari
 import lightbulb
@@ -18,11 +17,11 @@ from dragonpaw_bot.plugins.subday.constants import (
     SUBDAY_SIGNUP_ID,
     TOTAL_WEEKS,
 )
-from dragonpaw_bot.plugins.subday.models import SubDayParticipant
-from dragonpaw_bot.utils import InteractionHandler
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
+    from dragonpaw_bot.plugins.subday.models import SubDayParticipant
+    from dragonpaw_bot.utils import InteractionHandler
 
 __all__ = ["INTERACTION_HANDLERS", "MILESTONE_WEEKS", "TOTAL_WEEKS"]
 
@@ -118,7 +117,7 @@ async def _forward_owner_prompts(
         log.info("Saved state after clearing departed owners")
 
 
-async def _advance_participant(  # noqa: PLR0911
+async def _advance_participant(
     bot: DragonpawBot,
     guild: hikari.Guild,
     uid: int,
@@ -232,7 +231,7 @@ async def _process_guild_prompts(bot: DragonpawBot, guild: hikari.Guild) -> None
 @loader.task(lightbulb.crontrigger("0 14 * * 0"))
 async def sunday_prompts(bot: hikari.GatewayBot) -> None:
     """Advance completed participants and DM their next prompt."""
-    assert isinstance(bot, DragonpawBot)
+    bot = cast("DragonpawBot", bot)
     guilds = list(bot.cache.get_guilds_view().values())
     logger.info("Sunday prompt run", guild_count=len(guilds))
     for guild in guilds:

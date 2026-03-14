@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Mapping
+from typing import TYPE_CHECKING
 
 import hikari
 import lightbulb
@@ -8,10 +8,13 @@ import structlog
 
 from dragonpaw_bot import structs, utils
 from dragonpaw_bot.colors import SOLARIZED_BLUE
-from dragonpaw_bot.utils import ChannelContext, GuildContext, InteractionHandler
+from dragonpaw_bot.context import ChannelContext, GuildContext
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from dragonpaw_bot.bot import DragonpawBot
+    from dragonpaw_bot.utils import InteractionHandler
 
 logger = structlog.get_logger(__name__)
 
@@ -25,9 +28,9 @@ async def configure_lobby(
     config: structs.LobbyConfig,
     state: structs.GuildState,
     role_map: Mapping[str, hikari.Role],
-) -> List[str]:
+) -> list[str]:
     log = gc.logger
-    errors: List[str] = []
+    errors: list[str] = []
 
     # Where is the lobby
     channel = await utils.guild_channel_by_name(gc, config.channel)
@@ -175,7 +178,7 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
             role=guild_state.lobby_role_id,
         )
     except hikari.ForbiddenError:
-        logger.error(
+        logger.warning(
             "Cannot remove lobby role — forbidden",
             role_id=guild_state.lobby_role_id,
         )

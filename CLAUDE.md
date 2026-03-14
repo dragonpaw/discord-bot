@@ -50,7 +50,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **`duration.py`** — Shared `parse_duration_minutes()` and `format_duration()` helpers used by plugin config commands.
 
-**`context.py`** — `GuildContext` and `ChannelContext` dataclasses that bundle bot + guild info for convenient access throughout plugins. `GuildContext` provides factory methods (`from_ctx`, `from_interaction`, `from_guild`), permission checks, and `gc.log()` for sending notifications to the guild's configured log channel. `ChannelContext` extends it with channel-level operations like `purge_old_messages()` and `delete_my_messages()`. Also contains standalone permission helpers (`member_has_role`, `has_permission`, `has_any_role_permission`) and `check_channel_perms`.
+**`context.py`** — `GuildContext` and `ChannelContext` dataclasses that bundle bot + guild info for convenient access throughout plugins. `GuildContext` provides factory methods (`from_ctx`, `from_interaction`, `from_guild`), permission checks, and `gc.log()` for sending notifications to the guild's configured log channel. `ChannelContext` extends it with channel-level operations like `purge_old_messages()` and `delete_my_messages()`. Also contains standalone permission helpers (`member_has_role`, `has_permission`, `has_any_role_permission`), `check_channel_perms` (accepts optional `required` permission set — defaults to `CHANNEL_POST_PERMS`; use `CHANNEL_CLEANUP_PERMS` for cleanup channels), and `check_role_manageable` (checks bot can manage a role via permissions + hierarchy).
 
 **`utils.py`** — Discord helpers: looking up channels/roles/emojis by name.
 
@@ -60,7 +60,11 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **Config flow:** Server admins use the `/config roles setup` slash command with a URL to a role-menu TOML file. The bot fetches and parses it directly into a `RolesConfig`, sets up role menus, then persists `GuildState` to disk as YAML. The `/config bot logging` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/config roles setup` reloads.
 
-**Guild logging:** `gc.log()` (on `GuildContext`) sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji.
+**Guild logging:** `gc.log()` (on `GuildContext`) sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji. Use first-person ("I/me/my") in bot-facing staff messages (dragon persona).
+
+**Permission validation:** Config commands that set up channels or roles should validate permissions at setup time and warn the admin (but still save the config). Runtime permission errors in cron tasks should post actionable fix instructions to the guild log channel via `gc.log()`. Use `check_channel_perms` with the appropriate permission set and `check_role_manageable` for role hierarchy checks.
+
+**Global error handler:** A lightbulb error handler on the client logs full stack traces for command failures via `logger.exception()`, then returns `False` to let lightbulb continue default handling.
 
 **State serialization note:** Role menu state is now persisted separately in `state/role_menus_{guild_id}.yaml`. The main `GuildState` YAML is straightforward Pydantic JSON-mode serialization. Legacy YAML files containing `role_emojis`/`role_names`/`role_channel_id` are automatically stripped on load.
 
@@ -86,7 +90,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - Debug logging is enabled for the `dragonpaw_bot` logger. Logging is configured in `dragonpaw_bot/logging.py`.
 - Python version target: 3.13
 - Tests use `pytest-asyncio` with `asyncio_mode = "auto"` (no `@pytest.mark.asyncio` needed)
-- Ruff lint rules: isort (`I`) and pylint (`PL`) enabled in addition to defaults
+- Ruff lint rules: `I`, `PL`, `UP`, `SIM`, `PERF`, `RUF`, `TRY`, `DTZ`, `TC` enabled; `RUF001`, `RUF002`, `TRY003` ignored
 - New features should be implemented as extensions under `dragonpaw_bot/plugins/`
 - Plugins should include comprehensive logging at appropriate levels:
   - **Info**: user actions (signups, completions, config changes)
@@ -96,5 +100,5 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - Shared helpers belong in `utils.py` (e.g. `member_has_role`, `guild_role_by_name`, `guild_channel_by_name`)
 - Plugin-specific docs: Each plugin includes a `CLAUDE.md` file in its directory describing functionality, architecture, and configuration. This is the single source of truth for what the plugin does. When adding, changing, or removing features from a plugin, always update its CLAUDE.md file to reflect the current state.
 - State is persisted as YAML files in `state/` using `safer` for atomic writes
-- All Python files are UTF-8 (with `# -*- coding: utf-8 -*-` header). Use literal emoji characters (`📖`, `✅`) directly in source, never Unicode escapes (`\U0001f4d6`, `\u2705`).
+- All Python files are UTF-8. Use literal emoji characters (`📖`, `✅`) directly in source, never Unicode escapes (`\U0001f4d6`, `\u2705`).
 - Type checking uses `ty` (not mypy): `uv run ty check dragonpaw_bot/`

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import calendar
 import datetime
 import zoneinfo
@@ -37,7 +36,7 @@ class BirthdayEntry(pydantic.BaseModel):
                 zoneinfo.ZoneInfo(v)
             except (KeyError, zoneinfo.ZoneInfoNotFoundError):
                 msg = f"Invalid IANA timezone: {v}"
-                raise ValueError(msg)  # noqa: B904
+                raise ValueError(msg)
         return v
 
 

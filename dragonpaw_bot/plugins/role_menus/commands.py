@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import datetime
 import re
 import tomllib
-from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import hikari
@@ -13,6 +11,7 @@ import structlog
 
 from dragonpaw_bot import http, structs, utils
 from dragonpaw_bot.colors import rainbow
+from dragonpaw_bot.context import ChannelContext, GuildContext
 from dragonpaw_bot.plugins.role_menus import state
 from dragonpaw_bot.plugins.role_menus.constants import ROLE_MENU_PREFIX
 from dragonpaw_bot.plugins.role_menus.models import (
@@ -21,9 +20,10 @@ from dragonpaw_bot.plugins.role_menus.models import (
     RoleMenuState,
     RolesConfig,
 )
-from dragonpaw_bot.utils import ChannelContext, GuildContext
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
@@ -70,10 +70,7 @@ def build_menu_select(
     """
     custom_id = f"{ROLE_MENU_PREFIX}{menu_slug}"
 
-    if menu.single:
-        max_values = 1
-    else:
-        max_values = len(valid_options)
+    max_values = 1 if menu.single else len(valid_options)
 
     select = hikari.impl.TextSelectMenuBuilder(
         custom_id=custom_id,
@@ -387,11 +384,11 @@ async def configure_guild(gc: GuildContext, url: str) -> list[str]:
     try:
         config = parse_role_config(config_text)
     except tomllib.TOMLDecodeError as e:
-        log.error("Error parsing TOML file", error=str(e))
+        log.exception("Error parsing TOML file")
         await gc.log(f"🤯 **Config error:** {e}")
         return [f"Config error: {e}"]
     except pydantic.ValidationError as e:
-        log.error("Config validation error", error=str(e))
+        log.exception("Config validation error")
         await gc.log(f"🤯 **Config validation error:** {e}")
         return [f"Config validation error: {e}"]
 
@@ -402,7 +399,7 @@ async def configure_guild(gc: GuildContext, url: str) -> list[str]:
         id=gc.guild_id,
         name=gc.name,
         config_url=url,
-        config_last=datetime.datetime.now(),
+        config_last=datetime.datetime.now(tz=datetime.UTC),
         log_channel_id=old_state.log_channel_id if old_state else None,
     )
 

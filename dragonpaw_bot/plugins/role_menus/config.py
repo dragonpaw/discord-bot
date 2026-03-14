@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Slash commands: /config roles setup"""
 
 from __future__ import annotations
@@ -7,8 +6,8 @@ import hikari
 import lightbulb
 import structlog
 
+from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.role_menus.commands import configure_guild
-from dragonpaw_bot.utils import GuildContext
 
 logger = structlog.get_logger(__name__)
 

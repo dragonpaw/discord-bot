@@ -14,6 +14,7 @@ import uvloop
 import yaml
 
 from dragonpaw_bot import structs
+from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.logging import configure_logging
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
@@ -24,7 +25,7 @@ from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_h
 from dragonpaw_bot.plugins.role_menus import config as roles_config
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
 from dragonpaw_bot.plugins.subday import config as subday_config
-from dragonpaw_bot.utils import GuildContext, InteractionHandler, ModalHandler
+from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 configure_logging()
 logger = structlog.get_logger(__name__)
@@ -118,6 +119,20 @@ class DragonpawBot(hikari.GatewayBot):
 
 bot = DragonpawBot()
 client = lightbulb.client_from_app(bot, default_enabled_guilds=TEST_GUILDS)
+
+
+@client.error_handler
+async def on_command_error(
+    exc: lightbulb.exceptions.ExecutionPipelineFailedException,
+) -> bool:
+    for cause in exc.causes:
+        logger.exception(
+            "Command failed",
+            command=exc.context.command_data.qualified_name,
+            exc_info=cause,
+        )
+    return False  # Let lightbulb continue its default handling
+
 
 # Register bot in DI so tasks/commands can access it
 registry = client.di.registry_for(lightbulb.di.Contexts.DEFAULT)
@@ -321,7 +336,7 @@ class BotLogging(
                 id=ctx.guild_id,
                 name=guild.name,
                 config_url="",
-                config_last=datetime.datetime.now(),
+                config_last=datetime.datetime.now(tz=datetime.UTC),
             )
 
         if self.channel is not None:

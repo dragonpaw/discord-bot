@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import calendar
@@ -11,6 +10,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.colors import SOLARIZED_ORANGE, SOLARIZED_YELLOW
+from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.birthdays import state
 from dragonpaw_bot.plugins.birthdays.constants import (
     BIRTHDAY_PREFIX,
@@ -19,7 +19,6 @@ from dragonpaw_bot.plugins.birthdays.constants import (
 from dragonpaw_bot.plugins.birthdays.models import (
     BirthdayEntry,
 )
-from dragonpaw_bot.utils import GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -90,7 +89,7 @@ def _days_until_birthday(
 ) -> int:
     """Calculate days until next occurrence of this birthday."""
     if today is None:
-        today = datetime.date.today()
+        today = datetime.datetime.now(tz=datetime.UTC).date()
     if month == _FEB and day == _LEAP_DAY:
         this_year = _feb29_date(today.year)
     else:
@@ -112,10 +111,13 @@ def is_birthday_on_date(entry: BirthdayEntry, date: datetime.date) -> bool:
     if entry.month == date.month and entry.day == date.day:
         return True
     # Feb 29 birthdays: treat as March 1 in non-leap years
-    if entry.month == _FEB and entry.day == _LEAP_DAY:
-        if not calendar.isleap(date.year) and date.month == _MAR and date.day == 1:
-            return True
-    return False
+    return (
+        entry.month == _FEB
+        and entry.day == _LEAP_DAY
+        and not calendar.isleap(date.year)
+        and date.month == _MAR
+        and date.day == 1
+    )
 
 
 def _validate_timezone(tz_str: str) -> zoneinfo.ZoneInfo | None:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Slash commands: /config media add|remove|status"""
 
 from __future__ import annotations
@@ -7,10 +6,15 @@ import hikari
 import lightbulb
 import structlog
 
+from dragonpaw_bot.context import (
+    CHANNEL_CLEANUP_PERMS,
+    CHANNEL_POST_PERMS,
+    GuildContext,
+    check_channel_perms,
+)
 from dragonpaw_bot.duration import format_duration, parse_duration_minutes
 from dragonpaw_bot.plugins.media_channels import state as media_state
 from dragonpaw_bot.plugins.media_channels.models import MediaChannelEntry
-from dragonpaw_bot.utils import GuildContext
 
 logger = structlog.get_logger(__name__)
 
@@ -83,6 +87,15 @@ class MediaAdd(
             redirect=self.redirect.name if self.redirect else None,
             expiry_minutes=expiry_minutes,
         )
+
+        media_perms = {**CHANNEL_POST_PERMS, **CHANNEL_CLEANUP_PERMS}
+        missing = await check_channel_perms(
+            gc.bot, ctx.guild_id, self.channel.id, media_perms
+        )
+        if missing:
+            parts.append(
+                f"⚠️ I'm missing permissions in that channel: **{', '.join(missing)}**."
+            )
 
         await ctx.respond("\n".join(parts), flags=hikari.MessageFlag.EPHEMERAL)
         await gc.log(

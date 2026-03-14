@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Shared duration parsing/formatting utilities."""
 
 from __future__ import annotations

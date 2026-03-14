@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Slash commands: /config subday settings|prize-roles|prizes"""
 
 from __future__ import annotations
@@ -9,19 +8,18 @@ import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot import utils
 from dragonpaw_bot.colors import SOLARIZED_VIOLET
+from dragonpaw_bot.context import GuildContext, check_channel_perms
 from dragonpaw_bot.plugins.subday import state
 from dragonpaw_bot.plugins.subday.constants import (
     MILESTONE_WEEKS,
     SUBDAY_CFG_ROLE_PREFIX,
     SUBDAY_CONFIG_PREFIX,
 )
-from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig
-from dragonpaw_bot.utils import GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
+    from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -98,7 +96,7 @@ class _DefaultsActionRow:
         self._inner = inner
         self._defaults = defaults
 
-    def build(self) -> tuple[dict, list]:  # noqa: ANN401
+    def build(self) -> tuple[dict, list]:
         payload, resources = self._inner.build()
         if self._defaults:
             payload["components"][0]["default_values"] = self._defaults
@@ -253,7 +251,7 @@ async def _reject_missing_perms(
 ) -> bool:
     """Check channel perms and send an error response if missing. Returns True if rejected."""
     channel_id = hikari.Snowflake(interaction.values[0])
-    missing = await utils.check_channel_perms(bot, guild_id, channel_id)
+    missing = await check_channel_perms(bot, guild_id, channel_id)
     if not missing:
         return False
     missing_str = ", ".join(f"**{p}**" for p in missing)
@@ -327,11 +325,14 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         new_value = _resolve_select_value(interaction, field)
 
     # For channel fields, verify the bot can write to the selected channel
-    if new_value and field == "achievements_channel":
-        if await _reject_missing_perms(
+    if (
+        new_value
+        and field == "achievements_channel"
+        and await _reject_missing_perms(
             interaction, bot, guild_id, guild_state, new_value
-        ):
-            return
+        )
+    ):
+        return
 
     if new_value == old_value:
         logger.debug(

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import datetime
@@ -15,6 +14,7 @@ from dragonpaw_bot.colors import (
     SOLARIZED_VIOLET,
     SOLARIZED_YELLOW,
 )
+from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.subday import chart, prompts, state
 from dragonpaw_bot.plugins.subday.constants import (
     MAX_EMBEDS_PER_MESSAGE,
@@ -24,7 +24,6 @@ from dragonpaw_bot.plugins.subday.constants import (
     TOTAL_WEEKS,
 )
 from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig, SubDayParticipant
-from dragonpaw_bot.utils import GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -191,7 +190,7 @@ async def _try_post_achievement_embed(
         )
 
 
-async def _post_achievement(  # noqa: PLR0913
+async def _post_achievement(
     gc: GuildContext,
     completer: hikari.Member,
     target: hikari.Member,
@@ -1125,7 +1124,7 @@ class SubDayComplete(
     )
 
     @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912, PLR0915
+    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912
         assert ctx.guild_id and ctx.member
         gc = GuildContext.from_ctx(ctx)
 
@@ -1137,7 +1136,6 @@ class SubDayComplete(
 
         requested_week: int | None = self.week
         has_explicit_week = requested_week is not None
-        existing = guild_state.participants.get(target_id)
         is_backfill = has_explicit_week
 
         required_role = cfg.backfill_role if is_backfill else cfg.complete_role

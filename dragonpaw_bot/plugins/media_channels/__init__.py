@@ -1,18 +1,17 @@
-# -*- coding: utf-8 -*-
 """Media channels plugin: enforces media-only policy in configured channels."""
 
 from __future__ import annotations
 
 import asyncio
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import hikari
 import lightbulb
 import structlog
 
+from dragonpaw_bot.context import ChannelContext, GuildContext
 from dragonpaw_bot.plugins.media_channels import state as media_state
-from dragonpaw_bot.utils import ChannelContext, GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -148,7 +147,7 @@ async def _purge_media_channel(cc: ChannelContext, expiry_minutes: int) -> None:
 @loader.task(lightbulb.crontrigger("30 * * * *"))
 async def hourly_media_cleanup(bot: hikari.GatewayBot) -> None:
     """Hourly task: purge old messages from media channels with expiry configured (all concurrent)."""
-    assert isinstance(bot, DragonpawBot)
+    bot = cast("DragonpawBot", bot)
     guilds = list(bot.cache.get_guilds_view().values())
     logger.debug("Media channel cleanup hourly run", guild_count=len(guilds))
 

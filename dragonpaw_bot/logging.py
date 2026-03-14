@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Logging configuration for Dragonpaw Bot.
 
 Call configure_logging() once at startup, before any other imports log.

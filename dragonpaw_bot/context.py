@@ -1,15 +1,15 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import hikari
-import lightbulb
 import structlog
 
 if TYPE_CHECKING:
+    import lightbulb
+
     from dragonpaw_bot.bot import DragonpawBot
     from dragonpaw_bot.structs import GuildState
 
@@ -136,10 +136,7 @@ class GuildContext:
         guild = self.bot.cache.get_guild(self.guild_id)
         if guild and self.member.id == guild.owner_id:
             return True
-        for name in role_names:
-            if member_has_role(self.member, name):
-                return True
-        return False
+        return any(member_has_role(self.member, name) for name in role_names)
 
     async def check_permission(
         self, ctx: lightbulb.Context, role_name: str | list[str] | None, action: str
@@ -220,7 +217,7 @@ class ChannelContext(GuildContext):
         (capped at single_delete_limit per call — remainder picked up next run).
         Hikari handles rate limiting automatically. Returns count of deleted messages.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cutoff = now - timedelta(minutes=expiry_minutes)
         bulk_cutoff = now - timedelta(days=14)
         to_bulk: list[hikari.Snowflake] = []
@@ -242,6 +239,10 @@ class ChannelContext(GuildContext):
                 channel=self.channel_name,
                 error=str(exc),
             )
+            await self.log(
+                f"⚠️ I can't read messages in **#{self.channel_name}** for cleanup. "
+                f"Please grant me **Read Message History** and **View Channel** permissions in that channel."
+            )
             return 0
 
         for i in range(0, len(to_bulk), 100):
@@ -254,6 +255,10 @@ class ChannelContext(GuildContext):
                     "Bulk delete failed",
                     channel=self.channel_name,
                     error=str(exc),
+                )
+                await self.log(
+                    f"⚠️ I can't delete messages in **#{self.channel_name}**. "
+                    f"Please grant me **Manage Messages** permission in that channel."
                 )
                 break
 
@@ -279,6 +284,10 @@ class ChannelContext(GuildContext):
                     channel=self.channel_name,
                     error=str(exc),
                 )
+                await self.log(
+                    f"⚠️ I can't delete messages in **#{self.channel_name}**. "
+                    f"Please grant me **Manage Messages** permission in that channel."
+                )
                 break
 
         if to_single:
@@ -303,9 +312,13 @@ class ChannelContext(GuildContext):
                 self.logger.debug("Deleting my message", message_id=message.id)
                 await message.delete()
 
-    async def check_perms(self) -> list[str]:
+    async def check_perms(
+        self, required: dict[hikari.Permissions, str] | None = None
+    ) -> list[str]:
         """Return list of missing permission names for the bot in this channel."""
-        return await check_channel_perms(self.bot, self.guild_id, self.channel_id)
+        return await check_channel_perms(
+            self.bot, self.guild_id, self.channel_id, required
+        )
 
 
 # ---------------------------------------------------------------------------- #
@@ -315,10 +328,7 @@ class ChannelContext(GuildContext):
 
 def member_has_role(member: hikari.Member, role_name: str) -> bool:
     """Check if a member has a role by name (via the guild's role cache)."""
-    for role in member.get_roles():
-        if role.name == role_name:
-            return True
-    return False
+    return any(role.name == role_name for role in member.get_roles())
 
 
 def has_permission(
@@ -348,21 +358,28 @@ def has_any_role_permission(
     """
     if member.id == guild.owner_id:
         return True
-    for name in role_names:
-        if member_has_role(member, name):
-            return True
-    return False
+    return any(member_has_role(member, name) for name in role_names)
 
 
-PERM_LABELS: dict[hikari.Permissions, str] = {
+CHANNEL_POST_PERMS: dict[hikari.Permissions, str] = {
     hikari.Permissions.SEND_MESSAGES: "Send Messages",
     hikari.Permissions.EMBED_LINKS: "Embed Links",
     hikari.Permissions.ATTACH_FILES: "Attach Files",
 }
 
 
+CHANNEL_CLEANUP_PERMS: dict[hikari.Permissions, str] = {
+    hikari.Permissions.VIEW_CHANNEL: "View Channel",
+    hikari.Permissions.READ_MESSAGE_HISTORY: "Read Message History",
+    hikari.Permissions.MANAGE_MESSAGES: "Manage Messages",
+}
+
+
 async def check_channel_perms(
-    bot: DragonpawBot, guild_id: hikari.Snowflake, channel_id: hikari.Snowflake
+    bot: DragonpawBot,
+    guild_id: hikari.Snowflake,
+    channel_id: hikari.Snowflake,
+    required: dict[hikari.Permissions, str] | None = None,
 ) -> list[str]:
     """Return a list of missing permission names for the bot in the given channel."""
     logger.debug(
@@ -427,8 +444,42 @@ async def check_channel_perms(
             perms &= ~ow.deny
             perms |= ow.allow
 
+    check = required or CHANNEL_POST_PERMS
     missing = []
-    for perm, label in PERM_LABELS.items():
+    for perm, label in check.items():
         if not (perms & perm):
             missing.append(label)
     return missing
+
+
+async def check_role_manageable(
+    bot: DragonpawBot, guild_id: hikari.Snowflake, role: hikari.Role
+) -> str | None:
+    """Return a reason string if the bot cannot manage the given role, or None if OK."""
+    assert bot.user_id
+    me = await bot.rest.fetch_member(guild_id, bot.user_id)
+    guild_roles = await bot.rest.fetch_roles(guild_id)
+    role_map = {r.id: r for r in guild_roles}
+
+    # Check Manage Roles permission
+    perms = hikari.Permissions.NONE
+    for rid in me.role_ids:
+        r = role_map.get(rid)
+        if r:
+            perms |= r.permissions
+    if not (
+        perms & (hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_ROLES)
+    ):
+        return "I don't have **Manage Roles** permission."
+
+    # Check role hierarchy
+    my_top = max(
+        (role_map[rid].position for rid in me.role_ids if rid in role_map),
+        default=0,
+    )
+    if role.position >= my_top:
+        return (
+            f"My highest role is below **{role.name}** in the role hierarchy — "
+            f"please move my role above it in Server Settings → Roles."
+        )
+    return None

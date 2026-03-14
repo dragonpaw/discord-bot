@@ -6,9 +6,11 @@ import aiohttp
 
 
 async def get_text(url) -> str:
-    async with aiohttp.ClientSession(raise_for_status=True) as session:
-        async with session.get(url) as r:
-            return await r.text()
+    async with (
+        aiohttp.ClientSession(raise_for_status=True) as session,
+        session.get(url) as r,
+    ):
+        return await r.text()
 
 
 async def get_gist(url) -> str:
@@ -32,4 +34,4 @@ async def get_gist(url) -> str:
                 return file["content"]
 
         # Ok, then whatever the first file is.
-        return list(data["files"].values())[0]["content"]
+        return next(iter(data["files"].values()))["content"]

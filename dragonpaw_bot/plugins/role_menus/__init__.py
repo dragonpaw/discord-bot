@@ -1,5 +1,6 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import lightbulb
 import structlog
@@ -11,7 +12,9 @@ from dragonpaw_bot.plugins.role_menus.commands import (
     parse_role_config,
 )
 from dragonpaw_bot.plugins.role_menus.constants import ROLE_MENU_PREFIX
-from dragonpaw_bot.utils import InteractionHandler
+
+if TYPE_CHECKING:
+    from dragonpaw_bot.utils import InteractionHandler
 
 __all__ = [
     "INTERACTION_HANDLERS",

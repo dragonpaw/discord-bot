@@ -1,37 +1,18 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Mapping, Optional, Sequence, Union
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING
 
 import hikari
 import hikari.messages
 import structlog
 from emojis.db.db import EMOJI_DB
 
-from dragonpaw_bot.context import (
-    PERM_LABELS,
-    ChannelContext,
-    GuildContext,
-    check_channel_perms,
-    has_any_role_permission,
-    has_permission,
-    member_has_role,
-)
+if TYPE_CHECKING:
+    from dragonpaw_bot.context import GuildContext
 
 InteractionHandler = Callable[[hikari.ComponentInteraction], Awaitable[None]]
 ModalHandler = Callable[[hikari.ModalInteraction], Awaitable[None]]
-
-# Re-export context classes and permission helpers for backwards compatibility
-__all__ = [
-    "PERM_LABELS",
-    "ChannelContext",
-    "GuildContext",
-    "check_channel_perms",
-    "has_any_role_permission",
-    "has_permission",
-    "member_has_role",
-]
 
 logger = structlog.get_logger(__name__)
 
@@ -44,7 +25,7 @@ logger = structlog.get_logger(__name__)
 async def guild_channel_by_name(
     gc: GuildContext,
     name: str,
-) -> Optional[hikari.GuildTextChannel]:
+) -> hikari.GuildTextChannel | None:
     logger.debug("Finding channel", name=name)
     guild = await gc.fetch_guild()
     if isinstance(guild, hikari.Guild):
@@ -61,8 +42,8 @@ async def guild_channel_by_name(
 
 async def guild_emojis(
     gc: GuildContext,
-) -> Mapping[str, Union[hikari.KnownCustomEmoji, hikari.UnicodeEmoji]]:
-    emoji_map: dict[str, Union[hikari.KnownCustomEmoji, hikari.UnicodeEmoji]] = {}
+) -> Mapping[str, hikari.KnownCustomEmoji | hikari.UnicodeEmoji]:
+    emoji_map: dict[str, hikari.KnownCustomEmoji | hikari.UnicodeEmoji] = {}
 
     custom_emojis = await gc.bot.rest.fetch_guild_emojis(guild=gc.guild_id)
     for e in custom_emojis:
@@ -84,7 +65,7 @@ async def guild_roles(gc: GuildContext) -> Mapping[str, hikari.Role]:
 async def guild_role_by_name(
     gc: GuildContext,
     name: str,
-) -> Optional[hikari.Role]:
+) -> hikari.Role | None:
     roles = await gc.bot.rest.fetch_roles(guild=gc.guild_id)
     for r in roles:
         if r.name == name:

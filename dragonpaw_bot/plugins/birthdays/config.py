@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Slash commands: /config birthday settings"""
 
 from __future__ import annotations
@@ -9,15 +8,18 @@ import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot import utils
 from dragonpaw_bot.colors import SOLARIZED_ORANGE
+from dragonpaw_bot.context import (
+    GuildContext,
+    check_channel_perms,
+    check_role_manageable,
+)
 from dragonpaw_bot.plugins.birthdays import state
 from dragonpaw_bot.plugins.birthdays.constants import BIRTHDAY_CONFIG_PREFIX
-from dragonpaw_bot.plugins.birthdays.models import BirthdayGuildConfig
-from dragonpaw_bot.utils import GuildContext
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
+    from dragonpaw_bot.plugins.birthdays.models import BirthdayGuildConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -240,6 +242,39 @@ def display_config_value(v: object) -> str:
     return v or "None"  # type: ignore[return-value]
 
 
+async def _respond_config_embed(
+    bot: DragonpawBot,
+    interaction: hikari.ComponentInteraction,
+    guild_id: hikari.Snowflakeish,
+    cfg: BirthdayGuildConfig,
+    footer: str | None = None,
+) -> None:
+    """Build and send the config embed as an interaction response."""
+    embed = config_embed(cfg)
+    if footer:
+        embed.set_footer(text=footer)
+    components = await config_components(bot, guild_id, cfg)
+    await interaction.edit_initial_response(embed=embed, components=components)
+
+
+async def _check_birthday_role_warning(
+    bot: DragonpawBot,
+    interaction: hikari.ComponentInteraction,
+) -> str | None:
+    """If the interaction sets a birthday role, check if we can manage it.
+
+    Returns a warning string, or None if OK / not applicable.
+    """
+    resolved = interaction.resolved
+    if not resolved or not resolved.roles or not interaction.values:
+        return None
+    snowflake = hikari.Snowflake(interaction.values[0])
+    target_role = resolved.roles.get(snowflake)
+    if not target_role or not interaction.guild_id:
+        return None
+    return await check_role_manageable(bot, interaction.guild_id, target_role)
+
+
 # ---------------------------------------------------------------------------- #
 #                            Interaction handler                               #
 # ---------------------------------------------------------------------------- #
@@ -302,45 +337,43 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     # For channel fields, verify the bot can write to the selected channel
     if new_value and field == "announcement_channel":
         channel_id = hikari.Snowflake(interaction.values[0])
-        missing = await utils.check_channel_perms(bot, guild_id, channel_id)
+        missing = await check_channel_perms(bot, guild_id, channel_id)
         if missing:
             logger.warning(
                 "Birthday config rejected — missing channel permissions",
                 channel=new_value,
                 missing=", ".join(missing),
             )
-            embed = config_embed(cfg)
-            embed.set_footer(
-                text=f"Cannot use #{new_value} — missing: {', '.join(missing)}"
-            )
-            components = await config_components(bot, guild_id, cfg)
-            await interaction.edit_initial_response(
-                embed=embed,
-                components=components,
+            await _respond_config_embed(
+                bot,
+                interaction,
+                guild_id,
+                cfg,
+                footer=f"Cannot use #{new_value} — missing: {', '.join(missing)}",
             )
             return
 
+    # For the birthday role, check if the bot can actually manage it
+    role_warning: str | None = None
+    if new_value and field == "birthday_role":
+        role_warning = await _check_birthday_role_warning(bot, interaction)
+
     if new_value == old_value:
         logger.debug("Birthday setting unchanged", field=field, value=new_value)
-        embed = config_embed(cfg)
-        components = await config_components(bot, guild_id, cfg)
-        await interaction.edit_initial_response(
-            embed=embed,
-            components=components,
-        )
+        await _respond_config_embed(bot, interaction, guild_id, cfg)
         return
 
     setattr(cfg, field, new_value)
     guild_state.guild_name = guild.name
     state.save(guild_state)
 
-    embed = config_embed(cfg)
-    embed.set_footer(text="Settings updated.")
-    components = await config_components(bot, guild_id, cfg)
-    await interaction.edit_initial_response(
-        embed=embed,
-        components=components,
-    )
+    footer = "Settings updated."
+    if role_warning:
+        footer += f" ⚠️ {role_warning}"
+        logger.warning(
+            "Birthday role may not be manageable", role=new_value, reason=role_warning
+        )
+    await _respond_config_embed(bot, interaction, guild_id, cfg, footer=footer)
 
     display_old = display_config_value(old_value)
     display_new = display_config_value(new_value)

@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, Mock
 
 import hikari
 
-from dragonpaw_bot.utils import (
+from dragonpaw_bot.context import (
     check_channel_perms,
     has_any_role_permission,
     has_permission,

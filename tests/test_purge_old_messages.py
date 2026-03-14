@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock
 
 import hikari
 
-from dragonpaw_bot.utils import ChannelContext
+from dragonpaw_bot.context import ChannelContext
 
 GUILD = "test-guild"
 CHANNEL = "test-channel"
