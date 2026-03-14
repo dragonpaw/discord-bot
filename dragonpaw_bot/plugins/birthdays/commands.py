@@ -827,10 +827,11 @@ class BirthdayList(
         for entry in guild_state.birthdays.values():
             by_month.setdefault(entry.month, []).append(entry)
 
-        lines: list[str] = ["🎂 **Registered Birthdays**"]
+        # Build one embed per month
+        month_embeds: list[hikari.Embed] = []
         for month_num in sorted(by_month.keys()):
             entries = sorted(by_month[month_num], key=lambda e: e.day)
-            lines.append(f"\n## {MONTH_NAMES[month_num]}")
+            lines: list[str] = []
             for entry in entries:
                 tz = f" ({entry.timezone})" if entry.timezone else ""
                 entry_md = (entry.month, entry.day)
@@ -846,16 +847,38 @@ class BirthdayList(
                     else ""
                 )
                 lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
+            month_embeds.append(
+                hikari.Embed(
+                    title=MONTH_NAMES[month_num],
+                    description="\n".join(lines),
+                    color=SOLARIZED_ORANGE,
+                )
+            )
 
+        # Title embed with legend
         legend_parts = []
         if today_keys:
             legend_parts.append("🎂 = birthday today!")
         legend_parts.append("⭐ = next upcoming")
+        title_embed = hikari.Embed(
+            title="🎂 Registered Birthdays",
+            description=" · ".join(legend_parts),
+            color=SOLARIZED_ORANGE,
+        )
 
-        lines.append("")
-        lines.append(" · ".join(legend_parts))
+        # Discord allows up to 10 embeds per message
+        first_batch = month_embeds[:9]
+        second_batch = month_embeds[9:]
 
-        await ctx.respond("\n".join(lines), flags=hikari.MessageFlag.EPHEMERAL)
+        await ctx.respond(
+            embeds=[title_embed, *first_batch],
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        if second_batch:
+            await ctx.respond(
+                embeds=second_batch,
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
 
 
 # ---------------------------------------------------------------------------- #
