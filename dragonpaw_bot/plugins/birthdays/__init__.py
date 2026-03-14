@@ -137,11 +137,13 @@ async def send_week_ahead_dm(
         return
 
     member_log = gc.logger.bind(user=member.username)
-    wishlist_line = (
-        f"Your current wishlist: {entry.wishlist_url}"
-        if entry.wishlist_url
-        else "You don't have a wishlist set yet — add one with `/birthday wishlist <url>`!"
-    )
+    if entry.wishlist_url:
+        wishlist_line = (
+            f"Your current wishlist: {entry.wishlist_url}\n"
+            f"If you've moved recently, make sure your shipping address is up to date! 📦"
+        )
+    else:
+        wishlist_line = "You don't have a wishlist set yet — add one with `/birthday wishlist <url>`!"
     try:
         dm = await member.user.fetch_dm_channel()
         await dm.send(
