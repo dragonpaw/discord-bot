@@ -44,3 +44,12 @@ jobs:
           export TAG=$(cat BUILD_TAG)
           docker push ${IMAGE}:latest
           docker push ${IMAGE}:${TAG}
+
+      - name: Prune old container images
+        if: github.event_name == 'push'
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: discord-bot
+          package-type: container
+          min-versions-to-keep: 5
+          delete-only-untagged-versions: false
