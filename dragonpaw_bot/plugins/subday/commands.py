@@ -945,6 +945,7 @@ async def _handle_owner_approve(
             f"Here's what that means:\n"
             f"• Every **Sunday**, you'll get a copy of their weekly prompt so you can follow along 📖\n"
             f"• Every **Friday**, I'll nudge you if they haven't finished their current week yet 🔔\n"
+            f"• When a week is marked complete, I'll let you know so you can praise them 💜\n"
             f"• To get their weeks approved, reach out to someone with the {complete_mention} role~ 🐾"
         ),
         flags=hikari.MessageFlag.EPHEMERAL,
