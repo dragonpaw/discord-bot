@@ -66,8 +66,9 @@ Setting a role to `None` disables role assignment for that milestone (the achiev
 1. User signs up → gets a welcome embed (cyan) + week 1 prompt DM'd
 2. User completes the week's writing and shows a reviewer
 3. Reviewer runs `/subday complete @user` → achievement posted, week marked done
-4. On Sunday at 14:00 UTC, the cron task (`__init__.py`) advances completed participants to the next week and DMs a greeting embed (with progress bar and milestone countdown) followed by the prompt embed. If the participant has a confirmed owner, the owner also receives a copy. Errors are isolated per-guild. The cron also verifies owners are still in the guild and clears `owner_id` on all their subs if they've left.
+4. On Sunday at 14:00 UTC, the cron task (`cron.py`) advances completed participants to the next week and DMs a greeting embed (with progress bar and milestone countdown) followed by the prompt embed. If the participant has a confirmed owner, the owner also receives a copy. Errors are isolated per-guild. The cron also verifies owners are still in the guild and clears `owner_id` on all their subs if they've left.
 5. Participants who haven't completed their week are paused (skipped until completed)
+6. On Friday at 20:00 UTC (noon PST), the Friday reminder cron (`cron.py`) DMs participants who haven't finished their current week. Each participant gets at most one reminder per week (tracked via `reminder_sent` flag, reset on completion and on Sunday advance). If the participant has a confirmed owner, the owner also gets a heads-up DM.
 
 ### Achievement Embeds
 
@@ -92,12 +93,13 @@ Achievement embeds and `/subday status` include a Pillow-generated star chart PN
 
 ### Owner Feature
 
-Submissives can register an owner via `/subday owner @user`. The owner receives copies of the sub's weekly prompts each Sunday and can see their subs' progress via `/subday status`.
+Submissives can register an owner via `/subday owner @user`. The owner receives copies of the sub's weekly prompts each Sunday, gets a Friday reminder if their sub hasn't finished the current week, and can see their subs' progress via `/subday status`. When an owner accepts, they get an onboarding message explaining these features and who to contact for week completions.
 
 **State fields** on `SubDayParticipant`:
 
 - `owner_id: int | None` — confirmed owner's Discord user ID
 - `pending_owner_id: int | None` — awaiting approval
+- `reminder_sent: bool` — whether the Friday reminder has been sent for the current week (reset on completion and on Sunday advance)
 
 **Flow:**
 
@@ -123,7 +125,8 @@ Submissives can register an owner via `/subday owner @user`. The owner receives 
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Extension entry point (lightbulb Loader), component interaction listener with error boundaries, Sunday cron task |
+| `__init__.py` | Extension entry point (lightbulb Loader), interaction handler dispatch table |
+| `cron.py` | Sunday prompt cron task, Friday reminder cron task, and their helpers |
 | `chart.py` | Star chart image generation (Pillow) |
 | `commands.py` | Non-config slash commands, achievement embeds, milestone logic, component interaction handlers |
 | `config.py` | Config commands (`/config subday`), config interaction handler, config UI helpers |
@@ -144,6 +147,7 @@ Persisted as `state/subday_{guild_id}.yaml`, separate from the main guild state.
 - **Achievement posts**: Wrapped in try/except so channel permission issues don't crash the completion flow.
 - **Channel permission checks** (`utils.py`): `check_channel_perms` handles both `ForbiddenError` (can't view channel) and `NotFoundError` (channel deleted) gracefully.
 - **Sunday cron task**: Per-guild error isolation — one guild's failure doesn't abort processing for other guilds.
+- **Friday reminder cron**: Per-guild error isolation. Per-DM error isolation for both sub and owner DMs.
 
 ### Required Discord Setup
 

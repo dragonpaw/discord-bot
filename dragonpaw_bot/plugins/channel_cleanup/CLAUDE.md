@@ -18,7 +18,8 @@ Runs at the top of each hour (`0 * * * *`). For each configured channel, calls `
 
 ### File Structure
 
-- **`__init__.py`** — Extension entry point, hourly cron task
+- **`__init__.py`** — Extension entry point
+- **`cron.py`** — Hourly cleanup cron task
 - **`models.py`** — Pydantic models: `CleanupChannelEntry`, `CleanupGuildState`
 - **`state.py`** — YAML state persistence (load/save with in-memory cache)
 

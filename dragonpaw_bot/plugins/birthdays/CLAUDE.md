@@ -76,7 +76,8 @@ Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild sta
 
 ### File Structure
 
-- **`__init__.py`** — Extension entry point (lightbulb Loader), hourly cron task, member leave listener
+- **`__init__.py`** — Extension entry point (lightbulb Loader), member leave listener
+- **`cron.py`** — Hourly cron task, birthday announcement/role/reminder helpers
 - **`commands.py`** — Non-config slash commands, announcement embeds
 - **`config.py`** — Config command (`/config birthday settings`), config interaction handler, config UI helpers
 - **`models.py`** — Pydantic models: `BirthdayEntry`, `BirthdayGuildConfig`, `BirthdayGuildState`

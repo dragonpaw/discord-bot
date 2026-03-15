@@ -924,9 +924,29 @@ async def _handle_owner_approve(
         sub_id=sub_user_id,
     )
 
+    # Build a role mention for the complete role
+    cfg = guild_state.config
+    complete_mention = "a server admin"
+    if cfg.complete_role:
+        role = await utils.guild_role_by_name(
+            GuildContext.from_guild(
+                bot,
+                bot.cache.get_guild(hikari.Snowflake(guild_id))
+                or await bot.rest.fetch_guild(hikari.Snowflake(guild_id)),
+            ),
+            cfg.complete_role,
+        )
+        complete_mention = role.mention if role else f"**{cfg.complete_role}**"
+
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
-        content=f"🐉 You've accepted! You're now the owner for <@{sub_user_id}>~ 💜",
+        content=(
+            f"🐉 You've accepted! You're now the owner for <@{sub_user_id}>~ 💜\n\n"
+            f"Here's what that means:\n"
+            f"• Every **Sunday**, you'll get a copy of their weekly prompt so you can follow along 📖\n"
+            f"• Every **Friday**, I'll nudge you if they haven't finished their current week yet 🔔\n"
+            f"• To get their weeks approved, reach out to someone with the {complete_mention} role~ 🐾"
+        ),
         flags=hikari.MessageFlag.EPHEMERAL,
     )
 
@@ -1124,7 +1144,7 @@ class SubDayComplete(
     )
 
     @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912
+    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912, PLR0915
         assert ctx.guild_id and ctx.member
         gc = GuildContext.from_ctx(ctx)
 
@@ -1141,16 +1161,50 @@ class SubDayComplete(
         required_role = cfg.backfill_role if is_backfill else cfg.complete_role
         action = "backfill" if is_backfill else "complete"
 
-        if not await gc.check_permission(ctx, required_role, action):
+        if not gc.has_permission(required_role):
+            gc.logger.warning(
+                "Command denied, missing permission",
+                action=action,
+                required=required_role,
+            )
+            role_mention = f"**{required_role}**" if required_role else None
+            if required_role:
+                role_obj = await utils.guild_role_by_name(gc, required_role)
+                if role_obj:
+                    role_mention = role_obj.mention
+            if role_mention:
+                await ctx.respond(
+                    f"*little puff of smoke* 🐉 You need to ask someone with the {role_mention} role "
+                    f"to review and approve the week for you~ 🐾",
+                    flags=hikari.MessageFlag.EPHEMERAL,
+                )
+            else:
+                await ctx.respond(
+                    "*little puff of smoke* 🐉 Only the server owner can do that!",
+                    flags=hikari.MessageFlag.EPHEMERAL,
+                )
             return
 
         # Prevent self-completion
         if target.id == ctx.user.id:
             logger.debug("SubDay self-completion blocked", user=ctx.user.username)
-            await ctx.respond(
-                "*wags claw* 🐉 You can't mark your own work as complete — get someone else to check it!",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
+            complete_mention = f"**{cfg.complete_role}**" if cfg.complete_role else None
+            if cfg.complete_role:
+                role_obj = await utils.guild_role_by_name(gc, cfg.complete_role)
+                if role_obj:
+                    complete_mention = role_obj.mention
+            if complete_mention:
+                await ctx.respond(
+                    f"*boops your snoot* 🐉 Silly, you can't approve your own work! "
+                    f"Find someone with the {complete_mention} role to check it~ 🐾",
+                    flags=hikari.MessageFlag.EPHEMERAL,
+                )
+            else:
+                await ctx.respond(
+                    "*boops your snoot* 🐉 Silly, you can't approve your own work! "
+                    "Ask the server owner to check it~ 🐾",
+                    flags=hikari.MessageFlag.EPHEMERAL,
+                )
             return
 
         if is_backfill:
@@ -1167,6 +1221,7 @@ class SubDayComplete(
 
         week = participant.current_week
         participant.week_completed = True
+        participant.reminder_sent = False
         participant.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
 
         sent_next = bool(

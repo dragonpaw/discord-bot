@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import asyncio
+import contextlib
 import datetime
 import pickle
 from os import environ
@@ -82,6 +83,7 @@ INTENTS = (
     | hikari.Intents.GUILDS
     | hikari.Intents.GUILD_MEMBERS
     | hikari.Intents.GUILD_EMOJIS
+    | hikari.Intents.DM_MESSAGES
 )
 
 if "TEST_GUILDS" in environ:
@@ -295,6 +297,18 @@ async def on_guild_available(event: hikari.GuildAvailableEvent):
 async def on_guild_join(event: hikari.GuildJoinEvent):
     guild = await bot.rest.fetch_guild(guild=event.guild_id)
     logger.info("Joined server", guild=guild.name)
+
+
+@bot.listen(hikari.DMMessageCreateEvent)
+async def on_dm_message(event: hikari.DMMessageCreateEvent) -> None:
+    """Respond to DMs with a cute note to use slash commands instead."""
+    if event.is_bot:
+        return
+    with contextlib.suppress(hikari.HTTPError):
+        await event.message.respond(
+            "*peeks out of cave* 🐉 Rawr! I don't really do DMs — "
+            "try using my `/` slash commands in the server instead! 🐾"
+        )
 
 
 # ---------------------------------------------------------------------------- #

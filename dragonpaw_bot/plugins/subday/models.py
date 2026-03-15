@@ -10,6 +10,7 @@ class SubDayParticipant(pydantic.BaseModel):
     signup_date: datetime.datetime
     last_completed_date: datetime.datetime | None = None
     week_sent: bool = False
+    reminder_sent: bool = False
     owner_id: int | None = None
     pending_owner_id: int | None = None
 
