@@ -149,14 +149,14 @@ async def _dm_completion(
         logger.info(
             "Sent completion DM",
             guild=guild_name,
-            user=target.username,
+            user=target.display_name,
             week=week,
         )
     except hikari.HTTPError as exc:
         logger.warning(
             "Cannot DM user for completion notice",
             guild=guild_name,
-            user=target.username,
+            user=target.display_name,
             error=str(exc),
         )
 
@@ -201,7 +201,7 @@ async def _post_achievement(
     logger.debug(
         "Posting achievement",
         guild=gc.name,
-        user=target.username,
+        user=target.display_name,
         week=week,
     )
     prizes = cfg.milestone_prizes()
@@ -247,7 +247,7 @@ async def _post_achievement(
         logger.info(
             "GRADUATED from Where I am Led!",
             guild=gc.name,
-            user=target.username,
+            user=target.display_name,
         )
         embed = _graduation_embed(target, prizes)
         staff_msg = (
@@ -259,7 +259,7 @@ async def _post_achievement(
         logger.info(
             "Reached milestone week",
             guild=gc.name,
-            user=target.username,
+            user=target.display_name,
             week=week,
             role=role_name or "no role",
         )
@@ -283,7 +283,7 @@ async def _post_achievement(
             logger.info(
                 "Assigned milestone role",
                 guild=gc.name,
-                user=target.username,
+                user=target.display_name,
                 role=role.name,
             )
         else:
@@ -1188,7 +1188,7 @@ class SubDayComplete(
 
         # Prevent self-completion
         if target.id == ctx.user.id:
-            logger.debug("SubDay self-completion blocked", user=ctx.user.username)
+            logger.debug("SubDay self-completion blocked", user=ctx.member.display_name)
             complete_mention = f"**{cfg.complete_role}**" if cfg.complete_role else None
             if cfg.complete_role:
                 role_obj = await utils.guild_role_by_name(gc, cfg.complete_role)
@@ -1283,19 +1283,19 @@ class SubDayComplete(
         logger.info(
             "Completed SubDay week",
             guild=gc.name,
-            user=target.username,
+            user=target.display_name,
             week=week,
-            marked_by=ctx.user.username,
+            marked_by=ctx.member.display_name,
             backfill=is_backfill,
         )
 
         # Notify owner that their sub completed a week
         if participant.owner_id:
             try:
-                owner_user = await gc.bot.rest.fetch_user(
-                    hikari.Snowflake(participant.owner_id)
+                owner_member = await gc.bot.rest.fetch_member(
+                    gc.guild_id, hikari.Snowflake(participant.owner_id)
                 )
-                dm = await owner_user.fetch_dm_channel()
+                dm = await owner_member.user.fetch_dm_channel()
                 await dm.send(
                     f"*happy tail wag* 🐉✨ <@{target_id}> just finished "
                     f"**Week {week}** of Where I am Led! "
@@ -1303,9 +1303,14 @@ class SubDayComplete(
                 )
                 logger.info(
                     "Notified owner of completion",
-                    owner_id=participant.owner_id,
-                    sub_id=target_id,
+                    owner=owner_member.display_name,
+                    sub=target.display_name,
                     week=week,
+                )
+            except hikari.NotFoundError:
+                logger.warning(
+                    "Owner left guild, skipping completion notification",
+                    owner_id=participant.owner_id,
                 )
             except hikari.ForbiddenError:
                 logger.warning(
@@ -1425,8 +1430,8 @@ class SubDayRemove(
         logger.info(
             "Removed from SubDay",
             guild=guild_state.guild_name,
-            user=target.username,
-            removed_by=ctx.user.username,
+            user=target.display_name,
+            removed_by=ctx.member.display_name,
         )
         await gc.log(
             f"🗑️ {ctx.member.mention} removed {target.mention} from **Where I am Led**.",
