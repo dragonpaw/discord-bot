@@ -1288,6 +1288,36 @@ class SubDayComplete(
             backfill=is_backfill,
         )
 
+        # Notify owner that their sub completed a week
+        if participant.owner_id:
+            try:
+                owner_user = await gc.bot.rest.fetch_user(
+                    hikari.Snowflake(participant.owner_id)
+                )
+                dm = await owner_user.fetch_dm_channel()
+                await dm.send(
+                    f"*happy tail wag* 🐉✨ <@{target_id}> just finished "
+                    f"**Week {week}** of Where I am Led! "
+                    f"They did a great job and deserve some praise~ 💜"
+                )
+                logger.info(
+                    "Notified owner of completion",
+                    owner_id=participant.owner_id,
+                    sub_id=target_id,
+                    week=week,
+                )
+            except hikari.ForbiddenError:
+                logger.warning(
+                    "Cannot DM owner about completion (DMs disabled)",
+                    owner_id=participant.owner_id,
+                )
+            except hikari.HTTPError as exc:
+                logger.warning(
+                    "Failed to DM owner about completion",
+                    owner_id=participant.owner_id,
+                    error=str(exc),
+                )
+
 
 class SubDayList(
     lightbulb.SlashCommand,
