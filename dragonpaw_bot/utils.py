@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping
 from typing import TYPE_CHECKING
 
 import hikari
@@ -27,14 +27,8 @@ async def guild_channel_by_name(
     name: str,
 ) -> hikari.GuildTextChannel | None:
     logger.debug("Finding channel", name=name)
-    guild = await gc.fetch_guild()
-    if isinstance(guild, hikari.Guild):
-        channels: Sequence[hikari.GuildChannel] = list(guild.get_channels().values())
-        if not channels:
-            channels = await gc.bot.rest.fetch_guild_channels(guild=guild.id)
-    else:
-        channels = await gc.bot.rest.fetch_guild_channels(guild=guild.id)
-    for channel in channels:
+    channels = gc.bot.cache.get_guild_channels_view_for_guild(gc.guild_id)
+    for channel in channels.values():
         if channel.name == name and isinstance(channel, hikari.GuildTextChannel):
             return channel
     return None
@@ -45,8 +39,7 @@ async def guild_emojis(
 ) -> Mapping[str, hikari.KnownCustomEmoji | hikari.UnicodeEmoji]:
     emoji_map: dict[str, hikari.KnownCustomEmoji | hikari.UnicodeEmoji] = {}
 
-    custom_emojis = await gc.bot.rest.fetch_guild_emojis(guild=gc.guild_id)
-    for e in custom_emojis:
+    for e in gc.bot.cache.get_emojis_view_for_guild(gc.guild_id).values():
         emoji_map[e.name] = e
         logger.debug("Guild emoji", name=e.name, emoji=e)
 
@@ -58,16 +51,16 @@ async def guild_emojis(
 
 
 async def guild_roles(gc: GuildContext) -> Mapping[str, hikari.Role]:
-    roles = await gc.bot.rest.fetch_roles(guild=gc.guild_id)
-    return {r.name: r for r in roles}
+    return {
+        r.name: r for r in gc.bot.cache.get_roles_view_for_guild(gc.guild_id).values()
+    }
 
 
 async def guild_role_by_name(
     gc: GuildContext,
     name: str,
 ) -> hikari.Role | None:
-    roles = await gc.bot.rest.fetch_roles(guild=gc.guild_id)
-    for r in roles:
+    for r in gc.bot.cache.get_roles_view_for_guild(gc.guild_id).values():
         if r.name == name:
             return r
     return None

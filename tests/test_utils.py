@@ -112,12 +112,16 @@ def _mock_bot(
     member = Mock(spec=hikari.Member)
     member.id = hikari.Snowflake(1)
     member.role_ids = []
+    bot.cache.get_member = Mock(return_value=member)
     bot.rest.fetch_member = AsyncMock(return_value=member)
 
     # Mock @everyone role
     everyone_role = Mock(spec=hikari.Role)
     everyone_role.id = hikari.Snowflake(50)  # guild_id
     everyone_role.permissions = role_perms
+    bot.cache.get_roles_view_for_guild = Mock(
+        return_value={everyone_role.id: everyone_role}
+    )
     bot.rest.fetch_roles = AsyncMock(return_value=[everyone_role])
 
     if fetch_channel_side_effect:

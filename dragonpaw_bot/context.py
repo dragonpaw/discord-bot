@@ -388,9 +388,10 @@ async def check_channel_perms(
         guild_id=guild_id,
     )
     assert bot.user_id
-    me = await bot.rest.fetch_member(guild_id, bot.user_id)
-    roles = await bot.rest.fetch_roles(guild_id)
-    role_map = {r.id: r for r in roles}
+    me = bot.cache.get_member(guild_id, bot.user_id) or await bot.rest.fetch_member(
+        guild_id, bot.user_id
+    )
+    role_map = dict(bot.cache.get_roles_view_for_guild(guild_id))
 
     # Start with @everyone permissions
     everyone_role = role_map.get(guild_id)
@@ -457,9 +458,10 @@ async def check_role_manageable(
 ) -> str | None:
     """Return a reason string if the bot cannot manage the given role, or None if OK."""
     assert bot.user_id
-    me = await bot.rest.fetch_member(guild_id, bot.user_id)
-    guild_roles = await bot.rest.fetch_roles(guild_id)
-    role_map = {r.id: r for r in guild_roles}
+    me = bot.cache.get_member(guild_id, bot.user_id) or await bot.rest.fetch_member(
+        guild_id, bot.user_id
+    )
+    role_map = dict(bot.cache.get_roles_view_for_guild(guild_id))
 
     # Check Manage Roles permission
     perms = hikari.Permissions.NONE
