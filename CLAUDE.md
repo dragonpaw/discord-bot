@@ -90,7 +90,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
   - Context API: `ctx.user` (not `ctx.author`), `ctx.client.app` to get the bot
   - Event listeners: `@loader.listener(hikari.EventType)`, access bot via `event.app`
 - Pydantic v2 API (`model_validate`, `.model_dump()`)
-- Logging uses **structlog** with structured keyword arguments: `logger.info("Event description", guild=name, user=username)`. Use `structlog.get_logger(__name__)` in each module. The central interaction dispatcher binds `guild`, `user`, `custom_id`, and `plugin` into contextvars — handlers called from it should omit those keys. Use `logger.bind(guild=..., user=...)` for scoped loggers in slash commands, cron tasks, and event listeners.
+- Logging uses **structlog** with structured keyword arguments: `logger.info("Event description", guild=name, user=display_name)`. Use `structlog.get_logger(__name__)` in each module. The central interaction dispatcher binds `guild`, `user`, `custom_id`, and `plugin` into contextvars — handlers called from it should omit those keys. Use `logger.bind(guild=..., user=...)` for scoped loggers in slash commands, cron tasks, and event listeners. When logging Discord users, use their guild display name (`member.display_name`) not their username or ID — display names are what server staff recognize.
 - Debug logging is enabled for the `dragonpaw_bot` logger. Logging is configured in `dragonpaw_bot/logging.py`.
 - Python version target: 3.13
 - Tests use `pytest-asyncio` with `asyncio_mode = "auto"` (no `@pytest.mark.asyncio` needed)
