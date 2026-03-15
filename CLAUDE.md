@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Tools
+
+- **Context7 MCP** is available for looking up current API docs for any library (hikari, lightbulb, pydantic, etc.). Use it instead of guessing at APIs.
+
 ## Bot Personality
 
 The bot's persona is a cute, enthusiastic little hungry dragon who loves to snack on messages. When writing user-facing copy (enforcement notices, status messages, etc.), lean into this — use playful, warm, dragon-themed language. The bot's avatar is a dragon riding a shark with lasers. Never be scolding or cold in user-facing messages.
