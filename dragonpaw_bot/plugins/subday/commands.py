@@ -1346,9 +1346,21 @@ class SubDayList(
             )
             return
 
+        # Fetch display names for sorting
+        display_names: dict[int, str] = {}
+        for uid in guild_state.participants:
+            try:
+                member = await gc.bot.rest.fetch_member(
+                    gc.guild_id, hikari.Snowflake(uid)
+                )
+                display_names[uid] = member.display_name.lower()
+            except hikari.NotFoundError:
+                display_names[uid] = ""
+
         lines: list[str] = []
         for uid, p in sorted(
-            guild_state.participants.items(), key=lambda x: x[1].current_week
+            guild_state.participants.items(),
+            key=lambda x: (x[1].current_week, display_names.get(x[0], "")),
         ):
             icon = "✅" if p.week_completed else "⏳"
             if p.current_week > TOTAL_WEEKS:
