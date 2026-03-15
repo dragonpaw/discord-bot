@@ -1,10 +1,13 @@
 ## Guidepost: Guideposts
+
 What inspires you? What motivates you? What is inside you that you want to show the world? What is it that brings you peace when you are troubled? Look to these things to find your own special guideposts.
 
 ## Thought 1
+
 Surrendering to your Owner is not an admission of defeat or personal inadequacy. True surrender requires the courage to face the unknown and trust in the guide you have chosen to lead you into the unexplored territory. When you have found within yourself the courage and trust required to surrender that is a victory to savor.
 
 ## Thought 2
+
 A Slave’s Creed
 (alter as necessary to fit your own beliefs)
 - I am independent.
@@ -20,4 +23,5 @@ A Slave’s Creed
 - I am my Owner’s most prized possession
 
 ## Writing Assignment: Looking Back
+
 Look over the writing assignments you’ve completed. How many did you enjoy doing? What made an assignment easy or difficult for you?
