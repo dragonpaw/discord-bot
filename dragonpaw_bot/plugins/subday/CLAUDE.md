@@ -93,7 +93,7 @@ Achievement embeds and `/subday status` include a Pillow-generated star chart PN
 
 ### Owner Feature
 
-Submissives can register an owner via `/subday owner @user`. The owner receives copies of the sub's weekly prompts each Sunday, gets a Friday reminder if their sub hasn't finished the current week, and can see their subs' progress via `/subday status`. When an owner accepts, they get an onboarding message explaining these features and who to contact for week completions.
+Submissives can register an owner via `/subday owner @user`. The owner receives copies of the sub's weekly prompts each Sunday, gets a Friday reminder if their sub hasn't finished the current week, and can see their subs' progress via `/subday status`. When an owner accepts, they get an onboarding message explaining these features and who to contact for week completions. **If owner-facing DMs or interactions change, update the acceptance message in `_handle_owner_approve` to match.**
 
 **State fields** on `SubDayParticipant`:
 
