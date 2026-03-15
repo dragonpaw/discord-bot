@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, cast
 
+import hikari  # noqa: TC002 — needed at runtime for DI annotation resolution
 import lightbulb
 import structlog
 
@@ -11,8 +12,6 @@ from dragonpaw_bot.plugins.channel_cleanup import loader
 from dragonpaw_bot.plugins.channel_cleanup import state as cleanup_state
 
 if TYPE_CHECKING:
-    import hikari
-
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
