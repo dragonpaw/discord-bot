@@ -785,12 +785,7 @@ class BirthdayList(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        gc = GuildContext.from_ctx(ctx)
         guild_state = state.load(int(ctx.guild_id))
-        cfg = guild_state.config
-
-        if not await gc.check_permission(ctx, cfg.list_role, "list"):
-            return
 
         if not guild_state.birthdays:
             await ctx.respond(
@@ -827,8 +822,23 @@ class BirthdayList(
         for entry in guild_state.birthdays.values():
             by_month.setdefault(entry.month, []).append(entry)
 
-        # Build one embed per month
-        month_embeds: list[hikari.Embed] = []
+        # Build a single embed with bold month headers
+        month_emoji = [
+            "",
+            "❄️",
+            "💜",
+            "🌸",
+            "🌷",
+            "🌺",
+            "☀️",
+            "🎆",
+            "🌻",
+            "🍂",
+            "🎃",
+            "🍁",
+            "🎄",
+        ]
+        sections: list[str] = []
         for month_num in sorted(by_month.keys()):
             entries = sorted(by_month[month_num], key=lambda e: e.day)
             lines: list[str] = []
@@ -847,38 +857,23 @@ class BirthdayList(
                     else ""
                 )
                 lines.append(f"{marker} {entry.day}: <@{entry.user_id}>{tz}{wishlist}")
-            month_embeds.append(
-                hikari.Embed(
-                    title=MONTH_NAMES[month_num],
-                    description="\n".join(lines),
-                    color=SOLARIZED_ORANGE,
-                )
+            sections.append(
+                f"{month_emoji[month_num]} **{MONTH_NAMES[month_num]}**\n"
+                + "\n".join(lines)
             )
 
-        # Title embed with legend
         legend_parts = []
         if today_keys:
             legend_parts.append("🎂 = birthday today!")
         legend_parts.append("⭐ = next upcoming")
-        title_embed = hikari.Embed(
+
+        embed = hikari.Embed(
             title="🎂 Registered Birthdays",
-            description=" · ".join(legend_parts),
+            description=" · ".join(legend_parts) + "\n\n" + "\n\n".join(sections),
             color=SOLARIZED_ORANGE,
         )
 
-        # Discord allows up to 10 embeds per message
-        first_batch = month_embeds[:9]
-        second_batch = month_embeds[9:]
-
-        await ctx.respond(
-            embeds=[title_embed, *first_batch],
-            flags=hikari.MessageFlag.EPHEMERAL,
-        )
-        if second_batch:
-            await ctx.respond(
-                embeds=second_batch,
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
+        await ctx.respond(embed=embed, flags=hikari.MessageFlag.EPHEMERAL)
 
 
 # ---------------------------------------------------------------------------- #

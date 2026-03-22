@@ -145,15 +145,14 @@ def build_weekly_dm_embeds(prompt: WeekPrompt) -> list[hikari.Embed]:
     else:
         milestone_note = f"Next milestone: **Week {next_milestone}** ({weeks_to_milestone} weeks away)"
 
+    rules_text = load_rules()
     greeting = hikari.Embed(
         title="📬 Your New Prompt is Here!",
         description=(
             f"Happy Sunday! Here's your **Week {week}** prompt.\n\n"
             f"{_progress_bar(week)}\n\n"
             f"{milestone_note}\n\n"
-            "Take your time, reflect, and write when you're ready. "
-            "Show your work to your Owner or check in with staff "
-            "when you're done. 💜"
+            f"📋 **Instructions:**\n{rules_text}"
         ),
         color=SOLARIZED_CYAN
         if weeks_to_milestone > _MILESTONE_NEAR_THRESHOLD

@@ -704,6 +704,12 @@ class SubDayStatus(
         if own_participant:
             display_name = ctx.member.display_name if ctx.member else ctx.user.username
             embeds.append(_own_progress_embed(own_participant, display_name, cfg))
+            if own_participant.current_week <= TOTAL_WEEKS:
+                embeds.append(
+                    prompts.build_prompt_embed(
+                        prompts.load_week(own_participant.current_week)
+                    )
+                )
 
         gc = GuildContext.from_ctx(ctx)
         for sub_uid, sub_p in owned_subs:

@@ -18,7 +18,7 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 - **set-for @user [month] [day] [wishlist_url]** — Requires `manage_role`. Register or update a birthday for another user.
 - **remove** — Remove your own birthday entry. Requires `register_role`.
 - **remove-for @user** — Requires `manage_role`. Remove another user's birthday entry.
-- **list** — Requires `list_role`. Shows all registered birthdays grouped by month, sorted by day. Includes wishlist links where set.
+- **list** — Available to all server members (no role required). Shows all registered birthdays in a single embed grouped by month with emoji headers, sorted by day. Includes wishlist links where set.
 
 
 ### Config Commands (`/config birthday`)

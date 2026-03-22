@@ -173,14 +173,18 @@ async def _process_guild_prompts(bot: DragonpawBot, guild: hikari.Guild) -> None
     changed = False
     to_remove: list[int] = []
     owner_prompts: dict[int, list[tuple[int, prompts.WeekPrompt]]] = {}
+    advanced: list[tuple[int, int]] = []
 
     for uid, participant in guild_state.participants.items():
+        old_week = participant.current_week
         result = await _advance_participant(bot, guild, uid, participant, owner_prompts)
         if result is None:
             to_remove.append(uid)
             changed = True
         elif result:
             changed = True
+            if participant.current_week > old_week:
+                advanced.append((uid, participant.current_week))
 
     if to_remove:
         _cleanup_removed_participants(guild_state, to_remove)
@@ -190,6 +194,14 @@ async def _process_guild_prompts(bot: DragonpawBot, guild: hikari.Guild) -> None
         log.info("Sunday run complete, state saved")
     else:
         log.debug("No changes this Sunday run")
+
+    if advanced:
+        gc = GuildContext.from_guild(bot, guild)
+        lines = [f"- <@{uid}> → Week {week}" for uid, week in advanced]
+        await gc.log(
+            f"📬 Sunday SubDay run complete! Sent next week's prompt to "
+            f"{len(advanced)} participant(s):\n" + "\n".join(lines)
+        )
 
     if owner_prompts:
         await _forward_owner_prompts(bot, guild, guild_state, owner_prompts)
@@ -243,7 +255,7 @@ async def _process_guild_friday_reminders(
         try:
             dm = await member.user.fetch_dm_channel()
             await dm.send(
-                f"*nudges gently* 🐉 Hey hey! Just a little Friday reminder — "
+                f"*nuzzles gently* 🐉 Hey hey! Just a little Friday reminder — "
                 f"you still have your **Week {participant.current_week}** journal to finish! "
                 f"You've got this~ 💪🐾"
             )

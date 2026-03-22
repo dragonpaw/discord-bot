@@ -13,4 +13,4 @@ While it is not true that slaves should be seen and not heard, a quiet demeanor 
 
 ## Writing Assignment: The Infamous Car Analogy Question
 
-If people were cars, what kind of car would you be and why? (This question is terrible, and if you can think of a better one, I'll replace it. --Ash)
+In what practical ways do your specific tendencies, defined limits, and need for clear communication actively enhance the stability and daily function of your dynamic with your Owner?
