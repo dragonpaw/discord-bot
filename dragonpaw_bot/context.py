@@ -216,6 +216,10 @@ class ChannelContext(GuildContext):
         Bulk-deletes where possible (< 14 days), single-deletes for older messages
         (capped at single_delete_limit per call — remainder picked up next run).
         Hikari handles rate limiting automatically. Returns count of deleted messages.
+
+        Note: fetch_messages silently yields nothing when the bot lacks READ_MESSAGE_HISTORY
+        or VIEW_CHANNEL — it does NOT raise ForbiddenError. Callers must check permissions
+        proactively (e.g. via check_perms) rather than relying on exception handling here.
         """
         now = datetime.now(UTC)
         cutoff = now - timedelta(minutes=expiry_minutes)
