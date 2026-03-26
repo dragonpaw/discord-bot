@@ -26,25 +26,37 @@ def load(guild_id: int) -> SubDayGuildState:
         return _cache[guild_id]
 
     path = _state_path(guild_id)
-    if path.exists():
-        logger.debug("Loading subday state", guild_id=guild_id, path=str(path))
-        try:
-            with open(path) as f:
-                data = yaml.safe_load(f)
-            if data:
-                state = SubDayGuildState.model_validate(data)
-                _cache[guild_id] = state
-                return state
-        except Exception:
-            logger.exception(
-                "Error loading subday state, starting fresh",
-                guild_id=guild_id,
-                path=str(path),
-            )
+    if not path.exists():
+        st = SubDayGuildState(guild_id=guild_id)
+        _cache[guild_id] = st
+        return st
 
-    state = SubDayGuildState(guild_id=guild_id)
-    _cache[guild_id] = state
-    return state
+    logger.debug("Loading subday state", guild_id=guild_id, path=str(path))
+
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        logger.exception(
+            "Failed to read subday state file", guild_id=guild_id, path=str(path)
+        )
+        raise
+
+    if not data:
+        st = SubDayGuildState(guild_id=guild_id)
+        _cache[guild_id] = st
+        return st
+
+    try:
+        st = SubDayGuildState.model_validate(data)
+    except Exception:
+        logger.exception(
+            "Subday state validation failed", guild_id=guild_id, path=str(path)
+        )
+        raise
+
+    _cache[guild_id] = st
+    return st
 
 
 def save(state: SubDayGuildState) -> None:

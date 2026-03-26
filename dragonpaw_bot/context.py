@@ -100,6 +100,43 @@ class GuildContext:
         except hikari.HTTPError as exc:
             self.logger.warning("Failed to send log message", error=str(exc))
 
+    async def send_dm(
+        self,
+        user: hikari.Member | hikari.PartialUser | int,
+        *,
+        content: str | None = None,
+        embeds: list[hikari.Embed] | None = None,
+    ) -> bool:
+        """Send a DM to a user. Returns True on success, False on failure.
+
+        Accepts a Member, PartialUser/User, or integer user ID.
+        Handles ForbiddenError (DMs disabled) and HTTPError gracefully.
+        """
+        if isinstance(user, int):
+            resolved: hikari.PartialUser = await self.bot.rest.fetch_user(
+                hikari.Snowflake(user)
+            )
+        elif isinstance(user, hikari.Member):
+            resolved = user.user
+        else:
+            resolved = user
+        try:
+            dm = await resolved.fetch_dm_channel()
+            await dm.send(
+                content=content if content is not None else hikari.UNDEFINED,
+                embeds=embeds if embeds is not None else hikari.UNDEFINED,
+            )
+        except hikari.ForbiddenError:
+            self.logger.warning("Cannot DM user (DMs disabled)", user_id=resolved.id)
+            return False
+        except hikari.HTTPError as exc:
+            self.logger.warning(
+                "Failed to DM user", user_id=resolved.id, error=str(exc)
+            )
+            return False
+        else:
+            return True
+
     def state(self) -> GuildState | None:
         """Get the guild's core GuildState."""
         return self.bot.state(self.guild_id)
