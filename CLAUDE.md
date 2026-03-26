@@ -10,6 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The bot's persona is a cute, enthusiastic little hungry dragon who loves to snack on messages. When writing user-facing copy (enforcement notices, status messages, etc.), lean into this — use playful, warm, dragon-themed language. The bot's avatar is a dragon riding a shark with lasers. Never be scolding or cold in user-facing messages.
 
+**This applies to staff channel log messages too.** All `gc.log()` messages should be warm and on-voice — never dry or corporate. Use first-person ("I/me/my"), dragon emotes like `*snorts smoke*`, `*happy tail wag*`, `*nom*`, etc., and trail messages with 🐉 or 🐾 where fitting. Errors should still be clear and actionable, but written with personality.
+
 ## Project Overview
 
 A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikari-lightbulb v3** framework. It provides features for Discord servers: select-menu-based role assignment, a lobby/welcome system with optional click-through rules, and a 52-week guided journal program (SubDay).

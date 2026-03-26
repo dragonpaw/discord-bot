@@ -260,8 +260,8 @@ async def _apply_role_changes(
                 display = guild_state.role_names.get(role_id, role_name)
                 failed.append(display)
                 await gc.log(
-                    f"🤯 Unable to add role: **{display}**, "
-                    "please check my permissions relative to that role.",
+                    f"🤯 I couldn't add the **{display}** role — my paws got blocked! "
+                    "Please make sure my role is above it in the server's role hierarchy. 🐉",
                 )
         elif has_role and not wants_role:
             try:
@@ -276,8 +276,8 @@ async def _apply_role_changes(
                 display = guild_state.role_names.get(role_id, role_name)
                 failed.append(display)
                 await gc.log(
-                    f"🤯 Unable to remove role: **{display}**, "
-                    "please check my permissions relative to that role.",
+                    f"🤯 I couldn't remove the **{display}** role — my paws got blocked! "
+                    "Please make sure my role is above it in the server's role hierarchy. 🐉",
                 )
 
     return added, removed, failed
@@ -385,11 +385,13 @@ async def configure_guild(gc: GuildContext, url: str) -> list[str]:
         config = parse_role_config(config_text)
     except tomllib.TOMLDecodeError as e:
         log.exception("Error parsing TOML file")
-        await gc.log(f"🤯 **Config error:** {e}")
+        await gc.log(f"🤯 *snorts smoke* Config error while parsing the role menu: {e}")
         return [f"Config error: {e}"]
     except pydantic.ValidationError as e:
         log.exception("Config validation error")
-        await gc.log(f"🤯 **Config validation error:** {e}")
+        await gc.log(
+            f"🤯 *snorts smoke* The role menu config has a validation error: {e}"
+        )
         return [f"Config validation error: {e}"]
 
     role_map = await utils.guild_roles(gc)
@@ -410,7 +412,7 @@ async def configure_guild(gc: GuildContext, url: str) -> list[str]:
     )
     for err in errors:
         log.warning("Error setting up role menus", error=err)
-        await gc.log(f"🤯 **Role menu error:** {err}")
+        await gc.log(f"🤯 *snorts smoke* Trouble setting up a role menu: {err}")
     all_errors.extend(errors)
 
     gc.bot.state_update(guild_state)

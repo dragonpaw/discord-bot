@@ -381,7 +381,9 @@ async def _do_signup_async(
         guild=guild.name,
         user=user.username,
     )
-    await gc.log(f"📝 {user.mention} signed up for **Where I am Led**.")
+    await gc.log(
+        f"📝 {user.mention} just signed up for **Where I am Led**! *happy tail wag* 🐉"
+    )
 
 
 async def handle_signup_interaction(interaction: hikari.ComponentInteraction) -> None:
@@ -863,9 +865,9 @@ async def _notify_sub_of_owner_decision(  # noqa: PLR0913
         else f"🐉 <@{owner_user_id}> has declined your owner request. That's okay! 🐾"
     )
     log_text = (
-        f"🤝 **SubDay owner accepted** — <@{owner_user_id}> accepted ownership of <@{sub_user_id}>"
+        f"🤝 <@{owner_user_id}> accepted ownership of <@{sub_user_id}> — so sweet! 💜"
         if approved
-        else f"😢 **SubDay owner declined** — <@{owner_user_id}> declined ownership of <@{sub_user_id}>"
+        else f"😢 <@{owner_user_id}> declined ownership of <@{sub_user_id}> 🐾"
     )
     try:
         sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
@@ -1440,5 +1442,5 @@ class SubDayRemove(
             removed_by=ctx.member.display_name,
         )
         await gc.log(
-            f"🗑️ {ctx.member.mention} removed {target.mention} from **Where I am Led**.",
+            f"🗑️ {ctx.member.mention} removed {target.mention} from **Where I am Led** 🐾",
         )

@@ -100,7 +100,7 @@ class MediaAdd(
 
         await ctx.respond("\n".join(parts), flags=hikari.MessageFlag.EPHEMERAL)
         await gc.log(
-            f"⚙️ {ctx.user.mention} added <#{self.channel.id}> as a media-only channel.",
+            f"⚙️ {ctx.user.mention} made <#{self.channel.id}> media-only — I'll nom any text-only posts there! 🐉",
         )
 
 
@@ -140,7 +140,7 @@ class MediaRemove(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         await gc.log(
-            f"⚙️ {ctx.user.mention} removed <#{self.channel.id}> from media-only enforcement.",
+            f"⚙️ {ctx.user.mention} turned off media enforcement for <#{self.channel.id}> — I'll stop nomming text posts there~ 🐾",
         )
 
 

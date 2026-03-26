@@ -568,8 +568,8 @@ async def _handle_set_timezone(
     )
     gc = GuildContext.from_interaction(interaction)
     await gc.log(
-        f"🎂 {interaction.user.mention} {action} their birthday: "
-        f"{MONTH_NAMES[month]} {day}",
+        f"🎂 {interaction.user.mention} {action} their birthday — "
+        f"{MONTH_NAMES[month]} {day}! 🎉",
     )
 
 
@@ -688,8 +688,8 @@ class BirthdaySetFor(
             day=self.day,
         )
         await gc.log(
-            f"🎂 {ctx.user.mention} {action} birthday for {self.user.mention}: "
-            f"{MONTH_NAMES[self.month]} {self.day}",
+            f"🎂 {ctx.user.mention} {action} a birthday for {self.user.mention} — "
+            f"{MONTH_NAMES[self.month]} {self.day}! 🎉",
         )
 
 
@@ -729,7 +729,9 @@ class BirthdayRemove(
             guild=gc.name,
             user=ctx.user.username,
         )
-        await gc.log(f"🎂 {ctx.user.mention} removed their birthday entry")
+        await gc.log(
+            f"🎂 {ctx.user.mention} removed their birthday — I'll miss celebrating them! 🐾"
+        )
 
 
 class BirthdayRemoveFor(
@@ -773,7 +775,7 @@ class BirthdayRemoveFor(
             target=self.user.username,
         )
         await gc.log(
-            f"🎂 {ctx.user.mention} removed birthday entry for {self.user.mention}"
+            f"🎂 {ctx.user.mention} removed birthday entry for {self.user.mention} 🐾"
         )
 
 

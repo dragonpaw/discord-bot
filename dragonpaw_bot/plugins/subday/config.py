@@ -364,8 +364,8 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 
     gc = GuildContext.from_interaction(interaction)
     await gc.log(
-        f"⚙️ **SubDay config changed** by {interaction.user.mention}: "
-        f"`{field}` changed from `{display_old}` to `{display_new}`",
+        f"⚙️ {interaction.user.mention} tweaked SubDay settings — "
+        f"`{field}` changed from `{display_old}` to `{display_new}`! 🐉",
     )
 
     embed = embed_builder(cfg)

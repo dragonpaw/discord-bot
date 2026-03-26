@@ -92,7 +92,9 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
         name=guild_name,
         log_channel_id=log_channel_id,
     )
-    await gc.log(f"🎂 Removed birthday entry for departed member <@{uid}>")
+    await gc.log(
+        f"🎂 Removed birthday entry for <@{uid}> who left the server — I'll miss celebrating them! 🐾"
+    )
 
 
 from dragonpaw_bot.plugins.birthdays import cron as _cron  # noqa: E402, F401

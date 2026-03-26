@@ -133,7 +133,7 @@ async def on_member_join(event: hikari.MemberCreateEvent):
                 log_channel_id=log_channel_id,
             )
             await gc.log(
-                f"🤯 **Lobby error:** Welcome message has an unknown substitution: {e}",
+                f"🤯 *snorts smoke* I tried to send a welcome message but it had an unknown substitution — {e}. Someone may need to fix the welcome template! 🐉",
             )
             return
 
@@ -184,8 +184,8 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
         )
         gc = GuildContext.from_interaction(interaction)
         await gc.log(
-            f"🤯 Unable to remove lobby role from **{interaction.user.mention}**. "
-            "Check bot role hierarchy permissions.",
+            f"🤯 I tried to remove the lobby role from {interaction.user.mention} but my paws couldn't reach it! "
+            "Please check my role hierarchy permissions. 🐉",
         )
 
 
