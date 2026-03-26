@@ -316,6 +316,41 @@ class ChannelContext(GuildContext):
                 self.logger.debug("Deleting my message", message_id=message.id)
                 await message.delete()
 
+    async def run_cleanup(self, expiry_minutes: int) -> None:
+        """Check permissions then purge old messages, logging any issues to the guild log channel.
+
+        Combines the proactive permission check with purge_old_messages and error handling.
+        Use this from cron tasks instead of calling purge_old_messages directly.
+        """
+        missing = await self.check_perms(CHANNEL_CLEANUP_PERMS)
+        if missing:
+            self.logger.warning(
+                "Missing permissions for cleanup, skipping",
+                channel=self.channel_name,
+                missing=missing,
+            )
+            await self.log(
+                f"⚠️ I'm missing **{', '.join(missing)}** in **#{self.channel_name}** "
+                f"and can't run cleanup. Please fix the channel permissions."
+            )
+            return
+        try:
+            deleted = await self.purge_old_messages(expiry_minutes)
+            if deleted:
+                self.logger.info(
+                    "Purged old messages",
+                    channel=self.channel_name,
+                    count=deleted,
+                )
+        except Exception:
+            self.logger.exception(
+                "Cleanup cron error",
+                channel=self.channel_name,
+            )
+            await self.log(
+                f"🐛 I hit an unexpected error cleaning **#{self.channel_name}** — check the bot logs."
+            )
+
     async def check_perms(
         self, required: dict[hikari.Permissions, str] | None = None
     ) -> list[str]:
