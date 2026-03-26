@@ -77,9 +77,12 @@ class IntrosSet(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         await gc.log(
-            f"📋 {ctx.user.mention} configured the intros channel: <#{self.channel.id}>"
-            + (f" (required role: **{self.role.name}**)" if self.role else "")
-            + ".",
+            f"📋 {ctx.user.mention} pointed me at <#{self.channel.id}> as the intros channel!"
+            + (
+                f" I'll only watch for members with the **{self.role.name}** role. 🐾"
+                if self.role
+                else " 🐾"
+            ),
         )
 
 
@@ -115,4 +118,6 @@ class IntrosClear(
             "Introductions channel configuration cleared.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        await gc.log(f"📋 {ctx.user.mention} cleared the intros channel configuration.")
+        await gc.log(
+            f"📋 {ctx.user.mention} cleared the intros channel config — I'll stop keeping tabs on hellos! 🐉"
+        )

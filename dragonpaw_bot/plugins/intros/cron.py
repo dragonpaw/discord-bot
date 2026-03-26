@@ -54,9 +54,9 @@ async def _cleanup_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
             missing=missing,
         )
         await gc.log(
-            f"⚠️ I'm missing **{', '.join(missing)}** in <#{st.channel_id}> "
-            f"and can't clean up departed members' intro posts. "
-            f"Please fix my channel permissions."
+            f"⚠️ *sniffs around the intros channel* I'm missing **{', '.join(missing)}** "
+            f"in <#{st.channel_id}> and can't tidy up old posts from members who've left. "
+            f"Could someone fix my permissions? 🐉"
         )
         return
 
@@ -90,5 +90,5 @@ async def _cleanup_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     if removed:
         names = ", ".join(f"**{n}**" for n in removed)
         await gc.log(
-            f"🧹 Removed {len(removed)} intro post(s) from departed members: {names}."
+            f"🧹 *tidies the den* I nom'd {len(removed)} intro post(s) from members who've left: {names}."
         )

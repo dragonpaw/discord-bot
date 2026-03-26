@@ -85,6 +85,6 @@ class IntrosMissing(
 
         await ctx.edit_response(response_id, content=header + mentions)
         await gc.log(
-            f"👀 {ctx.user.mention} checked for missing intros: "
-            f"**{len(missing_members)}** member(s) haven't posted in <#{st.channel_id}>.",
+            f"👀 {ctx.user.mention} asked who's been shy — "
+            f"**{len(missing_members)}** member(s) still haven't introduced themselves in <#{st.channel_id}>!",
         )
