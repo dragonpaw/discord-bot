@@ -555,21 +555,18 @@ async def check_role_manageable(
 # ---------------------------------------------------------------------------- #
 
 
-class NotGuildOwner(Exception):
-    """Raised when a non-guild-owner invokes a guild-owner-only command."""
+class NotConfigAdmin(Exception):
+    """Raised when a user without MANAGE_GUILD invokes a config command."""
 
 
 @lightbulb.hook(
-    lightbulb.ExecutionSteps.CHECKS, skip_when_failed=True, name="guild_owner_only"
+    lightbulb.ExecutionSteps.CHECKS, skip_when_failed=True, name="config_admin_only"
 )
 def guild_owner_only(_: lightbulb.ExecutionPipeline, ctx: lightbulb.Context) -> None:
-    """Hook: restricts a command to the guild owner only."""
-    if ctx.guild_id is None:
-        raise NotGuildOwner
-    app = ctx.client.app
-    if not isinstance(app, hikari.GatewayBot):
-        raise NotGuildOwner
-    guild = app.cache.get_guild(ctx.guild_id)
-    if guild and ctx.user.id == guild.owner_id:
+    """Hook: restricts a command to members with MANAGE_GUILD (or ADMINISTRATOR)."""
+    if ctx.member is None:
+        raise NotConfigAdmin
+    perms = ctx.member.permissions
+    if perms & (hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD):
         return
-    raise NotGuildOwner
+    raise NotConfigAdmin

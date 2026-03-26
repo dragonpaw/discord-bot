@@ -15,7 +15,7 @@ import uvloop
 import yaml
 
 from dragonpaw_bot import structs
-from dragonpaw_bot.context import GuildContext, NotGuildOwner, guild_owner_only
+from dragonpaw_bot.context import GuildContext, NotConfigAdmin, guild_owner_only
 from dragonpaw_bot.logging import configure_logging
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
@@ -128,9 +128,9 @@ client = lightbulb.client_from_app(bot, default_enabled_guilds=TEST_GUILDS)
 async def on_command_error(
     exc: lightbulb.exceptions.ExecutionPipelineFailedException,
 ) -> bool:
-    if any(isinstance(c, NotGuildOwner) for c in exc.causes):
+    if any(isinstance(c, NotConfigAdmin) for c in exc.causes):
         await exc.context.respond(
-            "*guards the treasure* 🐉 Only the server owner can use this command!",
+            "*guards the treasure* 🐉 You need **Manage Server** permission to use this command!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return True
