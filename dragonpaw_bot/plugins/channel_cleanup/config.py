@@ -10,6 +10,7 @@ from dragonpaw_bot.context import (
     CHANNEL_CLEANUP_PERMS,
     GuildContext,
     check_channel_perms,
+    guild_owner_only,
 )
 from dragonpaw_bot.duration import format_duration, parse_duration_minutes
 from dragonpaw_bot.plugins.channel_cleanup import state as cleanup_state
@@ -28,7 +29,7 @@ class CleanupAdd(
     lightbulb.SlashCommand,
     name="add",
     description="Add a channel for automatic message expiry.",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+    hooks=[guild_owner_only],
 ):
     channel = lightbulb.channel("channel", "Channel to auto-clean")
     expires = lightbulb.string(
@@ -93,7 +94,7 @@ class CleanupRemove(
     lightbulb.SlashCommand,
     name="remove",
     description="Stop auto-cleaning a channel.",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+    hooks=[guild_owner_only],
 ):
     channel = lightbulb.channel("channel", "Channel to remove from auto-cleanup")
 
@@ -131,7 +132,7 @@ class CleanupStatus(
     lightbulb.SlashCommand,
     name="status",
     description="Show all configured auto-cleanup channels.",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+    hooks=[guild_owner_only],
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:

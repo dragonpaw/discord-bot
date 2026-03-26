@@ -9,7 +9,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.colors import SOLARIZED_VIOLET
-from dragonpaw_bot.context import GuildContext, check_channel_perms
+from dragonpaw_bot.context import GuildContext, check_channel_perms, guild_owner_only
 from dragonpaw_bot.plugins.subday import state
 from dragonpaw_bot.plugins.subday.constants import (
     MILESTONE_WEEKS,
@@ -436,13 +436,12 @@ class SubDaySettings(
     lightbulb.SlashCommand,
     name="settings",
     description="Configure SubDay settings for this server (owner only)",
+    hooks=[guild_owner_only],
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
-        if not await gc.require_owner(ctx):
-            return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _config_embed(cfg)
@@ -458,13 +457,12 @@ class SubDayPrizeRoles(
     lightbulb.SlashCommand,
     name="prize-roles",
     description="Configure milestone roles for this server (owner only)",
+    hooks=[guild_owner_only],
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
-        if not await gc.require_owner(ctx):
-            return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = _prize_roles_embed(cfg)
@@ -480,6 +478,7 @@ class SubDayPrizes(
     lightbulb.SlashCommand,
     name="prizes",
     description="Set milestone prize descriptions (owner only)",
+    hooks=[guild_owner_only],
 ):
     prize_13 = lightbulb.string("prize_13", "Prize for week 13 milestone", default=None)
     prize_26 = lightbulb.string("prize_26", "Prize for week 26 milestone", default=None)
@@ -492,8 +491,6 @@ class SubDayPrizes(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
-        if not await gc.require_owner(ctx):
-            return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
 

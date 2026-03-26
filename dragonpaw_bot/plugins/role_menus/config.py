@@ -6,7 +6,7 @@ import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot.context import GuildContext
+from dragonpaw_bot.context import GuildContext, guild_owner_only
 from dragonpaw_bot.plugins.role_menus.commands import configure_guild
 
 logger = structlog.get_logger(__name__)
@@ -16,7 +16,7 @@ class RolesSetup(
     lightbulb.SlashCommand,
     name="setup",
     description="Configure role menus via a URL to a TOML file.",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_ROLES)],
+    hooks=[guild_owner_only],
 ):
     url = lightbulb.string("url", "Link to the config you wish to use")
 

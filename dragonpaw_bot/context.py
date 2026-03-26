@@ -5,11 +5,10 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import hikari
+import lightbulb
 import structlog
 
 if TYPE_CHECKING:
-    import lightbulb
-
     from dragonpaw_bot.bot import DragonpawBot
     from dragonpaw_bot.structs import GuildState
 
@@ -200,18 +199,6 @@ class GuildContext:
         )
         await ctx.respond(
             f"*little puff of smoke* 🐉 You need {label} to use this command!",
-            flags=hikari.MessageFlag.EPHEMERAL,
-        )
-        return False
-
-    async def require_owner(self, ctx: lightbulb.Context) -> bool:
-        """Check guild owner, respond with denial if not. Returns True if allowed."""
-        guild = await self.fetch_guild()
-        if self.member and self.member.id == guild.owner_id:
-            return True
-        self.logger.warning("Admin command denied, not guild owner")
-        await ctx.respond(
-            "*guards the treasure* 🐉 Only the server owner can use this command!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return False
@@ -561,3 +548,28 @@ async def check_role_manageable(
             f"please move my role above it in Server Settings → Roles."
         )
     return None
+
+
+# ---------------------------------------------------------------------------- #
+#                              Lightbulb hooks                                 #
+# ---------------------------------------------------------------------------- #
+
+
+class NotGuildOwner(Exception):
+    """Raised when a non-guild-owner invokes a guild-owner-only command."""
+
+
+@lightbulb.hook(
+    lightbulb.ExecutionSteps.CHECKS, skip_when_failed=True, name="guild_owner_only"
+)
+def guild_owner_only(_: lightbulb.ExecutionPipeline, ctx: lightbulb.Context) -> None:
+    """Hook: restricts a command to the guild owner only."""
+    if ctx.guild_id is None:
+        raise NotGuildOwner
+    app = ctx.client.app
+    if not isinstance(app, hikari.GatewayBot):
+        raise NotGuildOwner
+    guild = app.cache.get_guild(ctx.guild_id)
+    if guild and ctx.user.id == guild.owner_id:
+        return
+    raise NotGuildOwner

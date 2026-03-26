@@ -15,12 +15,13 @@ import uvloop
 import yaml
 
 from dragonpaw_bot import structs
-from dragonpaw_bot.context import GuildContext
+from dragonpaw_bot.context import GuildContext, NotGuildOwner, guild_owner_only
 from dragonpaw_bot.logging import configure_logging
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
 from dragonpaw_bot.plugins.birthdays import config as birthday_config
 from dragonpaw_bot.plugins.channel_cleanup import config as cleanup_config
+from dragonpaw_bot.plugins.intros import config as intros_config
 from dragonpaw_bot.plugins.media_channels import config as media_config
 from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
 from dragonpaw_bot.plugins.role_menus import config as roles_config
@@ -127,6 +128,12 @@ client = lightbulb.client_from_app(bot, default_enabled_guilds=TEST_GUILDS)
 async def on_command_error(
     exc: lightbulb.exceptions.ExecutionPipelineFailedException,
 ) -> bool:
+    if any(isinstance(c, NotGuildOwner) for c in exc.causes):
+        await exc.context.respond(
+            "*guards the treasure* 🐉 Only the server owner can use this command!",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return True
     for cause in exc.causes:
         logger.exception(
             "Command failed",
@@ -321,6 +328,7 @@ _config_group = lightbulb.Group("config", "Bot configuration")
 _bot_sub = _config_group.subgroup("bot", "Bot-wide settings")
 _media_sub = _config_group.subgroup("media", "Media-only channel settings")
 _cleanup_sub = _config_group.subgroup("cleanup", "Auto-expiry channel settings")
+_intros_sub = _config_group.subgroup("intros", "Intro channel settings")
 _subday_sub = _config_group.subgroup("subday", "SubDay journal program settings")
 _birthday_sub = _config_group.subgroup("birthday", "Birthday tracking settings")
 _roles_sub = _config_group.subgroup("roles", "Role menu settings")
@@ -330,7 +338,7 @@ class BotLogging(
     lightbulb.SlashCommand,
     name="logging",
     description="Set or clear the bot's log channel for this server.",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+    hooks=[guild_owner_only],
 ):
     channel = lightbulb.channel(
         "channel", "Channel for bot logs (omit to clear)", default=None
@@ -373,6 +381,7 @@ class BotLogging(
 _bot_sub.register(BotLogging)
 media_config.register(_media_sub)
 cleanup_config.register(_cleanup_sub)
+intros_config.register(_intros_sub)
 subday_config.register(_subday_sub)
 birthday_config.register(_birthday_sub)
 roles_config.register(_roles_sub)
@@ -451,6 +460,7 @@ async def on_starting(_: hikari.StartingEvent) -> None:
         "dragonpaw_bot.plugins.birthdays",
         "dragonpaw_bot.plugins.media_channels",
         "dragonpaw_bot.plugins.channel_cleanup",
+        "dragonpaw_bot.plugins.intros",
     )
     await client.start()
 

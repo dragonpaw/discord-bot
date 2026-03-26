@@ -13,6 +13,7 @@ from dragonpaw_bot.context import (
     GuildContext,
     check_channel_perms,
     check_role_manageable,
+    guild_owner_only,
 )
 from dragonpaw_bot.plugins.birthdays import state
 from dragonpaw_bot.plugins.birthdays.constants import BIRTHDAY_CONFIG_PREFIX
@@ -399,13 +400,12 @@ class BirthdaySettings(
     lightbulb.SlashCommand,
     name="settings",
     description="Configure birthday settings for this server (owner only)",
+    hooks=[guild_owner_only],
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
-        if not await gc.require_owner(ctx):
-            return
         guild_state = state.load(int(ctx.guild_id))
         cfg = guild_state.config
         embed = config_embed(cfg)

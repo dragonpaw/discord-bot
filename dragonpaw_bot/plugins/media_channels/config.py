@@ -11,6 +11,7 @@ from dragonpaw_bot.context import (
     CHANNEL_POST_PERMS,
     GuildContext,
     check_channel_perms,
+    guild_owner_only,
 )
 from dragonpaw_bot.duration import format_duration, parse_duration_minutes
 from dragonpaw_bot.plugins.media_channels import state as media_state
@@ -29,7 +30,7 @@ class MediaAdd(
     lightbulb.SlashCommand,
     name="add",
     description="Add a media-only channel (text-only posts will be deleted).",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+    hooks=[guild_owner_only],
 ):
     channel = lightbulb.channel("channel", "Channel to enforce media-only policy")
     redirect = lightbulb.channel(
@@ -107,7 +108,7 @@ class MediaRemove(
     lightbulb.SlashCommand,
     name="remove",
     description="Stop enforcing media-only policy in a channel.",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+    hooks=[guild_owner_only],
 ):
     channel = lightbulb.channel(
         "channel", "Channel to remove from media-only enforcement"
@@ -147,7 +148,7 @@ class MediaStatus(
     lightbulb.SlashCommand,
     name="status",
     description="Show all configured media-only channels.",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+    hooks=[guild_owner_only],
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
