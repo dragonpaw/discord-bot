@@ -7,7 +7,7 @@ import hikari  # noqa: TC002 — needed at runtime for DI annotation resolution
 import lightbulb
 import structlog
 
-from dragonpaw_bot.context import ChannelContext, GuildContext
+from dragonpaw_bot.context import CHANNEL_CLEANUP_PERMS, ChannelContext, GuildContext
 from dragonpaw_bot.plugins.media_channels import loader
 from dragonpaw_bot.plugins.media_channels import state as media_state
 
@@ -18,6 +18,18 @@ logger = structlog.get_logger(__name__)
 
 
 async def _purge_media_channel(cc: ChannelContext, expiry_minutes: int) -> None:
+    missing = await cc.check_perms(CHANNEL_CLEANUP_PERMS)
+    if missing:
+        cc.logger.warning(
+            "Missing permissions for media cleanup, skipping",
+            channel=cc.channel_name,
+            missing=missing,
+        )
+        await cc.log(
+            f"⚠️ I'm missing **{', '.join(missing)}** in **#{cc.channel_name}** "
+            f"and can't run cleanup. Please fix the channel permissions."
+        )
+        return
     try:
         deleted = await cc.purge_old_messages(expiry_minutes)
         if deleted:
@@ -32,6 +44,9 @@ async def _purge_media_channel(cc: ChannelContext, expiry_minutes: int) -> None:
             "Media channel cleanup cron error",
             guild=cc.name,
             channel=cc.channel_name,
+        )
+        await cc.log(
+            f"🐛 I hit an unexpected error cleaning **#{cc.channel_name}** — check the bot logs."
         )
 
 

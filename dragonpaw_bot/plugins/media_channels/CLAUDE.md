@@ -41,7 +41,7 @@ thoughts in #redirect? 🐾
 
 ### Hourly Cleanup Cron
 
-Runs at `:30` past each hour. For each media channel with `expiry_minutes` set, calls `ChannelContext.purge_old_messages()` to bulk- or single-delete messages older than the configured duration. Per-guild error isolation.
+Runs at `:30` past each hour. For each media channel with `expiry_minutes` set, first checks bot permissions via `cc.check_perms(CHANNEL_CLEANUP_PERMS)` — if any are missing, logs a warning and posts to the guild log channel, then skips. Otherwise calls `ChannelContext.purge_old_messages()` to bulk- or single-delete messages older than the configured duration. Per-guild error isolation.
 
 ### File Structure
 
