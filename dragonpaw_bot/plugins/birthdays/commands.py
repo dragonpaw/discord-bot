@@ -179,7 +179,6 @@ def register(birthday_group: lightbulb.Group) -> None:
     birthday_group.register(BirthdayStatus)
     birthday_group.register(BirthdaySet)
     birthday_group.register(BirthdayWishlist)
-    birthday_group.register(BirthdaySetFor)
     birthday_group.register(BirthdayRemove)
     birthday_group.register(BirthdayRemoveFor)
     birthday_group.register(BirthdayList)
@@ -545,13 +544,52 @@ async def _handle_set_timezone(
         timezone=tz_id,
         wishlist_url=wishlist_url,
     )
+
+    gc = GuildContext.from_interaction(interaction)
+    if existing:
+        changes: list[str] = []
+        if existing.month != month or existing.day != day:
+            changes.append(
+                f"date ({MONTH_NAMES[existing.month]} {existing.day} → {MONTH_NAMES[month]} {day})"
+            )
+        if existing.timezone != tz_id:
+            changes.append(f"timezone ({existing.timezone or 'UTC'} → {tz_id})")
+        if not existing.wishlist_url and wishlist_url:
+            changes.append("wishlist added")
+        elif existing.wishlist_url and not wishlist_url:
+            changes.append("wishlist removed")
+        elif (
+            existing.wishlist_url
+            and wishlist_url
+            and existing.wishlist_url != wishlist_url
+        ):
+            changes.append("wishlist updated")
+        action = "updated"
+        if not changes:
+            await interaction.create_initial_response(
+                response_type=hikari.ResponseType.MESSAGE_UPDATE,
+                content="🐉 *peers at the records* ...that's exactly what I already have! Silly~ 🐾",
+                components=[],
+            )
+            return
+        log_msg = (
+            f"🎂 {interaction.user.mention} updated their birthday!"
+            f" *scribbles in the records* Changed: {', '.join(changes)} 🐉"
+        )
+    else:
+        action = "registered"
+        changes = []
+        log_msg = (
+            f"🎂 {interaction.user.mention} registered their birthday"
+            f" — {MONTH_NAMES[month]} {day}! 🎉"
+        )
+
     guild_state.birthdays[uid] = entry
     guild = bot.cache.get_guild(guild_id)
     guild_name = guild.name if guild else str(guild_id)
     guild_state.guild_name = guild_name
     state.save(guild_state)
 
-    action = "updated" if existing else "registered"
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_UPDATE,
         content=f"🐉🎂 Birthday {action}! **{MONTH_NAMES[month]} {day}** "
@@ -566,11 +604,7 @@ async def _handle_set_timezone(
         day=day,
         timezone=tz_id,
     )
-    gc = GuildContext.from_interaction(interaction)
-    await gc.log(
-        f"🎂 {interaction.user.mention} {action} their birthday — "
-        f"{MONTH_NAMES[month]} {day}! 🎉",
-    )
+    await gc.log(log_msg)
 
 
 async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> None:
@@ -622,74 +656,6 @@ async def handle_birthday_modal(interaction: hikari.ModalInteraction) -> None:
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="Something went wrong. Please try again.",
             flags=hikari.MessageFlag.EPHEMERAL,
-        )
-
-
-class BirthdaySetFor(
-    lightbulb.SlashCommand,
-    name="set-for",
-    description="Register or update a birthday for another user",
-):
-    user = lightbulb.user("user", "The user to set a birthday for")
-    month = lightbulb.integer("month", "Birth month (1-12)")
-    day = lightbulb.integer("day", "Birth day (1-31)")
-    wishlist_url = lightbulb.string("wishlist_url", "Wishlist URL", default=None)
-
-    @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:
-        assert ctx.guild_id
-        gc = GuildContext.from_ctx(ctx)
-        guild_state = state.load(int(ctx.guild_id))
-        cfg = guild_state.config
-
-        if not await gc.check_permission(ctx, cfg.manage_role, "set-for"):
-            return
-
-        error = _validate_date(self.month, self.day)
-        if error:
-            await ctx.respond(error, flags=hikari.MessageFlag.EPHEMERAL)
-            return
-
-        if self.wishlist_url and not _is_valid_wishlist_url(self.wishlist_url):
-            await ctx.respond(
-                _WISHLIST_URL_ERROR,
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            return
-
-        uid = int(self.user.id)
-        existing = guild_state.birthdays.get(uid)
-        entry = BirthdayEntry(
-            user_id=uid,
-            month=self.month,
-            day=self.day,
-            wishlist_url=_clean_wishlist_url(self.wishlist_url)
-            if self.wishlist_url
-            else (existing.wishlist_url if existing else None),
-        )
-        guild_state.birthdays[uid] = entry
-        guild_state.guild_name = gc.name
-        state.save(guild_state)
-
-        action = "updated" if existing else "registered"
-        await ctx.respond(
-            f"🐉🎂 Birthday {action} for {self.user.mention}: "
-            f"**{MONTH_NAMES[self.month]} {self.day}**",
-            flags=hikari.MessageFlag.EPHEMERAL,
-        )
-
-        logger.info(
-            "Birthday set for other user",
-            guild=gc.name,
-            user=ctx.user.username,
-            action=action,
-            target=self.user.username,
-            month=MONTH_NAMES[self.month],
-            day=self.day,
-        )
-        await gc.log(
-            f"🎂 {ctx.user.mention} {action} a birthday for {self.user.mention} — "
-            f"{MONTH_NAMES[self.month]} {self.day}! 🎉",
         )
 
 
