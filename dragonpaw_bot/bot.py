@@ -27,6 +27,9 @@ from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_h
 from dragonpaw_bot.plugins.role_menus import config as roles_config
 from dragonpaw_bot.plugins.subday import INTERACTION_HANDLERS as subday_handlers
 from dragonpaw_bot.plugins.subday import config as subday_config
+from dragonpaw_bot.plugins.tickets import INTERACTION_HANDLERS as tickets_handlers
+from dragonpaw_bot.plugins.tickets import MODAL_HANDLERS as tickets_modal_handlers
+from dragonpaw_bot.plugins.tickets import config as tickets_config
 from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 configure_logging()
@@ -39,6 +42,7 @@ _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
         *((p, h, "subday") for p, h in subday_handlers.items()),
         *((p, h, "birthdays") for p, h in birthday_handlers.items()),
         *((p, h, "role_menus") for p, h in role_menu_handlers.items()),
+        *((p, h, "tickets") for p, h in tickets_handlers.items()),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -47,6 +51,7 @@ _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
 _MODAL_ROUTES: list[tuple[str, ModalHandler, str]] = sorted(
     [
         *((p, h, "birthdays") for p, h in birthday_modal_handlers.items()),
+        *((p, h, "tickets") for p, h in tickets_modal_handlers.items()),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -332,6 +337,7 @@ _intros_sub = _config_group.subgroup("intros", "Intro channel settings")
 _subday_sub = _config_group.subgroup("subday", "SubDay journal program settings")
 _birthday_sub = _config_group.subgroup("birthday", "Birthday tracking settings")
 _roles_sub = _config_group.subgroup("roles", "Role menu settings")
+_tickets_sub = _config_group.subgroup("tickets", "Help ticket settings")
 
 
 class BotLogging(
@@ -385,6 +391,7 @@ intros_config.register(_intros_sub)
 subday_config.register(_subday_sub)
 birthday_config.register(_birthday_sub)
 roles_config.register(_roles_sub)
+tickets_config.register(_tickets_sub)
 loader.command(_config_group)
 
 
@@ -461,6 +468,7 @@ async def on_starting(_: hikari.StartingEvent) -> None:
         "dragonpaw_bot.plugins.media_channels",
         "dragonpaw_bot.plugins.channel_cleanup",
         "dragonpaw_bot.plugins.intros",
+        "dragonpaw_bot.plugins.tickets",
     )
     await client.start()
 
