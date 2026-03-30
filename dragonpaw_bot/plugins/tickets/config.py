@@ -24,7 +24,10 @@ class TicketsSet(
     hooks=[guild_owner_only],
 ):
     category = lightbulb.channel(
-        "category", "Category to create ticket channels under", default=None
+        "category",
+        "Category to create ticket channels under",
+        default=None,
+        channel_types=[hikari.ChannelType.GUILD_CATEGORY],
     )
     staff_role = lightbulb.role(
         "staff_role", "Role to ping and grant access to tickets", default=None
