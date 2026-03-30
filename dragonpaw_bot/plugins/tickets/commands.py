@@ -31,7 +31,7 @@ def _sanitize_channel_name(display_name: str) -> str:
     return f"help-{name}"[:100]
 
 
-class HelpCommand(
+class TicketCommand(
     lightbulb.SlashCommand,
     name="ticket",
     description="Open a private support ticket with the staff team.",

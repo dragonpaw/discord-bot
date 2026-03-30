@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import lightbulb
 
 from dragonpaw_bot.plugins.tickets.commands import (
-    HelpCommand,
+    TicketCommand,
     handle_ticket_add_person,
     handle_ticket_add_person_select,
     handle_ticket_close,
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 loader = lightbulb.Loader()
-loader.command(HelpCommand)
+loader.command(TicketCommand)
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     "ticket_close_confirm:": handle_ticket_close_confirm,  # prefix match — carries channel_id
