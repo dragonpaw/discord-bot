@@ -100,3 +100,37 @@ def test_state_round_trip_no_tickets(tmp_path, monkeypatch):
 
     loaded = tickets_state.load(400)
     assert loaded.open_tickets == []
+
+
+from dragonpaw_bot.plugins.tickets.commands import _sanitize_channel_name
+
+
+def test_sanitize_simple_name():
+    assert _sanitize_channel_name("Alice") == "help-alice"
+
+
+def test_sanitize_spaces_become_hyphens():
+    assert _sanitize_channel_name("John Smith") == "help-john-smith"
+
+
+def test_sanitize_strips_special_chars():
+    assert _sanitize_channel_name("User#1234") == "help-user-1234"
+
+
+def test_sanitize_emoji_stripped():
+    assert _sanitize_channel_name("Cool 🐉 User") == "help-cool-user"
+
+
+def test_sanitize_collapses_multiple_hyphens():
+    assert _sanitize_channel_name("Cool  🐉  User") == "help-cool-user"
+
+
+def test_sanitize_strips_leading_trailing_hyphens():
+    assert _sanitize_channel_name("###Alice###") == "help-alice"
+
+
+def test_sanitize_truncated_to_100_chars():
+    long_name = "a" * 200
+    result = _sanitize_channel_name(long_name)
+    assert len(result) <= 100
+    assert result.startswith("help-")
