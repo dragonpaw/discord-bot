@@ -268,7 +268,8 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
 
     gc.logger.info("Opened ticket", channel=channel_name, topic=topic)
     await gc.log(
-        f"🎫 *happy flap* I just opened a cozy little ticket for {interaction.user.mention}! "
+        f"🎫 *happy flap* I just opened a cozy little ticket for {interaction.user.mention} "
+        f"in <#{channel.id}>! "
         f'They need help with: "{topic}" 🐾'
     )
 
