@@ -236,3 +236,119 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         f"🎫 *happy flap* I just opened a cozy little ticket for {interaction.user.mention}! "
         f'They need help with: "{topic}" 🐾'
     )
+
+
+async def handle_ticket_close(interaction: hikari.ComponentInteraction) -> None:
+    """Respond with a confirmation prompt."""
+    channel_id = int(interaction.channel_id)
+    row = interaction.app.rest.build_message_action_row()
+    row.add_interactive_button(
+        hikari.ButtonStyle.DANGER,
+        f"ticket_close_confirm:{channel_id}",
+        label="Yes, close it 🔒",
+    )
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        content=(
+            "*peers at you with big dragon eyes* Are you sure you want to close this ticket? "
+            "It'll be gone for good! 🐉"
+        ),
+        flags=hikari.MessageFlag.EPHEMERAL,
+        component=row,
+    )
+
+
+async def handle_ticket_close_confirm(interaction: hikari.ComponentInteraction) -> None:
+    """Delete the ticket channel and clean up state."""
+    if not interaction.guild_id:
+        return
+
+    channel_id_str = interaction.custom_id.removeprefix("ticket_close_confirm:")
+    try:
+        channel_id = int(channel_id_str)
+    except ValueError:
+        return
+
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    gc = GuildContext.from_interaction(interaction)
+    st = tickets_state.load(int(interaction.guild_id))
+
+    ticket = next((t for t in st.open_tickets if t.channel_id == channel_id), None)
+    opener_mention = f"<@{ticket.user_id}>" if ticket else "someone"
+
+    st.open_tickets = [t for t in st.open_tickets if t.channel_id != channel_id]
+    tickets_state.save(st)
+
+    try:
+        await bot.rest.delete_channel(channel_id)
+    except hikari.NotFoundError:
+        pass  # Channel already gone — that's fine
+    except hikari.ForbiddenError:
+        gc.logger.exception("Cannot delete ticket channel", channel_id=channel_id)
+        await gc.log(
+            f"🤯 I tried to close a ticket channel (<#{channel_id}>) but couldn't delete it — "
+            f"please check my Manage Channels permission! 🐉"
+        )
+        return
+
+    gc.logger.info("Closed ticket", channel_id=channel_id)
+    await gc.log(
+        f"🔒 *nom nom* Ticket for {opener_mention} got all wrapped up and closed by "
+        f"{interaction.user.mention} — all tidied away! 🐾"
+    )
+
+
+async def handle_ticket_add_person(interaction: hikari.ComponentInteraction) -> None:
+    """Show a user select menu to add someone to the ticket."""
+    select_row = interaction.app.rest.build_message_action_row()
+    select_row.add_select_menu(
+        hikari.ComponentType.USER_SELECT_MENU,
+        "ticket_add_person_select",
+    )
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        content="*wiggles tail* Who should I let into this ticket? 👤",
+        flags=hikari.MessageFlag.EPHEMERAL,
+        component=select_row,
+    )
+
+
+async def handle_ticket_add_person_select(
+    interaction: hikari.ComponentInteraction,
+) -> None:
+    """Grant channel access to the selected user."""
+    if not interaction.guild_id or not interaction.values:
+        return
+
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    selected_user_id = hikari.Snowflake(interaction.values[0])
+    channel_id = interaction.channel_id
+
+    try:
+        await bot.rest.edit_permission_overwrite(
+            channel=channel_id,
+            target=selected_user_id,
+            target_type=hikari.PermissionOverwriteType.MEMBER,
+            allow=(
+                hikari.Permissions.VIEW_CHANNEL
+                | hikari.Permissions.SEND_MESSAGES
+                | hikari.Permissions.READ_MESSAGE_HISTORY
+            ),
+        )
+    except hikari.ForbiddenError:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="*sad smoke puff* I couldn't add them — missing permissions! 🐉",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    await bot.rest.create_message(
+        channel=channel_id,
+        content=f"*nom* I've let <@{selected_user_id}> into the ticket! 🐾",
+    )
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        content=f"Done! <@{selected_user_id}> can now see this ticket 🐉",
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
