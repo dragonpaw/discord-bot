@@ -195,8 +195,8 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         )
         return
 
-    # Persist ticket
-
+    # Persist ticket — re-load state to capture any concurrent mutations since the initial load
+    st = tickets_state.load(int(interaction.guild_id))
     st.open_tickets.append(
         OpenTicket(
             user_id=int(interaction.user.id),
@@ -208,12 +208,11 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
 
     # Post welcome message in ticket channel
     staff_ping = f"<@&{st.staff_role_id}>" if st.staff_role_id else "Hey staff!"
-    row = bot.rest.build_message_action_row()
-    row.add_interactive_button(
+    buttons_row = bot.rest.build_message_action_row()
+    buttons_row.add_interactive_button(
         hikari.ButtonStyle.DANGER, "ticket_close", label="Close Ticket 🔒"
     )
-    row2 = bot.rest.build_message_action_row()
-    row2.add_interactive_button(
+    buttons_row.add_interactive_button(
         hikari.ButtonStyle.SECONDARY, "ticket_add_person", label="Add Person 👤"
     )
 
@@ -224,7 +223,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
             f"{staff_ping}\n\n"
             f"**{interaction.member.display_name}** needs help with: **{topic}**"
         ),
-        components=[row, row2],
+        components=[buttons_row],
     )
 
     await interaction.edit_initial_response(
@@ -262,6 +261,11 @@ async def handle_ticket_close_confirm(interaction: hikari.ComponentInteraction) 
     """Delete the ticket channel and clean up state."""
     if not interaction.guild_id:
         return
+
+    # ACK the button immediately — channel deletion takes a moment
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.DEFERRED_MESSAGE_UPDATE,
+    )
 
     channel_id_str = interaction.custom_id.removeprefix("ticket_close_confirm:")
     try:
