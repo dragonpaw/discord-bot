@@ -438,6 +438,31 @@ CHANNEL_CLEANUP_PERMS: dict[hikari.Permissions, str] = {
 }
 
 
+async def check_guild_perms(
+    bot: DragonpawBot,
+    guild_id: hikari.Snowflake,
+    required: dict[hikari.Permissions, str],
+) -> list[str]:
+    """Return missing permission names for the bot at the guild level (no channel context)."""
+    assert bot.user_id
+    me = bot.cache.get_member(guild_id, bot.user_id) or await bot.rest.fetch_member(
+        guild_id, bot.user_id
+    )
+    role_map = dict(bot.cache.get_roles_view_for_guild(guild_id))
+
+    everyone_role = role_map.get(guild_id)
+    perms = everyone_role.permissions if everyone_role else hikari.Permissions.NONE
+    for role_id in me.role_ids:
+        role = role_map.get(role_id)
+        if role:
+            perms |= role.permissions
+
+    if perms & hikari.Permissions.ADMINISTRATOR:
+        return []
+
+    return [label for perm, label in required.items() if not (perms & perm)]
+
+
 async def check_channel_perms(
     bot: DragonpawBot,
     guild_id: hikari.Snowflake,

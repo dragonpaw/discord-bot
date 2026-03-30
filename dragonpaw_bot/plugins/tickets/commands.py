@@ -9,7 +9,7 @@ import hikari.impl
 import lightbulb
 import structlog
 
-from dragonpaw_bot.context import GuildContext
+from dragonpaw_bot.context import GuildContext, check_channel_perms, check_guild_perms
 from dragonpaw_bot.plugins.tickets import state as tickets_state
 from dragonpaw_bot.plugins.tickets.models import OpenTicket
 
@@ -21,6 +21,25 @@ logger = structlog.get_logger(__name__)
 TOPIC_MODAL_ID = "ticket_topic_modal"
 TOPIC_INPUT_ID = "ticket_topic_input"
 
+_TICKET_CREATE_PERMS: dict[hikari.Permissions, str] = {
+    hikari.Permissions.MANAGE_CHANNELS: "Manage Channels",
+}
+
+
+async def _check_create_perms(
+    bot: DragonpawBot,
+    guild_id: hikari.Snowflake,
+    category_id: int | None,
+) -> tuple[list[str], str]:
+    """Return (missing_perm_names, scope_description) for ticket channel creation."""
+    if category_id:
+        missing = await check_channel_perms(
+            bot, guild_id, hikari.Snowflake(category_id), _TICKET_CREATE_PERMS
+        )
+        return missing, f"the ticket category (<#{category_id}>)"
+    missing = await check_guild_perms(bot, guild_id, _TICKET_CREATE_PERMS)
+    return missing, "the server"
+
 
 def _sanitize_channel_name(display_name: str) -> str:
     """Convert a display name to a valid Discord channel name: help-{name}."""
@@ -31,9 +50,9 @@ def _sanitize_channel_name(display_name: str) -> str:
     return f"help-{name}"[:100]
 
 
-class TicketCommand(
+class AdultierAdultCommand(
     lightbulb.SlashCommand,
-    name="ticket",
+    name="adultier-adult",
     description="Open a private support ticket with the staff team.",
 ):
     @lightbulb.invoke
@@ -119,6 +138,24 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         )
         return
 
+    # Pre-flight: verify bot has permission to create the channel
+    missing, scope = await _check_create_perms(bot, gc.guild_id, st.category_id)
+    if missing:
+        missing_str = ", ".join(f"**{m}**" for m in missing)
+        gc.logger.error(
+            "Cannot create ticket channel — missing permissions",
+            scope=scope,
+            missing=missing,
+        )
+        await gc.log(
+            f"🤯 *snorts smoke* I tried to open a ticket for {interaction.user.mention} "
+            f"but I'm missing {missing_str} in {scope}! Please check my permissions there. 🐉"
+        )
+        await interaction.edit_initial_response(
+            content="*sad smoke puff* I couldn't open a ticket channel — I'm missing permissions. Please let staff know! 🐉"
+        )
+        return
+
     # Build permission overwrites
     everyone_id = interaction.guild_id  # @everyone role ID == guild ID
     overwrites = [
@@ -148,7 +185,6 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
                     hikari.Permissions.VIEW_CHANNEL
                     | hikari.Permissions.SEND_MESSAGES
                     | hikari.Permissions.MANAGE_MESSAGES
-                    | hikari.Permissions.MANAGE_CHANNELS
                 ),
                 deny=hikari.Permissions.NONE,
             )
@@ -181,8 +217,8 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
     except hikari.ForbiddenError:
         gc.logger.exception("Cannot create ticket channel — missing permissions")
         await gc.log(
-            "🤯 *snorts smoke* I tried to open a ticket channel but I don't have permission to create channels! "
-            "Please check that I have Manage Channels. 🐉"
+            "🤯 *snorts smoke* I tried to open a ticket channel but Discord still rejected it! "
+            "Please double-check my Manage Channels permission in the category. 🐉"
         )
         await interaction.edit_initial_response(
             content="*sad smoke puff* I couldn't open a ticket channel — looks like I'm missing permissions. Please let staff know! 🐉"
