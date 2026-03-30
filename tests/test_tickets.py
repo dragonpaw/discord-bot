@@ -43,3 +43,60 @@ def test_ticket_guild_state_round_trip():
     assert loaded.required_role_id == 700
     assert len(loaded.open_tickets) == 1
     assert loaded.open_tickets[0].topic == "help me"
+
+
+from dragonpaw_bot.plugins.tickets import state as tickets_state
+
+
+def test_state_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setattr(tickets_state, "STATE_DIR", tmp_path)
+    tickets_state._cache.clear()
+
+    st = TicketGuildState(
+        guild_id=200,
+        guild_name="Test Guild",
+        staff_role_id=999,
+        open_tickets=[OpenTicket(user_id=1, channel_id=2, topic="halp")],
+    )
+    tickets_state.save(st)
+    tickets_state._cache.clear()
+
+    loaded = tickets_state.load(200)
+    assert loaded.guild_id == 200
+    assert loaded.guild_name == "Test Guild"
+    assert loaded.staff_role_id == 999
+    assert len(loaded.open_tickets) == 1
+    assert loaded.open_tickets[0].topic == "halp"
+
+
+def test_state_load_missing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(tickets_state, "STATE_DIR", tmp_path)
+    tickets_state._cache.clear()
+
+    loaded = tickets_state.load(999)
+    assert loaded.guild_id == 999
+    assert loaded.open_tickets == []
+
+
+def test_state_uses_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(tickets_state, "STATE_DIR", tmp_path)
+    tickets_state._cache.clear()
+
+    st = TicketGuildState(guild_id=300, guild_name="Cached")
+    tickets_state.save(st)
+
+    first = tickets_state.load(300)
+    second = tickets_state.load(300)
+    assert first is second
+
+
+def test_state_round_trip_no_tickets(tmp_path, monkeypatch):
+    monkeypatch.setattr(tickets_state, "STATE_DIR", tmp_path)
+    tickets_state._cache.clear()
+
+    st = TicketGuildState(guild_id=400)
+    tickets_state.save(st)
+    tickets_state._cache.clear()
+
+    loaded = tickets_state.load(400)
+    assert loaded.open_tickets == []
