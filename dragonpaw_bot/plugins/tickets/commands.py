@@ -33,7 +33,7 @@ def _sanitize_channel_name(display_name: str) -> str:
 
 class HelpCommand(
     lightbulb.SlashCommand,
-    name="help",
+    name="ticket",
     description="Open a private support ticket with the staff team.",
 ):
     @lightbulb.invoke
@@ -98,7 +98,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
     if not topic:
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="*confused head tilt* I didn't catch a topic — please try `/help` again! 🐉",
+            content="*confused head tilt* I didn't catch a topic — please try `/ticket` again! 🐉",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return

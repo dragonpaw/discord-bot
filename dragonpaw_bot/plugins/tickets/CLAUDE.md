@@ -4,7 +4,7 @@ Lets users open private support ticket channels via `/help`. Each ticket is a ch
 
 ### User Commands
 
-- **`/help`** — Open a new ticket. Shows a modal to enter a topic. One open ticket per user at a time.
+- **`/ticket`** — Open a new ticket. Shows a modal to enter a topic. One open ticket per user at a time.
 
 ### Configuration
 
@@ -18,7 +18,7 @@ State is persisted to `state/tickets_{guild_id}.yaml`.
 
 ### Ticket Lifecycle
 
-1. User runs `/help` → modal appears → submits topic
+1. User runs `/ticket` → modal appears → submits topic
 2. Bot creates `help-{username}` channel under configured category
 3. Bot posts staff ping + topic + Close/Add Person buttons in channel
 4. User receives ephemeral link to channel
