@@ -39,12 +39,6 @@ class ValidationSetup(
         default=None,
         channel_types=[hikari.ChannelType.GUILD_CATEGORY],
     )
-    announce_channel = lightbulb.channel(
-        "announce_channel",
-        "Channel where approved members are announced",
-        default=None,
-        channel_types=[hikari.ChannelType.GUILD_TEXT],
-    )
     member_role = lightbulb.role(
         "member_role",
         "Role assigned to members when they are approved",
@@ -105,8 +99,6 @@ class ValidationSetup(
             st.lobby_channel_id = int(self.lobby_channel.id)
         if self.validate_category is not None:
             st.validate_category_id = int(self.validate_category.id)
-        if self.announce_channel is not None:
-            st.general_channel_id = int(self.announce_channel.id)
         if self.member_role is not None:
             st.member_role_id = int(self.member_role.id)
         if self.staff_role is not None:
@@ -131,9 +123,6 @@ class ValidationSetup(
             validate_category=self.validate_category.name
             if self.validate_category
             else None,
-            announce_channel=self.announce_channel.name
-            if self.announce_channel
-            else None,
             member_role=self.member_role.name if self.member_role else None,
             staff_role=self.staff_role.name if self.staff_role else None,
             max_reminders=self.max_reminders,
@@ -144,8 +133,6 @@ class ValidationSetup(
             parts.append(f"lobby: <#{self.lobby_channel.id}>")
         if self.validate_category:
             parts.append(f"validate category: {self.validate_category.name}")
-        if self.announce_channel:
-            parts.append(f"announce: <#{self.announce_channel.id}>")
         if self.member_role:
             parts.append(f"member role: <@&{self.member_role.id}>")
         if self.staff_role:
@@ -244,9 +231,6 @@ class ValidationStatus(
             f"• Lobby channel: {f'<#{st.lobby_channel_id}>' if st.lobby_channel_id else 'not set'}"
         )
         lines.append(f"• Validate category: {category_display}")
-        lines.append(
-            f"• Announce channel: {f'<#{st.general_channel_id}>' if st.general_channel_id else 'not set'}"
-        )
         lines.append(
             f"• Member role: {f'<@&{st.member_role_id}>' if st.member_role_id else 'not set'}"
         )

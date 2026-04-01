@@ -27,7 +27,6 @@ class ValidationGuildState(pydantic.BaseModel):
     # config
     lobby_channel_id: int | None = None
     validate_category_id: int | None = None
-    general_channel_id: int | None = None
     member_role_id: int | None = None
     staff_role_id: int | None = None
     max_reminders: int = pydantic.Field(default=3, ge=1)

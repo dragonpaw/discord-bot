@@ -415,10 +415,12 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
     st.members = [m for m in st.members if m.channel_id != channel_id]
     validation_state.save(st)
 
-    if st.general_channel_id:
+    bot_st = bot.state(interaction.guild_id)
+    general_channel_id = bot_st.general_channel_id if bot_st else None
+    if general_channel_id:
         try:
             await bot.rest.create_message(
-                channel=st.general_channel_id,
+                channel=general_channel_id,
                 content=(
                     f"🎉 *does a happy little dragon wiggle* Everyone say hello to **{name}**! "
                     f"They're officially part of the hoard now~ 🐉\n\n"
@@ -433,10 +435,11 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
             )
         except hikari.HTTPError:
             gc.logger.warning(
-                "Failed to post welcome announcement", channel_id=st.general_channel_id
+                "Failed to post welcome announcement",
+                channel_id=int(general_channel_id),
             )
             await gc.log(
-                f"⚠️ Couldn't post the welcome announcement for **{name}** in <#{st.general_channel_id}>! 🐉"
+                f"⚠️ Couldn't post the welcome announcement for **{name}** in <#{general_channel_id}>! 🐉"
             )
 
     await gc.log(
