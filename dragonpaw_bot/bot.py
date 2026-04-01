@@ -460,6 +460,10 @@ class SetGeneralChannel(
             await gc.log(f"⚙️ {ctx.user.mention} cleared the general chat channel 🐉")
 
 
+from dragonpaw_bot.plugins.activity import config as activity_config  # noqa: E402
+
+_activity_sub = _config_group.subgroup("activity", "Activity tracker settings")
+
 _channels_sub.register(SetLogChannel)
 _channels_sub.register(SetGeneralChannel)
 media_config.register(_media_sub)
@@ -470,6 +474,7 @@ birthday_config.register(_birthday_sub)
 roles_config.register(_roles_sub)
 tickets_config.register(_tickets_sub)
 validation_config.register(_validation_sub)
+activity_config.register(_activity_sub)
 loader.command(_config_group)
 
 
@@ -547,6 +552,7 @@ async def on_starting(_: hikari.StartingEvent) -> None:
         "dragonpaw_bot.plugins.intros",
         "dragonpaw_bot.plugins.tickets",
         "dragonpaw_bot.plugins.validation",
+        "dragonpaw_bot.plugins.activity",
     )
     await client.start()
 

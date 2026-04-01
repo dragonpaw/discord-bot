@@ -1,0 +1,191 @@
+"""Activity tracker plugin: records member engagement across messages, reactions, and VC."""
+
+from __future__ import annotations
+
+import re
+import time
+from typing import TYPE_CHECKING
+
+import hikari
+import lightbulb
+import structlog
+
+from dragonpaw_bot.plugins.activity import state as activity_state
+from dragonpaw_bot.plugins.activity.models import (
+    CONTRIBUTION_VALUES,
+    ContributionBucket,
+    UserActivity,
+    has_ignored_role,
+)
+
+if TYPE_CHECKING:
+    from dragonpaw_bot.bot import DragonpawBot
+
+logger = structlog.get_logger(__name__)
+
+loader = lightbulb.Loader()
+
+_URL_RE = re.compile(r"https?://", re.IGNORECASE)
+
+# guild_id → {user_id → join_timestamp}
+_vc_sessions: dict[int, dict[int, float]] = {}
+
+
+def _has_media(message: hikari.Message) -> bool:
+    return (
+        bool(message.attachments)
+        or _URL_RE.search(message.content or "") is not None
+        or bool(message.stickers)
+    )
+
+
+def _add_contribution(
+    state: activity_state.ActivityGuildState,
+    user_id: int,
+    kind: str,
+    amount: float,
+    now: float | None = None,
+) -> None:
+    """Upsert a contribution into the user's hourly bucket."""
+    if now is None:
+        now = time.time()
+    hour = int(now) // 3600 * 3600
+    if user_id not in state.users:
+        state.users[user_id] = UserActivity(user_id=user_id)
+    buckets = state.users[user_id].buckets
+    for b in buckets:
+        if b.hour == hour and b.kind == kind:
+            b.amount += amount
+            return
+    buckets.append(ContributionBucket(hour=hour, kind=kind, amount=amount))
+
+
+@loader.listener(hikari.GuildMessageCreateEvent)
+async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
+    """Track text and media post contributions."""
+    if event.message.author.is_bot:
+        return
+
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
+    st = activity_state.load(int(event.guild_id))
+
+    member = bot.cache.get_member(event.guild_id, event.author_id)
+    if member is None:
+        try:
+            member = await bot.rest.fetch_member(event.guild_id, event.author_id)
+        except hikari.NotFoundError:
+            return
+
+    role_ids = [int(r) for r in member.role_ids]
+    if not role_ids:
+        return  # Not yet through onboarding
+
+    if has_ignored_role(role_ids, st.config.role_configs):
+        return
+
+    kind = "media" if _has_media(event.message) else "text"
+
+    # Per-channel point multiplier
+    channel_cfg = next(
+        (c for c in st.config.channel_configs if c.channel_id == int(event.channel_id)),
+        None,
+    )
+    amount = channel_cfg.point_multiplier if channel_cfg else 1.0
+
+    _add_contribution(st, int(event.author_id), kind, amount)
+    activity_state.save(st)
+
+    logger.debug(
+        "Activity recorded",
+        user=member.display_name,
+        kind=kind,
+        raw_points=CONTRIBUTION_VALUES[kind] * amount,
+    )
+
+
+@loader.listener(hikari.GuildReactionAddEvent)
+async def on_reaction(event: hikari.GuildReactionAddEvent) -> None:
+    """Track reaction contributions."""
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
+    st = activity_state.load(int(event.guild_id))
+
+    member = bot.cache.get_member(event.guild_id, event.user_id)
+    if member is None:
+        try:
+            member = await bot.rest.fetch_member(event.guild_id, event.user_id)
+        except hikari.NotFoundError:
+            return
+
+    if member.is_bot:
+        return
+
+    role_ids = [int(r) for r in member.role_ids]
+    if not role_ids:
+        return
+
+    if has_ignored_role(role_ids, st.config.role_configs):
+        return
+
+    _add_contribution(st, int(event.user_id), "reaction", 1.0)
+    activity_state.save(st)
+
+    logger.debug(
+        "Activity recorded",
+        user=member.display_name,
+        kind="reaction",
+        raw_points=CONTRIBUTION_VALUES["reaction"],
+    )
+
+
+@loader.listener(hikari.VoiceStateUpdateEvent)
+async def on_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> None:
+    """Track voice channel time contributions."""
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
+    guild_id = int(event.guild_id)
+    user_id = int(event.state.user_id)
+
+    old_channel = event.old_state.channel_id if event.old_state else None
+    new_channel = event.state.channel_id
+
+    # Leave (or switch away from old channel): record accumulated time
+    if old_channel is not None:
+        sessions = _vc_sessions.get(guild_id, {})
+        join_time = sessions.pop(user_id, None)
+        if join_time is not None:
+            minutes = (time.time() - join_time) / 60.0
+            if minutes >= 1.0:
+                member = bot.cache.get_member(event.guild_id, event.state.user_id)
+                if member is None:
+                    try:
+                        member = await bot.rest.fetch_member(
+                            event.guild_id, event.state.user_id
+                        )
+                    except hikari.NotFoundError:
+                        member = None
+
+                if member and not member.is_bot:
+                    st = activity_state.load(guild_id)
+                    role_ids = [int(r) for r in member.role_ids]
+                    if role_ids and not has_ignored_role(
+                        role_ids, st.config.role_configs
+                    ):
+                        _add_contribution(st, user_id, "vc", minutes)
+                        activity_state.save(st)
+                        logger.debug(
+                            "Activity recorded",
+                            user=member.display_name,
+                            kind="vc",
+                            raw_points=CONTRIBUTION_VALUES["vc"] * minutes,
+                        )
+
+    # Join (or switch to new channel): start tracking
+    if new_channel is not None:
+        _vc_sessions.setdefault(guild_id, {})[user_id] = time.time()
+
+
+from dragonpaw_bot.plugins.activity import commands as _commands  # noqa: E402
+from dragonpaw_bot.plugins.activity import cron as _cron  # noqa: E402, F401
+
+_activity_group = lightbulb.Group("activity", "Activity tracker commands")
+_commands.register(_activity_group)
+loader.command(_activity_group)
