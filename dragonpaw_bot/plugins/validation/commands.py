@@ -423,12 +423,12 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
                     f"🎉 *does a happy little dragon wiggle* Everyone say hello to **{name}**! "
                     f"They're officially part of the hoard now~ 🐉\n\n"
                     f"**{name}**, welcome welcome welcome!! A few things to get you settled in:\n"
-                    f"• Peek at #about to learn more about us 📖\n"
-                    f"• Head to #roles and grab some shiny ones ✨\n"
-                    f"• Tell us a little about yourself in #introductions 🐾\n"
-                    f"• We host classes and have a SubDay Journal program — check out #classes-and-events! 📚\n"
+                    f"• Peek at {f'<#{st.about_channel_id}>' if st.about_channel_id else '#about'} to learn more about us 📖\n"
+                    f"• Head to {f'<#{st.roles_channel_id}>' if st.roles_channel_id else '#roles'} and grab some shiny ones ✨\n"
+                    f"• Tell us a little about yourself in {f'<#{st.intros_channel_id}>' if st.intros_channel_id else '#introductions'} 🐾\n"
+                    f"• We host classes and have a SubDay Journal program — check out {f'<#{st.events_channel_id}>' if st.events_channel_id else '#classes-and-events'}! 📚\n"
                     f"• One tiny thing! I have a *very* hungry tummy for text in the media channels 🍽️ "
-                    f"*nom nom* Images and links are yummy, but please pop your comments over in #general-often-lewd~ 💜"
+                    f"*nom nom* Images and links are yummy, but please pop your comments over in {f'<#{st.chat_channel_id}>' if st.chat_channel_id else '#general-often-lewd'}~ 💜"
                 ),
             )
         except hikari.HTTPError:

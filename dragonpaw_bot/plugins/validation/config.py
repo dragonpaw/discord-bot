@@ -62,9 +62,39 @@ class ValidationSetup(
         min_value=1,
         max_value=10,
     )
+    about_channel = lightbulb.channel(
+        "about_channel",
+        "Channel linked in the welcome message for server info",
+        default=None,
+        channel_types=[hikari.ChannelType.GUILD_TEXT],
+    )
+    roles_channel = lightbulb.channel(
+        "roles_channel",
+        "Channel linked in the welcome message for role selection",
+        default=None,
+        channel_types=[hikari.ChannelType.GUILD_TEXT],
+    )
+    intros_channel = lightbulb.channel(
+        "intros_channel",
+        "Channel linked in the welcome message for introductions",
+        default=None,
+        channel_types=[hikari.ChannelType.GUILD_TEXT],
+    )
+    events_channel = lightbulb.channel(
+        "events_channel",
+        "Channel linked in the welcome message for classes and events",
+        default=None,
+        channel_types=[hikari.ChannelType.GUILD_TEXT],
+    )
+    chat_channel = lightbulb.channel(
+        "chat_channel",
+        "Channel linked in the welcome message for general chat",
+        default=None,
+        channel_types=[hikari.ChannelType.GUILD_TEXT],
+    )
 
     @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912
+    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912, PLR0915
         if not ctx.guild_id:
             return
         gc = GuildContext.from_ctx(ctx)
@@ -83,6 +113,16 @@ class ValidationSetup(
             st.staff_role_id = int(self.staff_role.id)
         if self.max_reminders is not None:
             st.max_reminders = self.max_reminders
+        if self.about_channel is not None:
+            st.about_channel_id = int(self.about_channel.id)
+        if self.roles_channel is not None:
+            st.roles_channel_id = int(self.roles_channel.id)
+        if self.intros_channel is not None:
+            st.intros_channel_id = int(self.intros_channel.id)
+        if self.events_channel is not None:
+            st.events_channel_id = int(self.events_channel.id)
+        if self.chat_channel is not None:
+            st.chat_channel_id = int(self.chat_channel.id)
 
         validation_state.save(st)
         gc.logger.info(
@@ -112,6 +152,16 @@ class ValidationSetup(
             parts.append(f"staff role: <@&{self.staff_role.id}>")
         if self.max_reminders is not None:
             parts.append(f"max reminders: {self.max_reminders}")
+        if self.about_channel:
+            parts.append(f"about: <#{self.about_channel.id}>")
+        if self.roles_channel:
+            parts.append(f"roles: <#{self.roles_channel.id}>")
+        if self.intros_channel:
+            parts.append(f"intros: <#{self.intros_channel.id}>")
+        if self.events_channel:
+            parts.append(f"events: <#{self.events_channel.id}>")
+        if self.chat_channel:
+            parts.append(f"chat: <#{self.chat_channel.id}>")
 
         summary = ", ".join(parts) if parts else "no changes"
         warnings: list[str] = []
@@ -175,7 +225,7 @@ class ValidationStatus(
         )
         awaiting_staff = sum(1 for m in st.members if m.stage.value == "awaiting_staff")
 
-        bot = ctx.client.app
+        bot: hikari.GatewayBot = ctx.client.app  # type: ignore[assignment]
         category_ch = (
             bot.cache.get_guild_channel(hikari.Snowflake(st.validate_category_id))
             if st.validate_category_id
@@ -204,6 +254,21 @@ class ValidationStatus(
             f"• Staff role: {f'<@&{st.staff_role_id}>' if st.staff_role_id else 'not set'}"
         )
         lines.append(f"• Max reminders before kick: {st.max_reminders}")
+        lines.append(
+            f"• About channel: {f'<#{st.about_channel_id}>' if st.about_channel_id else 'not set'}"
+        )
+        lines.append(
+            f"• Roles channel: {f'<#{st.roles_channel_id}>' if st.roles_channel_id else 'not set'}"
+        )
+        lines.append(
+            f"• Intros channel: {f'<#{st.intros_channel_id}>' if st.intros_channel_id else 'not set'}"
+        )
+        lines.append(
+            f"• Events channel: {f'<#{st.events_channel_id}>' if st.events_channel_id else 'not set'}"
+        )
+        lines.append(
+            f"• Chat channel: {f'<#{st.chat_channel_id}>' if st.chat_channel_id else 'not set'}"
+        )
         lines.append(f"• Awaiting rules: {awaiting_rules}")
         lines.append(f"• Awaiting photos: {awaiting_photos}")
         lines.append(f"• Awaiting staff review: {awaiting_staff}")

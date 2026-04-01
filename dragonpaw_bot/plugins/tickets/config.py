@@ -100,7 +100,7 @@ class TicketsStatus(
             return
         st = tickets_state.load(int(ctx.guild_id))
 
-        bot = ctx.client.app
+        bot: hikari.GatewayBot = ctx.client.app  # type: ignore[assignment]
         category_ch = (
             bot.cache.get_guild_channel(hikari.Snowflake(st.category_id))
             if st.category_id

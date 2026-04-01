@@ -31,5 +31,11 @@ class ValidationGuildState(pydantic.BaseModel):
     member_role_id: int | None = None
     staff_role_id: int | None = None
     max_reminders: int = pydantic.Field(default=3, ge=1)
+    # welcome message channel links
+    about_channel_id: int | None = None
+    roles_channel_id: int | None = None
+    intros_channel_id: int | None = None
+    events_channel_id: int | None = None
+    chat_channel_id: int | None = None
     # runtime
     members: list[ValidationMember] = []
