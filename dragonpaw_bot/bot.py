@@ -447,6 +447,9 @@ class SetGeneralChannel(
                 f"General chat channel set to <#{self.channel.id}>.",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
+            await gc.log(
+                f"⚙️ {ctx.user.mention} set the general chat channel to <#{self.channel.id}> 🐉"
+            )
         else:
             state.general_channel_id = None
             bot.state_update(state)
@@ -454,6 +457,7 @@ class SetGeneralChannel(
             await ctx.respond(
                 "General chat channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
             )
+            await gc.log(f"⚙️ {ctx.user.mention} cleared the general chat channel 🐉")
 
 
 _channels_sub.register(SetLogChannel)
