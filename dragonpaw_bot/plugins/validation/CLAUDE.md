@@ -37,8 +37,8 @@ the channel deletion is the source of truth for staff).
 
 Managed via `/config validation` (owner only):
 
-- **`setup [lobby_channel] [validate_category] [announce_channel] [member_role] [staff_role] [max_reminders]`**
-  — Set any combination. Omitted params keep current values.
+- **`setup [lobby_channel] [validate_category] [member_role] [staff_role] [max_reminders]`**
+  — Set any combination. Omitted params keep current values. The welcome announcement channel is configured globally via `/config channels general`.
 - **`status`** — Shows config + member counts at each stage.
 
 State persisted to `state/validation_{guild_id}.yaml`.

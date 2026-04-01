@@ -26,7 +26,7 @@ Requires the `MESSAGE_CONTENT` privileged intent (enabled in Discord Developer P
 1. Non-bot message arrives in a monitored channel.
 2. If it has media → leave it alone.
 3. If it's text-only → delete it.
-4. Post a playful dragon notice mentioning the user (with optional redirect hint).
+4. Post a playful dragon notice mentioning the user (with redirect hint if configured — per-channel redirect takes priority, falls back to the bot-wide general chat channel set via `/config channels general`).
 5. Auto-delete the notice after 15 seconds.
 6. Log the action to the guild's log channel via `gc.log()`.
 
@@ -37,7 +37,7 @@ Requires the `MESSAGE_CONTENT` privileged intent (enabled in Discord Developer P
 and files only — so I had to nom that message right up. Why not share your
 thoughts in #redirect? 🐾
 ```
-(Redirect hint omitted if not configured.)
+The redirect hint uses the per-channel redirect if configured, otherwise falls back to the bot-wide `general_channel_id` from `GuildState` (set via `/config channels general`). Omitted if neither is set.
 
 ### Hourly Cleanup Cron
 
