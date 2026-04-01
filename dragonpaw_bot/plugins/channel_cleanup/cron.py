@@ -18,7 +18,7 @@ logger = structlog.get_logger(__name__)
 
 
 @loader.task(lightbulb.crontrigger("0 * * * *"))
-async def hourly_cleanup(bot: hikari.GatewayBot) -> None:
+async def channel_cleanup_hourly(bot: hikari.GatewayBot) -> None:
     """Hourly task: purge old messages from configured channels (all channels run concurrently)."""
     bot = cast("DragonpawBot", bot)
     guilds = list(bot.cache.get_guilds_view().values())

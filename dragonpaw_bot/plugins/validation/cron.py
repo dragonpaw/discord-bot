@@ -19,7 +19,7 @@ logger = structlog.get_logger(__name__)
 
 
 @loader.task(lightbulb.crontrigger("0 * * * *"))  # every hour
-async def reminder_cron(bot: DragonpawBot = lightbulb.di.INJECTED) -> None:  # noqa: PLR0912
+async def validation_reminder_cron(bot: DragonpawBot = lightbulb.di.INJECTED) -> None:  # noqa: PLR0912
     """Ping unvalidated members in the lobby channel every 24h; kick after max_reminders."""
     now = datetime.now(UTC)
     guilds = list(bot.cache.get_guilds_view().values())

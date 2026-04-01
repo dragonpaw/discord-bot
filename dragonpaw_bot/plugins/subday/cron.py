@@ -208,7 +208,7 @@ async def _process_guild_prompts(bot: DragonpawBot, guild: hikari.Guild) -> None
 
 
 @loader.task(lightbulb.crontrigger("0 14 * * 0"))
-async def sunday_prompts(bot: hikari.GatewayBot) -> None:
+async def subday_sunday_prompts(bot: hikari.GatewayBot) -> None:
     """Advance completed participants and DM their next prompt."""
     bot = cast("DragonpawBot", bot)
     guilds = list(bot.cache.get_guilds_view().values())
@@ -316,7 +316,7 @@ async def _process_guild_friday_reminders(
 
 
 @loader.task(lightbulb.crontrigger("0 20 * * 5"))
-async def friday_reminders(bot: hikari.GatewayBot) -> None:
+async def subday_friday_reminders(bot: hikari.GatewayBot) -> None:
     """Friday noon PST (20:00 UTC): remind incomplete participants."""
     bot = cast("DragonpawBot", bot)
     guilds = list(bot.cache.get_guilds_view().values())
