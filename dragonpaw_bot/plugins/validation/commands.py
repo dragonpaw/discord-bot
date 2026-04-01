@@ -421,8 +421,14 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
                 channel=st.general_channel_id,
                 content=(
                     f"🎉 *does a happy little dragon wiggle* Everyone say hello to **{name}**! "
-                    f"They've passed through the fire and are officially part of the hoard now! "
-                    f"Welcome welcome welcome!! 🐉🐾"
+                    f"They're officially part of the hoard now~ 🐉\n\n"
+                    f"**{name}**, welcome welcome welcome!! A few things to get you settled in:\n"
+                    f"• Peek at #about to learn more about us 📖\n"
+                    f"• Head to #roles and grab some shiny ones ✨\n"
+                    f"• Tell us a little about yourself in #introductions 🐾\n"
+                    f"• We host classes and have a SubDay Journal program — check out #classes-and-events! 📚\n"
+                    f"• One tiny thing! I have a *very* hungry tummy for text in the media channels 🍽️ "
+                    f"*nom nom* Images and links are yummy, but please pop your comments over in #general-often-lewd~ 💜"
                 ),
             )
         except hikari.HTTPError:
