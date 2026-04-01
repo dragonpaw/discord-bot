@@ -64,7 +64,7 @@ class ValidationSetup(
     )
 
     @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912, PLR0915
+    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912
         if not ctx.guild_id:
             return
         gc = GuildContext.from_ctx(ctx)
@@ -103,7 +103,7 @@ class ValidationSetup(
         if self.lobby_channel:
             parts.append(f"lobby: <#{self.lobby_channel.id}>")
         if self.validate_category:
-            parts.append(f"validate category: <#{self.validate_category.id}>")
+            parts.append(f"validate category: {self.validate_category.name}")
         if self.announce_channel:
             parts.append(f"announce: <#{self.announce_channel.id}>")
         if self.member_role:
@@ -133,11 +133,6 @@ class ValidationSetup(
             reason = await check_role_manageable(gc.bot, ctx.guild_id, self.member_role)
             if reason:
                 warnings.append(f"⚠️ Member role issue: {reason}")
-
-        if self.staff_role is not None:
-            reason = await check_role_manageable(gc.bot, ctx.guild_id, self.staff_role)
-            if reason:
-                warnings.append(f"⚠️ Staff role issue: {reason}")
 
         members_approved = (
             hikari.ApplicationFlags.GUILD_MEMBERS_INTENT
@@ -180,13 +175,25 @@ class ValidationStatus(
         )
         awaiting_staff = sum(1 for m in st.members if m.stage.value == "awaiting_staff")
 
+        bot = ctx.client.app
+        category_ch = (
+            bot.cache.get_guild_channel(hikari.Snowflake(st.validate_category_id))
+            if st.validate_category_id
+            else None
+        )
+        category_display = (
+            category_ch.name
+            if category_ch
+            else str(st.validate_category_id)
+            if st.validate_category_id
+            else "not set"
+        )
+
         lines = ["*peers around curiously* 🐉 Here's my validation setup:"]
         lines.append(
             f"• Lobby channel: {f'<#{st.lobby_channel_id}>' if st.lobby_channel_id else 'not set'}"
         )
-        lines.append(
-            f"• Validate category: {f'<#{st.validate_category_id}>' if st.validate_category_id else 'not set'}"
-        )
+        lines.append(f"• Validate category: {category_display}")
         lines.append(
             f"• Announce channel: {f'<#{st.general_channel_id}>' if st.general_channel_id else 'not set'}"
         )

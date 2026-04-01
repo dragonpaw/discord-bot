@@ -61,7 +61,7 @@ class TicketsSet(
 
         parts = []
         if self.category:
-            parts.append(f"category: <#{self.category.id}>")
+            parts.append(f"category: {self.category.name}")
         if self.staff_role:
             parts.append(f"staff role: <@&{self.staff_role.id}>")
         if self.required_role:
@@ -100,10 +100,22 @@ class TicketsStatus(
             return
         st = tickets_state.load(int(ctx.guild_id))
 
-        lines = ["*peers around curiously* 🐉 Here's my ticket setup:"]
-        lines.append(
-            f"• Category: {f'<#{st.category_id}>' if st.category_id else 'not set'}"
+        bot = ctx.client.app
+        category_ch = (
+            bot.cache.get_guild_channel(hikari.Snowflake(st.category_id))
+            if st.category_id
+            else None
         )
+        category_display = (
+            category_ch.name
+            if category_ch
+            else str(st.category_id)
+            if st.category_id
+            else "not set"
+        )
+
+        lines = ["*peers around curiously* 🐉 Here's my ticket setup:"]
+        lines.append(f"• Category: {category_display}")
         lines.append(
             f"• Staff role: {f'<@&{st.staff_role_id}>' if st.staff_role_id else 'not set'}"
         )
