@@ -144,7 +144,7 @@ def _render_star_sprite(
         draw.polygon(pts, fill=None, outline=(*outline, 255), width=2 * SS)
     else:
         draw.polygon(pts, fill=None, outline=(*outline, 255), width=outline_width * SS)
-    return sprite.resize((size, size), Image.LANCZOS)
+    return sprite.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def _paste_star(
@@ -208,7 +208,7 @@ def _load_icon(filename: str) -> Image.Image:
     """Load a prize icon PNG, resize to ICON_SIZE, and cache it."""
     if filename not in _icon_cache:
         icon = Image.open(ICONS_DIR / filename).convert("RGBA")
-        icon.thumbnail((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
+        icon.thumbnail((ICON_SIZE, ICON_SIZE), Image.Resampling.LANCZOS)
         _icon_cache[filename] = icon
     return _icon_cache[filename]
 

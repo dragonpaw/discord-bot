@@ -488,11 +488,15 @@ async def on_starting(_: hikari.StartingEvent) -> None:
     await client.start()
 
     # Log all registered cron tasks
-    for task in sorted(client._tasks, key=lambda t: t._func.__name__):
+    for task in sorted(client._tasks, key=lambda t: getattr(t._func, "__name__", "")):
         closure = getattr(task._trigger, "__closure__", None)
         if closure and hasattr(closure[0].cell_contents, "expressions"):
             cron_expr = " ".join(str(x) for x in closure[0].cell_contents.expressions)
             schedule = f"cron({cron_expr})"
         else:
             schedule = "unknown"
-        logger.info("Registered task", task=task._func.__name__, schedule=schedule)
+        logger.info(
+            "Registered task",
+            task=getattr(task._func, "__name__", repr(task)),
+            schedule=schedule,
+        )

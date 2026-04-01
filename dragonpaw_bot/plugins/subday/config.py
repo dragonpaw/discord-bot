@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import hikari
 import lightbulb
@@ -80,7 +80,7 @@ def _config_embed(cfg: SubDayGuildConfig) -> hikari.Embed:
     return embed
 
 
-class _DefaultsActionRow:
+class _DefaultsActionRow(hikari.api.ComponentBuilder):
     """Wraps a MessageActionRowBuilder to inject default_values into the payload.
 
     Hikari's select menu builders don't emit ``default_values`` for
@@ -96,7 +96,15 @@ class _DefaultsActionRow:
         self._inner = inner
         self._defaults = defaults
 
-    def build(self) -> tuple[dict, list]:
+    @property
+    def type(self) -> int | hikari.ComponentType:
+        return self._inner.type
+
+    @property
+    def id(self) -> hikari.UndefinedOr[int]:
+        return self._inner.id
+
+    def build(self) -> Any:
         payload, resources = self._inner.build()
         if self._defaults:
             payload["components"][0]["default_values"] = self._defaults
@@ -235,11 +243,11 @@ def _resolve_multi_role_value(
     return names
 
 
-def _display_config_value(v: object) -> str:
+def _display_config_value(v: str | list[str] | None) -> str:
     """Format a config value for display in log/audit messages."""
     if isinstance(v, list):
         return ", ".join(v) if v else "None"
-    return v or "None"  # type: ignore[return-value]
+    return v or "None"
 
 
 async def _reject_missing_perms(
@@ -251,7 +259,7 @@ async def _reject_missing_perms(
 ) -> bool:
     """Check channel perms and send an error response if missing. Returns True if rejected."""
     channel_id = hikari.Snowflake(interaction.values[0])
-    missing = await check_channel_perms(bot, guild_id, channel_id)
+    missing = await check_channel_perms(bot, hikari.Snowflake(guild_id), channel_id)
     if not missing:
         return False
     missing_str = ", ".join(f"**{p}**" for p in missing)
@@ -327,6 +335,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     # For channel fields, verify the bot can write to the selected channel
     if (
         new_value
+        and isinstance(new_value, str)
         and field == "achievements_channel"
         and await _reject_missing_perms(
             interaction, bot, guild_id, guild_state, new_value

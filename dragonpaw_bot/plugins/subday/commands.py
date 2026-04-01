@@ -754,7 +754,7 @@ class SubDayOwner(
             return
 
         participant = guild_state.participants[user_id]
-        target: hikari.User | None = self.user  # type: ignore[assignment]
+        target: hikari.User | None = self.user
 
         # Clear owner
         if target is None:
@@ -1217,9 +1217,12 @@ class SubDayComplete(
             return
 
         if is_backfill:
+            assert (
+                requested_week is not None
+            )  # is_backfill = has_explicit_week = requested_week is not None
             participant, auto_enrolled = _prepare_backfill(
                 guild_state, target_id, requested_week
-            )  # type: ignore[arg-type]
+            )
         else:
             error = _validate_normal_complete(guild_state, target, target_id)
             if error:
