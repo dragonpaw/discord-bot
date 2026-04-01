@@ -357,7 +357,7 @@ async def on_dm_message(event: hikari.DMMessageCreateEvent) -> None:
 loader = lightbulb.Loader()
 
 _config_group = lightbulb.Group("config", "Bot configuration")
-_bot_sub = _config_group.subgroup("bot", "Bot-wide settings")
+_channels_sub = _config_group.subgroup("channels", "Channel settings")
 _media_sub = _config_group.subgroup("media", "Media-only channel settings")
 _cleanup_sub = _config_group.subgroup("cleanup", "Auto-expiry channel settings")
 _intros_sub = _config_group.subgroup("intros", "Intro channel settings")
@@ -368,9 +368,9 @@ _tickets_sub = _config_group.subgroup("tickets", "Help ticket settings")
 _validation_sub = _config_group.subgroup("validation", "Member validation settings")
 
 
-class BotLogging(
+class SetLogChannel(
     lightbulb.SlashCommand,
-    name="logging",
+    name="log",
     description="Set or clear the bot's log channel for this server.",
     hooks=[guild_owner_only],
 ):
@@ -412,7 +412,52 @@ class BotLogging(
             )
 
 
-_bot_sub.register(BotLogging)
+class SetGeneralChannel(
+    lightbulb.SlashCommand,
+    name="general",
+    description="Set or clear the general chat channel for this server.",
+    hooks=[guild_owner_only],
+):
+    channel = lightbulb.channel(
+        "channel", "General chat channel (omit to clear)", default=None
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        if not ctx.guild_id:
+            logger.error("Interaction without a guild")
+            return
+
+        gc = GuildContext.from_ctx(ctx)
+        guild = await gc.fetch_guild()
+        state = gc.state()
+        if not state:
+            state = structs.GuildState(
+                id=ctx.guild_id,
+                name=guild.name,
+                config_url="",
+                config_last=datetime.datetime.now(tz=datetime.UTC),
+            )
+
+        if self.channel is not None:
+            state.general_channel_id = self.channel.id
+            bot.state_update(state)
+            gc.logger.info("Set general chat channel", channel=self.channel.name)
+            await ctx.respond(
+                f"General chat channel set to <#{self.channel.id}>.",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+        else:
+            state.general_channel_id = None
+            bot.state_update(state)
+            gc.logger.info("Cleared general chat channel")
+            await ctx.respond(
+                "General chat channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
+            )
+
+
+_channels_sub.register(SetLogChannel)
+_channels_sub.register(SetGeneralChannel)
 media_config.register(_media_sub)
 cleanup_config.register(_cleanup_sub)
 intros_config.register(_intros_sub)
