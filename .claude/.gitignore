@@ -1,0 +1,5 @@
+# Claude Code internals — only memory/ is project-relevant
+*
+!.gitignore
+!memory/
+!memory/**
