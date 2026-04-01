@@ -318,9 +318,20 @@ async def on_guild_available(event: hikari.GuildAvailableEvent):
         logger.info("No state found, nothing to do", guild=name)
 
 
+_BLOCKED_GUILDS = {915486296883990528}
+
+
 @bot.listen(hikari.GuildJoinEvent)
 async def on_guild_join(event: hikari.GuildJoinEvent):
     guild = await bot.rest.fetch_guild(guild=event.guild_id)
+    if int(event.guild_id) in _BLOCKED_GUILDS:
+        logger.warning(
+            "Joined blocked guild, leaving immediately",
+            guild=guild.name,
+            guild_id=event.guild_id,
+        )
+        await bot.rest.leave_guild(event.guild_id)
+        return
     logger.info("Joined server", guild=guild.name)
 
 
