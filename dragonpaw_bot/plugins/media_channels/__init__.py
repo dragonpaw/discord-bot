@@ -81,10 +81,12 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
         )
         return
 
+    bot_st = bot.state(event.guild_id)
+    redirect_id = entry.redirect_channel_id or (
+        bot_st.general_channel_id if bot_st else None
+    )
     redirect_hint = (
-        f" Why not share your thoughts in <#{entry.redirect_channel_id}>? 🐾"
-        if entry.redirect_channel_id
-        else ""
+        f" Why not share your thoughts in <#{redirect_id}>? 🐾" if redirect_id else ""
     )
     notice_text = (
         f"*chomps happily* 🐉 Mmm, snacks! <@{msg.author.id}>, "
