@@ -206,7 +206,7 @@ async def process_guild_birthdays(gc: GuildContext) -> None:
 
 
 @loader.task(lightbulb.crontrigger("5 * * * *"))
-async def hourly_birthdays(bot: hikari.GatewayBot) -> None:
+async def birthdays_hourly(bot: hikari.GatewayBot) -> None:
     """Hourly task: announce birthdays at each user's local midnight."""
     bot = cast("DragonpawBot", bot)
     guilds = list(bot.cache.get_guilds_view().values())

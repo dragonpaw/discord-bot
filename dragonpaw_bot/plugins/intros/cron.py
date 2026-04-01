@@ -21,7 +21,7 @@ logger = structlog.get_logger(__name__)
 
 
 @loader.task(lightbulb.crontrigger("0 9 * * *"))
-async def daily_intros_cleanup(bot: hikari.GatewayBot) -> None:
+async def intros_daily_cleanup(bot: hikari.GatewayBot) -> None:
     """Daily task: delete intro posts from members who have left the guild."""
     bot = cast("DragonpawBot", bot)
     guilds = list(bot.cache.get_guilds_view().values())
