@@ -174,6 +174,117 @@ class GuildContext:
             return True
         return any(member_has_role(self.member, name) for name in role_names)
 
+    async def create_private_channel(
+        self,
+        name: str,
+        user_ids: list[hikari.Snowflake | int],
+        extra_roles: list[hikari.Snowflake | int] | None = None,
+        category_id: int | None = None,
+    ) -> hikari.GuildTextChannel:
+        """Create a private text channel visible only to specified users and roles.
+
+        Denies @everyone VIEW_CHANNEL, grants the bot MANAGE_MESSAGES, grants each
+        user_id and extra_role VIEW_CHANNEL + SEND_MESSAGES + READ_MESSAGE_HISTORY.
+        Logs and re-raises on any hikari.HTTPError.
+        """
+        overwrites: list[hikari.PermissionOverwrite] = [
+            hikari.PermissionOverwrite(
+                type=hikari.PermissionOverwriteType.ROLE,
+                id=self.guild_id,  # @everyone role ID == guild ID
+                deny=hikari.Permissions.VIEW_CHANNEL,
+                allow=hikari.Permissions.NONE,
+            ),
+        ]
+        if self.bot.user_id:
+            overwrites.append(
+                hikari.PermissionOverwrite(
+                    type=hikari.PermissionOverwriteType.MEMBER,
+                    id=self.bot.user_id,
+                    allow=(
+                        hikari.Permissions.VIEW_CHANNEL
+                        | hikari.Permissions.SEND_MESSAGES
+                        | hikari.Permissions.MANAGE_MESSAGES
+                    ),
+                    deny=hikari.Permissions.NONE,
+                )
+            )
+        overwrites.extend(
+            hikari.PermissionOverwrite(
+                type=hikari.PermissionOverwriteType.MEMBER,
+                id=hikari.Snowflake(user_id),
+                allow=(
+                    hikari.Permissions.VIEW_CHANNEL
+                    | hikari.Permissions.SEND_MESSAGES
+                    | hikari.Permissions.READ_MESSAGE_HISTORY
+                ),
+                deny=hikari.Permissions.NONE,
+            )
+            for user_id in user_ids
+        )
+        overwrites.extend(
+            hikari.PermissionOverwrite(
+                type=hikari.PermissionOverwriteType.ROLE,
+                id=hikari.Snowflake(role_id),
+                allow=(
+                    hikari.Permissions.VIEW_CHANNEL
+                    | hikari.Permissions.SEND_MESSAGES
+                    | hikari.Permissions.READ_MESSAGE_HISTORY
+                ),
+                deny=hikari.Permissions.NONE,
+            )
+            for role_id in (extra_roles or [])
+        )
+        try:
+            return await self.bot.rest.create_guild_text_channel(
+                guild=self.guild_id,
+                name=name,
+                category=hikari.Snowflake(category_id)
+                if category_id
+                else hikari.UNDEFINED,
+                permission_overwrites=overwrites,
+            )
+        except hikari.ForbiddenError:
+            self.logger.exception(
+                "Cannot create private channel — missing permissions", channel=name
+            )
+            await self.log(
+                f"🤯 *snorts smoke* I tried to create **#{name}** but Discord rejected it! "
+                "Please check my **Manage Channels** permission in the category. 🐉"
+            )
+            raise
+        except hikari.HTTPError:
+            self.logger.exception(
+                "Unexpected error creating private channel", channel=name
+            )
+            await self.log(
+                f"🐛 Something went wrong trying to create **#{name}** — check the bot logs. 🐉"
+            )
+            raise
+
+    async def delete_channel(self, channel_id: int | hikari.Snowflake) -> None:
+        """Delete a channel, logging all errors gracefully."""
+        try:
+            await self.bot.rest.delete_channel(channel_id)
+        except hikari.NotFoundError:
+            self.logger.debug(
+                "Channel already gone, skipping delete", channel_id=channel_id
+            )
+        except hikari.ForbiddenError:
+            self.logger.warning(
+                "Cannot delete channel — missing permissions", channel_id=channel_id
+            )
+            await self.log(
+                f"🤯 I tried to delete <#{channel_id}> but couldn't — "
+                "please check my **Manage Channels** permission! 🐉"
+            )
+        except hikari.HTTPError:
+            self.logger.exception(
+                "Unexpected error deleting channel", channel_id=channel_id
+            )
+            await self.log(
+                f"🐛 Unexpected error trying to delete <#{channel_id}> — check the bot logs. 🐉"
+            )
+
     async def check_permission(
         self, ctx: lightbulb.Context, role_name: str | list[str] | None, action: str
     ) -> bool:

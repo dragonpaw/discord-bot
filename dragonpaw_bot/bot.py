@@ -30,6 +30,9 @@ from dragonpaw_bot.plugins.subday import config as subday_config
 from dragonpaw_bot.plugins.tickets import INTERACTION_HANDLERS as tickets_handlers
 from dragonpaw_bot.plugins.tickets import MODAL_HANDLERS as tickets_modal_handlers
 from dragonpaw_bot.plugins.tickets import config as tickets_config
+from dragonpaw_bot.plugins.validation import INTERACTION_HANDLERS as validation_handlers
+from dragonpaw_bot.plugins.validation import MODAL_HANDLERS as validation_modal_handlers
+from dragonpaw_bot.plugins.validation import config as validation_config
 from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 configure_logging()
@@ -43,6 +46,7 @@ _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
         *((p, h, "birthdays") for p, h in birthday_handlers.items()),
         *((p, h, "role_menus") for p, h in role_menu_handlers.items()),
         *((p, h, "tickets") for p, h in tickets_handlers.items()),
+        *((p, h, "validation") for p, h in validation_handlers.items()),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -52,6 +56,7 @@ _MODAL_ROUTES: list[tuple[str, ModalHandler, str]] = sorted(
     [
         *((p, h, "birthdays") for p, h in birthday_modal_handlers.items()),
         *((p, h, "tickets") for p, h in tickets_modal_handlers.items()),
+        *((p, h, "validation") for p, h in validation_modal_handlers.items()),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -107,6 +112,7 @@ class DragonpawBot(hikari.GatewayBot):
         )
         self._state: dict[hikari.Snowflake, structs.GuildState] = {}
         self.user_id: hikari.Snowflake | None = None
+        self.application_flags: hikari.ApplicationFlags | None = None
         logger.info("Starting bot", build=BUILD_TAG, test_guilds=TEST_GUILDS)
 
     def state(self, guild_id: hikari.Snowflake) -> structs.GuildState | None:
@@ -199,14 +205,20 @@ def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
 
     data["id"] = hikari.Snowflake(data["id"])
 
+    if data.get("log_channel_id") is not None:
+        data["log_channel_id"] = hikari.Snowflake(data["log_channel_id"])
+
+    # Strip legacy lobby fields
     for field in (
         "lobby_role_id",
+        "lobby_welcome_message",
         "lobby_channel_id",
+        "lobby_click_for_rules",
+        "lobby_kick_days",
+        "lobby_rules",
         "lobby_rules_message_id",
-        "log_channel_id",
     ):
-        if data.get(field) is not None:
-            data[field] = hikari.Snowflake(data[field])
+        data.pop(field, None)
 
     return structs.GuildState.model_validate(data)
 
@@ -262,6 +274,7 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
         url=OAUTH_URL.format(CLIENT_ID=CLIENT_ID, OAUTH_PERMISSIONS=OAUTH_PERMISSIONS),
     )
     bot.user_id = event.my_user.id
+    bot.application_flags = event.application_flags
 
     flags = event.application_flags
     # Discord sets different flags for verified vs unverified bots:
@@ -280,8 +293,8 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
     if INTENTS & hikari.Intents.GUILD_MEMBERS and not flags & _MEMBERS_FLAGS:
         logger.warning(
             "GUILD_MEMBERS intent is requested but NOT enabled in the "
-            "Discord Developer Portal. Lobby welcome messages and member "
-            "join events will silently fail. Enable it under: "
+            "Discord Developer Portal. Validation plugin member join/update "
+            "events will silently fail. Enable it under: "
             "Bot > Privileged Gateway Intents > Server Members Intent"
         )
 
@@ -338,6 +351,7 @@ _subday_sub = _config_group.subgroup("subday", "SubDay journal program settings"
 _birthday_sub = _config_group.subgroup("birthday", "Birthday tracking settings")
 _roles_sub = _config_group.subgroup("roles", "Role menu settings")
 _tickets_sub = _config_group.subgroup("tickets", "Help ticket settings")
+_validation_sub = _config_group.subgroup("validation", "Member validation settings")
 
 
 class BotLogging(
@@ -392,6 +406,7 @@ subday_config.register(_subday_sub)
 birthday_config.register(_birthday_sub)
 roles_config.register(_roles_sub)
 tickets_config.register(_tickets_sub)
+validation_config.register(_validation_sub)
 loader.command(_config_group)
 
 
@@ -461,7 +476,6 @@ async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None
 async def on_starting(_: hikari.StartingEvent) -> None:
     await loader.add_to_client(client)
     await client.load_extensions(
-        # "dragonpaw_bot.plugins.lobby",  # TODO: disabled pending redesign
         "dragonpaw_bot.plugins.role_menus",
         "dragonpaw_bot.plugins.subday",
         "dragonpaw_bot.plugins.birthdays",
@@ -469,6 +483,7 @@ async def on_starting(_: hikari.StartingEvent) -> None:
         "dragonpaw_bot.plugins.channel_cleanup",
         "dragonpaw_bot.plugins.intros",
         "dragonpaw_bot.plugins.tickets",
+        "dragonpaw_bot.plugins.validation",
     )
     await client.start()
 

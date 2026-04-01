@@ -5,7 +5,6 @@ import re
 from typing import TYPE_CHECKING
 
 import hikari
-import hikari.impl
 import lightbulb
 import structlog
 
@@ -157,78 +156,18 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         )
         return
 
-    # Build permission overwrites
-    everyone_id = interaction.guild_id  # @everyone role ID == guild ID
-    overwrites = [
-        hikari.PermissionOverwrite(
-            type=hikari.PermissionOverwriteType.ROLE,
-            id=everyone_id,
-            deny=hikari.Permissions.VIEW_CHANNEL,
-            allow=hikari.Permissions.NONE,
-        ),
-        hikari.PermissionOverwrite(
-            type=hikari.PermissionOverwriteType.MEMBER,
-            id=interaction.user.id,
-            allow=(
-                hikari.Permissions.VIEW_CHANNEL
-                | hikari.Permissions.SEND_MESSAGES
-                | hikari.Permissions.READ_MESSAGE_HISTORY
-            ),
-            deny=hikari.Permissions.NONE,
-        ),
-    ]
-    if bot.user_id:
-        overwrites.append(
-            hikari.PermissionOverwrite(
-                type=hikari.PermissionOverwriteType.MEMBER,
-                id=bot.user_id,
-                allow=(
-                    hikari.Permissions.VIEW_CHANNEL
-                    | hikari.Permissions.SEND_MESSAGES
-                    | hikari.Permissions.MANAGE_MESSAGES
-                ),
-                deny=hikari.Permissions.NONE,
-            )
-        )
-    if st.staff_role_id:
-        overwrites.append(
-            hikari.PermissionOverwrite(
-                type=hikari.PermissionOverwriteType.ROLE,
-                id=hikari.Snowflake(st.staff_role_id),
-                allow=(
-                    hikari.Permissions.VIEW_CHANNEL
-                    | hikari.Permissions.SEND_MESSAGES
-                    | hikari.Permissions.READ_MESSAGE_HISTORY
-                ),
-                deny=hikari.Permissions.NONE,
-            )
-        )
-
     channel_name = _sanitize_channel_name(interaction.member.display_name)
 
     try:
-        channel = await bot.rest.create_guild_text_channel(
-            guild=interaction.guild_id,
-            name=channel_name,
-            category=hikari.Snowflake(st.category_id)
-            if st.category_id
-            else hikari.UNDEFINED,
-            permission_overwrites=overwrites,
+        channel = await gc.create_private_channel(
+            channel_name,
+            user_ids=[interaction.user.id],
+            extra_roles=[st.staff_role_id] if st.staff_role_id else [],
+            category_id=st.category_id,
         )
-    except hikari.ForbiddenError:
-        gc.logger.exception("Cannot create ticket channel — missing permissions")
-        await gc.log(
-            "🤯 *snorts smoke* I tried to open a ticket channel but Discord still rejected it! "
-            "Please double-check my Manage Channels permission in the category. 🐉"
-        )
+    except hikari.HTTPError:
         await interaction.edit_initial_response(
             content="*sad smoke puff* I couldn't open a ticket channel — looks like I'm missing permissions. Please let staff know! 🐉"
-        )
-        return
-    except hikari.HTTPError:
-        gc.logger.exception("Failed to create ticket channel")
-        await interaction.edit_initial_response(
-            content="*sad smoke puff* Something went wrong opening your ticket. Please try again! 🐉"
         )
         return
 
@@ -311,7 +250,6 @@ async def handle_ticket_close_confirm(interaction: hikari.ComponentInteraction) 
     except ValueError:
         return
 
-    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
     gc = GuildContext.from_interaction(interaction)
     st = tickets_state.load(int(interaction.guild_id))
 
@@ -321,17 +259,7 @@ async def handle_ticket_close_confirm(interaction: hikari.ComponentInteraction) 
     st.open_tickets = [t for t in st.open_tickets if t.channel_id != channel_id]
     tickets_state.save(st)
 
-    try:
-        await bot.rest.delete_channel(channel_id)
-    except hikari.NotFoundError:
-        pass  # Channel already gone — that's fine
-    except hikari.ForbiddenError:
-        gc.logger.exception("Cannot delete ticket channel", channel_id=channel_id)
-        await gc.log(
-            f"🤯 I tried to close a ticket channel (<#{channel_id}>) but couldn't delete it — "
-            f"please check my Manage Channels permission! 🐉"
-        )
-        return
+    await gc.delete_channel(channel_id)
 
     gc.logger.info("Closed ticket", channel_id=channel_id)
     await gc.log(

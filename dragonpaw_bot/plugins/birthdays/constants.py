@@ -1,4 +1,3 @@
-
 # Component interaction custom IDs
 BIRTHDAY_CONFIG_PREFIX = "birthday_cfg:"
 BIRTHDAY_PREFIX = "birthday:"
