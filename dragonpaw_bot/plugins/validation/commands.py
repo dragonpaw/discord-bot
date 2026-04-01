@@ -424,7 +424,7 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
                     f"They're officially part of the hoard now~ 🐉\n\n"
                     f"**{name}**, welcome welcome welcome!! A few things to get you settled in:\n"
                     f"• Peek at {f'<#{st.about_channel_id}>' if st.about_channel_id else '#about'} to learn more about us 📖\n"
-                    f"• Head to {f'<#{st.roles_channel_id}>' if st.roles_channel_id else '#roles'} and grab some shiny ones ✨\n"
+                    f"• I'll see you over in {f'<#{st.roles_channel_id}>' if st.roles_channel_id else '#roles'} to help pick out your roles — grab some shiny ones! ✨\n"
                     f"• Tell us a little about yourself in {f'<#{st.intros_channel_id}>' if st.intros_channel_id else '#introductions'} 🐾\n"
                     f"• We host classes and have a SubDay Journal program — check out {f'<#{st.events_channel_id}>' if st.events_channel_id else '#classes-and-events'}! 📚\n"
                     f"• One tiny thing! I have a *very* hungry tummy for text in the media channels 🍽️ "
