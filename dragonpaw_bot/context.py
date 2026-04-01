@@ -261,6 +261,36 @@ class GuildContext:
             )
             raise
 
+    async def kick_member(
+        self, user_id: int | hikari.Snowflake, *, reason: str
+    ) -> None:
+        """Kick a member, logging the outcome to the guild log channel.
+
+        Handles NotFoundError (already left), ForbiddenError (missing permission),
+        and unexpected HTTPError gracefully — all cases are logged and swallowed.
+        """
+        try:
+            await self.bot.rest.kick_user(
+                self.guild_id, hikari.Snowflake(user_id), reason=reason
+            )
+            await self.log(f"👢 *wry tail flick* Kicked <@{user_id}> — {reason} 🐉")
+            self.logger.info("Kicked member", user_id=user_id, reason=reason)
+        except hikari.NotFoundError:
+            await self.log(f"👻 Tried to kick <@{user_id}> but they'd already left! 🐉")
+            self.logger.info("Member already left before kick", user_id=user_id)
+        except hikari.ForbiddenError:
+            await self.log(
+                f"⚠️ Couldn't kick <@{user_id}> — please check my **Kick Members** permission! 🐉"
+            )
+            self.logger.warning(
+                "Cannot kick member — missing permission", user_id=user_id
+            )
+        except hikari.HTTPError:
+            await self.log(
+                f"⚠️ Something went wrong trying to kick <@{user_id}> — check the logs! 🐉"
+            )
+            self.logger.exception("Failed to kick member", user_id=user_id)
+
     async def delete_channel(self, channel_id: int | hikari.Snowflake) -> None:
         """Delete a channel, logging all errors gracefully."""
         try:

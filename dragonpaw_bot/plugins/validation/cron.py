@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import hikari
 import lightbulb
@@ -19,8 +19,11 @@ logger = structlog.get_logger(__name__)
 
 
 @loader.task(lightbulb.crontrigger("0 * * * *"))  # every hour
-async def validation_reminder_cron(bot: DragonpawBot = lightbulb.di.INJECTED) -> None:  # noqa: PLR0912
+async def validation_reminder_cron(
+    bot: hikari.GatewayBot = lightbulb.di.INJECTED,
+) -> None:
     """Ping unvalidated members in the lobby channel every 24h; kick after max_reminders."""
+    bot = cast("DragonpawBot", bot)
     now = datetime.now(UTC)
     guilds = list(bot.cache.get_guilds_view().values())
 
@@ -44,50 +47,10 @@ async def validation_reminder_cron(bot: DragonpawBot = lightbulb.di.INJECTED) ->
                     continue
 
                 if member.reminder_count >= st.max_reminders:
-                    # Kick time
-                    try:
-                        await bot.rest.kick_user(
-                            guild.id,
-                            hikari.Snowflake(member.user_id),
-                            reason="Did not validate in time",
-                        )
-                        await gc.log(
-                            f"👢 *wry tail flick* Kicked <@{member.user_id}> after "
-                            f"{member.reminder_count} reminder(s) with no response 🐉"
-                        )
-                        logger.info(
-                            "Kicked unvalidated member",
-                            user_id=member.user_id,
-                            guild=guild.name,
-                        )
-                    except hikari.NotFoundError:
-                        await gc.log(
-                            f"👻 Tried to kick <@{member.user_id}> after "
-                            f"{member.reminder_count} reminder(s), but they'd already left! 🐉"
-                        )
-                        logger.info(
-                            "Unvalidated member already left",
-                            user_id=member.user_id,
-                            guild=guild.name,
-                        )
-                    except hikari.ForbiddenError:
-                        await gc.log(
-                            f"⚠️ Couldn't kick <@{member.user_id}> — please check my **Kick Members** permission! 🐉"
-                        )
-                        logger.warning(
-                            "Cannot kick member — missing permission",
-                            user_id=member.user_id,
-                            guild=guild.name,
-                        )
-                    except hikari.HTTPError:
-                        await gc.log(
-                            f"⚠️ Something went wrong trying to kick <@{member.user_id}> — check the logs! 🐉"
-                        )
-                        logger.exception(
-                            "Failed to kick unvalidated member",
-                            user_id=member.user_id,
-                            guild=guild.name,
-                        )
+                    await gc.kick_member(
+                        member.user_id,
+                        reason=f"Did not validate after {member.reminder_count} reminder(s)",
+                    )
                     to_remove.append(member.user_id)
                 else:
                     try:
