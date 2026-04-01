@@ -208,6 +208,9 @@ def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
     if data.get("log_channel_id") is not None:
         data["log_channel_id"] = hikari.Snowflake(data["log_channel_id"])
 
+    if data.get("general_channel_id") is not None:
+        data["general_channel_id"] = hikari.Snowflake(data["general_channel_id"])
+
     # Strip legacy lobby fields
     for field in (
         "lobby_role_id",

@@ -44,3 +44,26 @@ def test_guild_state_missing_required_fields():
 
     with pytest.raises(pydantic.ValidationError):
         GuildState.model_validate({"name": "Test Guild"})
+
+
+def test_guild_state_general_channel_id_defaults_to_none():
+    state = GuildState(
+        id=hikari.Snowflake(123456789),
+        name="Test Guild",
+        config_url="https://example.com/config.toml",
+        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0),
+    )
+    assert state.general_channel_id is None
+
+
+def test_guild_state_general_channel_id_round_trip():
+    state = GuildState(
+        id=hikari.Snowflake(123456789),
+        name="Test Guild",
+        config_url="https://example.com/config.toml",
+        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0),
+        general_channel_id=hikari.Snowflake(888),
+    )
+    dumped = state.model_dump()
+    restored = GuildState.model_validate(dumped)
+    assert restored.general_channel_id == hikari.Snowflake(888)

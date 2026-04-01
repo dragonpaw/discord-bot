@@ -17,3 +17,4 @@ class GuildState(pydantic.BaseModel):
     config_last: datetime.datetime
 
     log_channel_id: hikari.Snowflake | None = None
+    general_channel_id: hikari.Snowflake | None = None

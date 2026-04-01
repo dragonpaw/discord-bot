@@ -204,6 +204,26 @@ def test_parse_role_config_dragonpaw_gist():
     assert len(pings.options) == 9
 
 
+def test_yaml_dict_round_trip_general_channel_id(state_dir):
+    import yaml
+
+    raw = {
+        "id": 99,
+        "name": "Test Guild",
+        "config_url": "https://example.com/config.toml",
+        "config_last": "2025-06-01T00:00:00",
+        "log_channel_id": None,
+        "general_channel_id": 555,
+    }
+    yaml_file = state_dir / "99.yaml"
+    with open(yaml_file, "w") as f:
+        yaml.dump(raw, f)
+
+    loaded = state_load_yaml(hikari.Snowflake(99))
+    assert loaded is not None
+    assert loaded.general_channel_id == hikari.Snowflake(555)
+
+
 async def test_bot_startup_loads_extensions():
     """Verify the bot loader and all extensions load without errors.
 
