@@ -94,6 +94,8 @@ INTENTS = (
     | hikari.Intents.GUILDS
     | hikari.Intents.GUILD_MEMBERS
     | hikari.Intents.GUILD_EMOJIS
+    | hikari.Intents.GUILD_MESSAGE_REACTIONS
+    | hikari.Intents.GUILD_VOICE_STATES
     | hikari.Intents.DM_MESSAGES
 )
 
