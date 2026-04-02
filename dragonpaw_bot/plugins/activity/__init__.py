@@ -63,6 +63,13 @@ def _add_contribution(
 @loader.listener(hikari.GuildMessageCreateEvent)
 async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
     """Track text and media post contributions."""
+    try:
+        await _handle_message(event)
+    except Exception:
+        logger.exception("Error in activity on_message", guild_id=int(event.guild_id))
+
+
+async def _handle_message(event: hikari.GuildMessageCreateEvent) -> None:
     if event.message.author.is_bot:
         return
 
@@ -74,6 +81,13 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
         try:
             member = await bot.rest.fetch_member(event.guild_id, event.author_id)
         except hikari.NotFoundError:
+            return
+        except hikari.HTTPError:
+            logger.warning(
+                "Failed to fetch member for activity tracking",
+                guild_id=int(event.guild_id),
+                user_id=int(event.author_id),
+            )
             return
 
     role_ids = [int(r) for r in member.role_ids]
@@ -106,6 +120,13 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
 @loader.listener(hikari.GuildReactionAddEvent)
 async def on_reaction(event: hikari.GuildReactionAddEvent) -> None:
     """Track reaction contributions."""
+    try:
+        await _handle_reaction(event)
+    except Exception:
+        logger.exception("Error in activity on_reaction", guild_id=int(event.guild_id))
+
+
+async def _handle_reaction(event: hikari.GuildReactionAddEvent) -> None:
     bot: DragonpawBot = event.app  # type: ignore[assignment]
     st = activity_state.load(int(event.guild_id))
 
@@ -114,6 +135,13 @@ async def on_reaction(event: hikari.GuildReactionAddEvent) -> None:
         try:
             member = await bot.rest.fetch_member(event.guild_id, event.user_id)
         except hikari.NotFoundError:
+            return
+        except hikari.HTTPError:
+            logger.warning(
+                "Failed to fetch member for activity tracking",
+                guild_id=int(event.guild_id),
+                user_id=int(event.user_id),
+            )
             return
 
     if member.is_bot:
@@ -140,8 +168,19 @@ async def on_reaction(event: hikari.GuildReactionAddEvent) -> None:
 @loader.listener(hikari.VoiceStateUpdateEvent)
 async def on_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> None:
     """Track voice channel time contributions."""
+    if event.guild_id is None:
+        return
+    try:
+        await _handle_voice_state_update(event)
+    except Exception:
+        logger.exception(
+            "Error in activity on_voice_state_update", guild_id=int(event.guild_id)
+        )
+
+
+async def _handle_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> None:
     bot: DragonpawBot = event.app  # type: ignore[assignment]
-    guild_id = int(event.guild_id)
+    guild_id = int(event.guild_id)  # type: ignore[arg-type]
     user_id = int(event.state.user_id)
 
     old_channel = event.old_state.channel_id if event.old_state else None
@@ -161,6 +200,13 @@ async def on_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> None:
                             event.guild_id, event.state.user_id
                         )
                     except hikari.NotFoundError:
+                        member = None
+                    except hikari.HTTPError:
+                        logger.warning(
+                            "Failed to fetch member for VC activity",
+                            guild_id=guild_id,
+                            user_id=user_id,
+                        )
                         member = None
 
                 if member and not member.is_bot:

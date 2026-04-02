@@ -85,7 +85,7 @@ class ActivityScore(
             ),
             color=SOLARIZED_CYAN,
         )
-        await ctx.edit_response(response_id, embed=embed)
+        await ctx.edit_response(response_id, content="", embed=embed)
         logger.info(
             "Activity score checked",
             guild=st.guild_name,
@@ -126,10 +126,20 @@ class ActivityLeaderboard(
             )
             return
 
-        # Build member map from cache
+        # Build member map from REST
         member_map: dict[int, hikari.Member] = {}
-        async for member in bot.rest.fetch_members(ctx.guild_id):
-            member_map[int(member.id)] = member
+        try:
+            async for member in bot.rest.fetch_members(ctx.guild_id):
+                member_map[int(member.id)] = member
+        except hikari.HTTPError:
+            logger.warning(
+                "Failed to fetch members for leaderboard", guild=st.guild_name
+            )
+            await ctx.edit_response(
+                response_id,
+                content="🐉 Couldn't fetch member list right now — try again in a moment! 🐾",
+            )
+            return
 
         now = time.time()
         scored: list[tuple[float, hikari.Member]] = []
@@ -167,7 +177,7 @@ class ActivityLeaderboard(
             description="\n".join(lines),
             color=SOLARIZED_CYAN,
         )
-        await ctx.edit_response(response_id, embed=embed)
+        await ctx.edit_response(response_id, content="", embed=embed)
         logger.info(
             "Activity leaderboard viewed",
             guild=st.guild_name,

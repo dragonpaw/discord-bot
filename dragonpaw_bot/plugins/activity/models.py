@@ -93,7 +93,9 @@ def calculate_score(
     score = 0.0
     for kind, kind_buckets in by_kind.items():
         base_value = CONTRIBUTION_VALUES.get(kind, 1.0)
-        kind_buckets.sort(key=lambda b: b.hour)  # oldest first → lower log_weight
+        kind_buckets.sort(
+            key=lambda b: b.hour, reverse=True
+        )  # newest first → highest log_weight
         for idx, bucket in enumerate(kind_buckets):
             log_weight = 1.0 / math.log(idx + 2)
             base_pts = base_value * bucket.amount * log_weight * contrib_mult

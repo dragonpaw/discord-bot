@@ -46,14 +46,22 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     st = activity_state.load(int(guild.id))
     now = time.time()
 
-    member_ids: set[int] = set()
-    async for member in bot.rest.fetch_members(guild.id):
-        member_ids.add(int(member.id))
+    # Fetch members once for both prune and lurker sync
+    members: dict[int, hikari.Member] = {}
+    try:
+        async for member in bot.rest.fetch_members(guild.id):
+            members[int(member.id)] = member
+    except hikari.HTTPError:
+        logger.warning("Failed to fetch members for activity cron", guild=guild.name)
+        await gc.log(
+            "⚠️ Couldn't fetch the member list for today's activity update — will try again tomorrow! 🐾"
+        )
+        return
 
-    _prune_state(st, member_ids, now)
+    _prune_state(st, set(members.keys()), now)
 
     if st.config.lurker_role_id:
-        await _sync_lurker_role(bot, gc, st, now)
+        await _sync_lurker_role(bot, gc, st, members, now)
 
 
 def _prune_state(st: ActivityGuildState, member_ids: set[int], now: float) -> None:
@@ -86,6 +94,7 @@ async def _sync_lurker_role(
     bot: DragonpawBot,
     gc: GuildContext,
     st: ActivityGuildState,
+    members: dict[int, hikari.Member],
     now: float,
 ) -> None:
     lurker_role_id = st.config.lurker_role_id
@@ -94,7 +103,7 @@ async def _sync_lurker_role(
     added: list[str] = []
     removed: list[str] = []
 
-    async for member in bot.rest.fetch_members(gc.guild_id):
+    for member in members.values():
         if member.is_bot:
             continue
         role_ids = [int(r) for r in member.role_ids]
@@ -109,44 +118,30 @@ async def _sync_lurker_role(
         should_be_lurker = score < ACTIVITY_FLOOR
         has_lurker = lurker_role_id in role_ids
 
-        if should_be_lurker and not has_lurker:
-            try:
-                await bot.rest.add_role_to_member(
-                    gc.guild_id, member.id, lurker_role_id
-                )
-                added.append(member.display_name)
-                logger.info(
-                    "Lurker role added",
-                    guild=gc.name,
-                    user=member.display_name,
-                    score=score,
-                )
-            except hikari.ForbiddenError:
-                logger.warning(
-                    "Cannot add lurker role", guild=gc.name, user=member.display_name
-                )
-                await gc.log(
-                    f"⚠️ I can't assign the lurker role to {member.mention} — please check my role hierarchy! 🐉"
-                )
-        elif not should_be_lurker and has_lurker:
-            try:
-                await bot.rest.remove_role_from_member(
-                    gc.guild_id, member.id, lurker_role_id
-                )
-                removed.append(member.display_name)
-                logger.info(
-                    "Lurker role removed",
-                    guild=gc.name,
-                    user=member.display_name,
-                    score=score,
-                )
-            except hikari.ForbiddenError:
-                logger.warning(
-                    "Cannot remove lurker role", guild=gc.name, user=member.display_name
-                )
-                await gc.log(
-                    f"⚠️ I can't remove the lurker role from {member.mention} — please check my role hierarchy! 🐉"
-                )
+        if (
+            should_be_lurker
+            and not has_lurker
+            and await _set_lurker(bot, gc, member, lurker_role_id, add=True)
+        ):
+            added.append(member.display_name)
+            logger.info(
+                "Lurker role added",
+                guild=gc.name,
+                user=member.display_name,
+                score=score,
+            )
+        elif (
+            not should_be_lurker
+            and has_lurker
+            and await _set_lurker(bot, gc, member, lurker_role_id, add=False)
+        ):
+            removed.append(member.display_name)
+            logger.info(
+                "Lurker role removed",
+                guild=gc.name,
+                user=member.display_name,
+                score=score,
+            )
 
     if added or removed:
         parts: list[str] = []
@@ -155,3 +150,41 @@ async def _sync_lurker_role(
         if removed:
             parts.append(f"removed from **{len(removed)}**: {', '.join(removed)}")
         await gc.log(f"💤 Lurker role sync — {'; '.join(parts)} 🐉")
+
+
+async def _set_lurker(
+    bot: DragonpawBot,
+    gc: GuildContext,
+    member: hikari.Member,
+    lurker_role_id: int,
+    *,
+    add: bool,
+) -> bool:
+    """Add or remove the lurker role. Returns True on success, False on failure."""
+    action = "assign" if add else "remove"
+    preposition = "to" if add else "from"
+    try:
+        if add:
+            await bot.rest.add_role_to_member(gc.guild_id, member.id, lurker_role_id)
+        else:
+            await bot.rest.remove_role_from_member(
+                gc.guild_id, member.id, lurker_role_id
+            )
+    except hikari.NotFoundError:
+        return False  # Member left between fetch and assignment
+    except hikari.ForbiddenError:
+        logger.warning(
+            f"Cannot {action} lurker role", guild=gc.name, user=member.display_name
+        )
+        await gc.log(
+            f"⚠️ I can't {action} the lurker role {preposition} {member.mention} — please check my role hierarchy! 🐉"
+        )
+        return False
+    except hikari.HTTPError:
+        logger.warning(
+            f"HTTP error on lurker role {action}",
+            guild=gc.name,
+            user=member.display_name,
+        )
+        return False
+    return True
