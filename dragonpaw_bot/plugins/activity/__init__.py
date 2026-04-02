@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import time
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import hikari
 import lightbulb
@@ -248,18 +248,6 @@ async def _handle_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> Non
     # Join (or switch to new channel): start tracking
     if new_channel is not None:
         _vc_sessions.setdefault(guild_id, {})[user_id] = time.time()
-
-
-@loader.task(lightbulb.crontrigger("20 * * * *"))
-async def activity_flush(bot: hikari.GatewayBot) -> None:
-    """Hourly task: flush dirty in-memory state to disk."""
-    bot = cast("DragonpawBot", bot)
-    for guild_id in list(_dirty_guilds):
-        st = activity_state._cache.get(guild_id)
-        if st is not None:
-            activity_state.save(st)
-            logger.debug("Activity state flushed", guild=st.guild_name)
-        _dirty_guilds.discard(guild_id)
 
 
 from dragonpaw_bot.plugins.activity import commands as _commands  # noqa: E402

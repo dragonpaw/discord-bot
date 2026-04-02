@@ -10,7 +10,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.context import GuildContext
-from dragonpaw_bot.plugins.activity import loader
+from dragonpaw_bot.plugins.activity import _dirty_guilds, loader
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
@@ -25,6 +25,18 @@ if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
+
+
+@loader.task(lightbulb.crontrigger("20 * * * *"))
+async def activity_flush(bot: hikari.GatewayBot) -> None:
+    """Hourly task: flush dirty in-memory state to disk."""
+    bot = cast("DragonpawBot", bot)
+    for guild_id in list(_dirty_guilds):
+        st = activity_state._cache.get(guild_id)
+        if st is not None:
+            activity_state.save(st)
+            logger.debug("Activity state flushed", guild=st.guild_name)
+        _dirty_guilds.discard(guild_id)
 
 
 @loader.task(lightbulb.crontrigger("15 4 * * *"))
