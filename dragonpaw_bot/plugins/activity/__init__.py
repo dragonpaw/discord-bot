@@ -248,11 +248,3 @@ async def _handle_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> Non
     # Join (or switch to new channel): start tracking
     if new_channel is not None:
         _vc_sessions.setdefault(guild_id, {})[user_id] = time.time()
-
-
-from dragonpaw_bot.plugins.activity import commands as _commands  # noqa: E402
-from dragonpaw_bot.plugins.activity import cron as _cron  # noqa: E402, F401
-
-_activity_group = lightbulb.Group("activity", "Activity tracker commands")
-_commands.register(_activity_group)
-loader.command(_activity_group)

@@ -9,7 +9,7 @@ import structlog
 
 from dragonpaw_bot import utils
 from dragonpaw_bot.context import GuildContext, check_role_manageable
-from dragonpaw_bot.plugins.birthdays import commands, loader, state
+from dragonpaw_bot.plugins.birthdays import commands, state
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     )
 
 logger = structlog.get_logger(__name__)
+loader = lightbulb.Loader()
 
 
 async def announce_birthday(

@@ -10,7 +10,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.context import GuildContext
-from dragonpaw_bot.plugins.activity import _dirty_guilds, loader
+from dragonpaw_bot.plugins.activity import _dirty_guilds
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
+loader = lightbulb.Loader()
 
 
 @loader.task(lightbulb.crontrigger("20 * * * *"))

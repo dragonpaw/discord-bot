@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
+loader = lightbulb.Loader()
+
+subday_group = lightbulb.Group("subday", "Where I am Led — 52-week guided journal")
 
 
 # ---------------------------------------------------------------------------- #
@@ -439,17 +442,6 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
 # ---------------------------------------------------------------------------- #
 #                                   Commands                                   #
 # ---------------------------------------------------------------------------- #
-
-
-def register(subday_group: lightbulb.Group) -> None:
-    """Register all subcommands on the given command group."""
-    subday_group.register(SubDayAbout)
-    subday_group.register(SubDayStatus)
-    subday_group.register(SubDayOwner)
-    subday_group.register(SubDaySignup)
-    subday_group.register(SubDayComplete)
-    subday_group.register(SubDayList)
-    subday_group.register(SubDayRemove)
 
 
 class SubDayAbout(
@@ -1447,3 +1439,24 @@ class SubDayRemove(
         await gc.log(
             f"🗑️ {ctx.member.mention} removed {target.mention} from **Where I am Led** 🐾",
         )
+
+
+@subday_group.register
+class SubDayHelp(
+    lightbulb.SlashCommand,
+    name="help",
+    description="Show available SubDay commands",
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        await help_handler(ctx)
+
+
+subday_group.register(SubDayAbout)
+subday_group.register(SubDayStatus)
+subday_group.register(SubDayOwner)
+subday_group.register(SubDaySignup)
+subday_group.register(SubDayComplete)
+subday_group.register(SubDayList)
+subday_group.register(SubDayRemove)
+loader.command(subday_group)

@@ -555,14 +555,23 @@ async def on_starting(_: hikari.StartingEvent) -> None:
     await loader.add_to_client(client)
     await client.load_extensions(
         "dragonpaw_bot.plugins.role_menus",
-        "dragonpaw_bot.plugins.subday",
+        "dragonpaw_bot.plugins.subday.commands",
+        "dragonpaw_bot.plugins.subday.cron",
         "dragonpaw_bot.plugins.birthdays",
+        "dragonpaw_bot.plugins.birthdays.commands",
+        "dragonpaw_bot.plugins.birthdays.cron",
         "dragonpaw_bot.plugins.media_channels",
+        "dragonpaw_bot.plugins.media_channels.cron",
         "dragonpaw_bot.plugins.channel_cleanup",
-        "dragonpaw_bot.plugins.intros",
+        "dragonpaw_bot.plugins.channel_cleanup.cron",
+        "dragonpaw_bot.plugins.intros.commands",
+        "dragonpaw_bot.plugins.intros.cron",
         "dragonpaw_bot.plugins.tickets",
-        "dragonpaw_bot.plugins.validation",
+        "dragonpaw_bot.plugins.validation.commands",
+        "dragonpaw_bot.plugins.validation.cron",
         "dragonpaw_bot.plugins.activity",
+        "dragonpaw_bot.plugins.activity.commands",
+        "dragonpaw_bot.plugins.activity.cron",
     )
     await client.start()
 

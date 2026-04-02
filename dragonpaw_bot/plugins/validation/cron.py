@@ -9,13 +9,13 @@ import structlog
 
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.validation import state as validation_state
-from dragonpaw_bot.plugins.validation.commands import loader
 from dragonpaw_bot.plugins.validation.models import ValidationStage
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
+loader = lightbulb.Loader()
 
 
 @loader.task(lightbulb.crontrigger("15 * * * *"))  # every hour

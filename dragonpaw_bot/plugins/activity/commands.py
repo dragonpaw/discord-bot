@@ -22,14 +22,12 @@ if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
+loader = lightbulb.Loader()
 
 _DEFAULT_LEADERBOARD_COUNT = 10
 _MAX_LEADERBOARD_COUNT = 25
 
-
-def register(activity_group: lightbulb.Group) -> None:
-    activity_group.register(ActivityScore)
-    activity_group.register(ActivityLeaderboard)
+_activity_group = lightbulb.Group("activity", "Activity tracker commands")
 
 
 class ActivityScore(
@@ -183,3 +181,8 @@ class ActivityLeaderboard(
             guild=st.guild_name,
             count=len(top),
         )
+
+
+_activity_group.register(ActivityScore)
+_activity_group.register(ActivityLeaderboard)
+loader.command(_activity_group)

@@ -7,9 +7,6 @@ from dragonpaw_bot.plugins.validation.commands import (
     handle_approve_modal,
     handle_rules_agreed,
 )
-from dragonpaw_bot.plugins.validation.commands import (
-    loader as loader,
-)
 
 if TYPE_CHECKING:
     from dragonpaw_bot.utils import InteractionHandler, ModalHandler
@@ -22,5 +19,3 @@ INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
 MODAL_HANDLERS: dict[str, ModalHandler] = {
     "validation_approve_modal:": handle_approve_modal,  # prefix match — carries channel_id
 }
-
-from dragonpaw_bot.plugins.validation import cron as _cron  # noqa: E402, F401

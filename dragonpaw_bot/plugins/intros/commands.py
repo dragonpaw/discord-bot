@@ -10,10 +10,9 @@ from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.intros import state as intros_state
 
 logger = structlog.get_logger(__name__)
+loader = lightbulb.Loader()
 
-
-def register(intros_group: lightbulb.Group) -> None:
-    intros_group.register(IntrosMissing)
+_intros_group = lightbulb.Group("intros", "Introductions channel tools")
 
 
 class IntrosMissing(
@@ -88,3 +87,7 @@ class IntrosMissing(
             f"👀 {ctx.user.mention} asked who's been shy — "
             f"**{len(missing_members)}** member(s) still haven't introduced themselves in <#{st.channel_id}>!",
         )
+
+
+_intros_group.register(IntrosMissing)
+loader.command(_intros_group)

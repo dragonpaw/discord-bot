@@ -24,6 +24,9 @@ if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
+loader = lightbulb.Loader()
+
+_birthday_group = lightbulb.Group("birthday", "Birthday tracking and announcements")
 
 _FEB = 2
 _LEAP_DAY = 29
@@ -172,16 +175,6 @@ def user_local_date_offset(entry: BirthdayEntry, *, days: int) -> datetime.date:
 # ---------------------------------------------------------------------------- #
 #                                  Commands                                    #
 # ---------------------------------------------------------------------------- #
-
-
-def register(birthday_group: lightbulb.Group) -> None:
-    """Register all subcommands on the given command group."""
-    birthday_group.register(BirthdayStatus)
-    birthday_group.register(BirthdaySet)
-    birthday_group.register(BirthdayWishlist)
-    birthday_group.register(BirthdayRemove)
-    birthday_group.register(BirthdayRemoveFor)
-    birthday_group.register(BirthdayList)
 
 
 class BirthdayStatus(
@@ -884,3 +877,12 @@ def build_announcement_embed(
             color=SOLARIZED_MAGENTA,
         )
     return embed
+
+
+_birthday_group.register(BirthdayStatus)
+_birthday_group.register(BirthdaySet)
+_birthday_group.register(BirthdayWishlist)
+_birthday_group.register(BirthdayRemove)
+_birthday_group.register(BirthdayRemoveFor)
+_birthday_group.register(BirthdayList)
+loader.command(_birthday_group)

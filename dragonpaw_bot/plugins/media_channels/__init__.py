@@ -126,6 +126,3 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
     await gc.log(
         f"🐉 Nommed text-only post by {msg.author.mention} in <#{event.channel_id}>",
     )
-
-
-from dragonpaw_bot.plugins.media_channels import cron as _cron  # noqa: E402, F401

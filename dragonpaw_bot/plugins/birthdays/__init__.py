@@ -33,11 +33,6 @@ MODAL_HANDLERS: dict[str, ModalHandler] = {
 
 loader = lightbulb.Loader()
 
-birthday_group = lightbulb.Group("birthday", "Birthday tracking and announcements")
-
-commands.register(birthday_group)
-loader.command(birthday_group)
-
 
 # ---------------------------------------------------------------------------- #
 #                            Member leave cleanup                              #
@@ -95,6 +90,3 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
     await gc.log(
         f"🎂 Removed birthday entry for <@{uid}> who left the server — I'll miss celebrating them! 🐾"
     )
-
-
-from dragonpaw_bot.plugins.birthdays import cron as _cron  # noqa: E402, F401

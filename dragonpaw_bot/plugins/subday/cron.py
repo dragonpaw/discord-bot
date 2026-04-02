@@ -8,7 +8,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.context import GuildContext
-from dragonpaw_bot.plugins.subday import loader, prompts, state
+from dragonpaw_bot.plugins.subday import prompts, state
 from dragonpaw_bot.plugins.subday.constants import (
     TOTAL_WEEKS,
 )
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from dragonpaw_bot.plugins.subday.models import SubDayParticipant
 
 logger = structlog.get_logger(__name__)
+loader = lightbulb.Loader()
 
 
 # ---------------------------------------------------------------------------- #
