@@ -53,8 +53,8 @@ All require guild owner.
 
 Both require `MANAGE_GUILD`.
 
-- **`score [user]`** — Show activity score for a member (defaults to self). Responds ephemerally with score, status (active/lurking), bucket count, and role info.
-- **`leaderboard [count]`** — Show top N members by score (default 10, max 25). Skips bots and ignored-role members.
+- **`score [user]`** — Show activity score for a member (defaults to self). Responds ephemerally with score, status (🐉 Active / 💤 Lurking / 🛡️ Immune), bucket count, and role info.
+- **`report`** — Show all non-bot members sorted alphabetically by display name. Each member gets an emoji badge: 🥇🥈🥉 for top 3 by score, 🐉 active, 💤 lurker, 🛡️ immune (ignored role). Members with no activity data appear with score 0.00 (lurker).
 
 ### Cron Task
 
@@ -77,13 +77,13 @@ Persisted as `state/activity_{guild_id}.yaml`.
 - **`listeners.py`** — Event listeners for message, reaction, and voice tracking; module-level `_dirty_guilds` and `_vc_sessions` state
 - **`models.py`** — Pydantic models, `calculate_score()`, `best_role_config()`, `has_ignored_role()`
 - **`state.py`** — YAML state persistence (load/save with in-memory cache)
-- **`commands.py`** — `/activity score` and `/activity leaderboard`
+- **`commands.py`** — `/activity score` and `/activity report`
 - **`config.py`** — `/config activity` subcommands
 - **`cron.py`** — Daily prune + lurker sync task
 
 ### Logging
 
-- **Info:** Score checks, leaderboard views, config changes, lurker role add/remove
+- **Info:** Score checks, report views, config changes, lurker role add/remove
 - **Debug:** Per-contribution saves with raw_points, state loads, cron ticks
 - **Warning:** Permission failures (lurker role assignment)
 

@@ -45,7 +45,7 @@ target-version = "py313"
 
 [tool.ruff.lint]
 extend-select = ["I", "PL", "UP", "SIM", "PERF", "RUF", "TRY", "DTZ", "TC"]
-ignore = ["RUF001", "RUF002", "TRY003"]
+ignore = ["RUF001", "RUF002", "TRY003", "SIM108"]
 
 [tool.ruff.lint.per-file-ignores]
 "dragonpaw_bot/plugins/subday/chart.py" = ["PLR0913"]
