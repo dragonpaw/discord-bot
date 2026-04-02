@@ -312,8 +312,19 @@ async def on_ready(event: hikari.ShardReadyEvent) -> None:
         )
 
 
+_BLOCKED_GUILDS = {915486296883990528}
+
+
 @bot.listen(hikari.GuildAvailableEvent)
 async def on_guild_available(event: hikari.GuildAvailableEvent):
+    if int(event.guild_id) in _BLOCKED_GUILDS:
+        logger.warning(
+            "In blocked guild, leaving",
+            guild=event.guild.name,
+            guild_id=event.guild_id,
+        )
+        await bot.rest.leave_guild(event.guild_id)
+        return
     state = bot.state(guild_id=event.guild_id)
     if state:
         logger.info("State loaded from disk, resuming services", guild=state.name)
@@ -321,9 +332,6 @@ async def on_guild_available(event: hikari.GuildAvailableEvent):
         guild = event.get_guild()
         name = (guild and guild.name) or str(event.guild_id)
         logger.info("No state found, nothing to do", guild=name)
-
-
-_BLOCKED_GUILDS = {915486296883990528}
 
 
 @bot.listen(hikari.GuildJoinEvent)
