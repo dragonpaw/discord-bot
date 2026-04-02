@@ -32,6 +32,7 @@ def register(activity_sub: lightbulb.SubGroup) -> None:
     activity_sub.register(ActivityChannelAdd)
     activity_sub.register(ActivityChannelRemove)
     activity_sub.register(ActivityLurker)
+    activity_sub.register(ActivityViewer)
     activity_sub.register(ActivityStatus)
 
 
@@ -286,6 +287,50 @@ class ActivityLurker(
         )
 
 
+class ActivityViewer(
+    lightbulb.SlashCommand,
+    name="viewer",
+    description="Set (or clear) the role required to use /activity commands",
+    hooks=[guild_owner_only],
+):
+    role = lightbulb.role("role", "The viewer role (omit to clear)", default=None)
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        assert ctx.guild_id
+        gc = GuildContext.from_ctx(ctx)
+
+        st = activity_state.load(int(ctx.guild_id))
+        st.guild_name = gc.name
+
+        if self.role is None:
+            st.config.viewer_role_id = None
+            st.config.viewer_role_name = ""
+            activity_state.save(st)
+            await ctx.respond(
+                "🐉 Viewer role cleared — only Manage Server can use /activity commands now 🐾",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            gc.logger.info("Activity viewer role cleared")
+            await gc.log(
+                f"📊 {ctx.user.mention} cleared the activity viewer role — admin-only access now 🐾"
+            )
+            return
+
+        st.config.viewer_role_id = int(self.role.id)
+        st.config.viewer_role_name = self.role.name
+        activity_state.save(st)
+
+        await ctx.respond(
+            f"🐉 Viewer role set to **{self.role.name}** — members with this role can use /activity commands 🐾",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        gc.logger.info("Activity viewer role set", role=self.role.name)
+        await gc.log(
+            f"📊 {ctx.user.mention} set the activity viewer role to **{self.role.name}** 🐉"
+        )
+
+
 class ActivityStatus(
     lightbulb.SlashCommand,
     name="status",
@@ -322,7 +367,14 @@ class ActivityStatus(
         else:
             channels_text = "_None configured_"
 
-        lurker_text = f"<@&{cfg.lurker_role_id}>" if cfg.lurker_role_id else "_Not set_"
+        if cfg.lurker_role_id:
+            lurker_text = f"<@&{cfg.lurker_role_id}>"
+        else:
+            lurker_text = "_Not set_"
+        if cfg.viewer_role_id:
+            viewer_text = f"<@&{cfg.viewer_role_id}>"
+        else:
+            viewer_text = "_Manage Server only_"
 
         embed = hikari.Embed(
             title="📊 Activity Tracker Configuration",
@@ -331,6 +383,7 @@ class ActivityStatus(
         embed.add_field(name="Roles", value=roles_text, inline=False)
         embed.add_field(name="Channel Multipliers", value=channels_text, inline=False)
         embed.add_field(name="Lurker Role", value=lurker_text, inline=False)
+        embed.add_field(name="Viewer Role", value=viewer_text, inline=False)
         embed.add_field(
             name="Tracked Members",
             value=str(len(st.users)),

@@ -51,6 +51,8 @@ class ActivityGuildConfig(pydantic.BaseModel):
     channel_configs: list[ChannelConfig] = []
     lurker_role_id: int | None = None
     lurker_role_name: str = ""
+    viewer_role_id: int | None = None
+    viewer_role_name: str = ""
 
 
 class ActivityGuildState(pydantic.BaseModel):

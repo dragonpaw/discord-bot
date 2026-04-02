@@ -725,6 +725,14 @@ class NotConfigAdmin(Exception):
     """Raised when a user without MANAGE_GUILD invokes a config command."""
 
 
+class NotActivityViewer(Exception):
+    """Raised when a user without the viewer role invokes an activity view command."""
+
+    def __init__(self, role_name: str = "") -> None:
+        self.role_name = role_name
+        super().__init__()
+
+
 @lightbulb.hook(
     lightbulb.ExecutionSteps.CHECKS, skip_when_failed=True, name="config_admin_only"
 )

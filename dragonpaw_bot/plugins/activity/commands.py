@@ -10,6 +10,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.colors import SOLARIZED_CYAN
+from dragonpaw_bot.context import NotActivityViewer
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
@@ -29,6 +30,26 @@ _EMBED_DESCRIPTION_LIMIT = 4096
 _TRUNCATION_NOTE = "\n*(list truncated — too many members to display)*"
 
 _activity_group = lightbulb.Group("activity", "Activity tracker commands")
+
+
+@lightbulb.hook(
+    lightbulb.ExecutionSteps.CHECKS, skip_when_failed=True, name="activity_viewer_only"
+)
+def activity_viewer_only(
+    _: lightbulb.ExecutionPipeline, ctx: lightbulb.Context
+) -> None:
+    """Hook: allows guild admins and members with the configured activity viewer role."""
+    if ctx.guild_id is None or ctx.member is None:
+        raise NotActivityViewer()
+    if ctx.member.permissions & (
+        hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD
+    ):
+        return
+    st = activity_state.load(int(ctx.guild_id))
+    if st.config.viewer_role_id is None:
+        raise NotActivityViewer()
+    if st.config.viewer_role_id not in {int(r) for r in ctx.member.role_ids}:
+        raise NotActivityViewer(st.config.viewer_role_name)
 
 
 def _classify_members(
@@ -139,7 +160,7 @@ class ActivityScore(
     lightbulb.SlashCommand,
     name="score",
     description="Show activity score for a member",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+    hooks=[activity_viewer_only],
 ):
     user = lightbulb.user("user", "Member to check (defaults to you)", default=None)
 
@@ -207,7 +228,7 @@ class ActivityReport(
     lightbulb.SlashCommand,
     name="report",
     description="Show all members with their activity status",
-    hooks=[lightbulb.prefab.has_permissions(hikari.Permissions.MANAGE_GUILD)],
+    hooks=[activity_viewer_only],
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
