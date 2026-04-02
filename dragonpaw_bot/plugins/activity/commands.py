@@ -47,19 +47,30 @@ def _classify_members(
             continue
         role_ids = [int(r) for r in member.role_ids]
         if has_ignored_role(role_ids, st.config.role_configs):
-            immune_role_name = next(
-                role_id_to_name[rid] for rid in role_ids if rid in role_id_to_name
+            immune.append(
+                (
+                    member,
+                    next(
+                        role_id_to_name[rid]
+                        for rid in role_ids
+                        if rid in role_id_to_name
+                    ),
+                )
             )
-            immune.append((member, immune_role_name))
             continue
-        role_cfg = best_role_config(role_ids, st.config.role_configs)
         user_activity = st.users.get(int(member.id))
         if user_activity is not None:
             buckets = user_activity.buckets
         else:
             buckets = []
-        score = calculate_score(buckets, role_cfg, now=now)
-        scored.append((score, member))
+        scored.append(
+            (
+                calculate_score(
+                    buckets, best_role_config(role_ids, st.config.role_configs), now=now
+                ),
+                member,
+            )
+        )
     return immune, scored
 
 
@@ -90,8 +101,9 @@ def _build_report_lines(
     for member in all_members:
         member_id = int(member.id)
         if member_id not in score_by_id:
-            role_name = immune_role_by_id[member_id]
-            lines.append(f"🛡️ {member.mention} — Immune ({role_name})")
+            lines.append(
+                f"🛡️ {member.mention} — Immune ({immune_role_by_id[member_id]})"
+            )
             continue
         score = score_by_id[member_id]
         medal = medal_map.get(member_id)
@@ -159,30 +171,30 @@ class ActivityScore(
 
         user_activity = st.users.get(int(member.id))
         buckets = user_activity.buckets if user_activity else []
-        now = time.time()
-        score = calculate_score(buckets, role_cfg, now=now)
+        score = calculate_score(buckets, role_cfg, now=time.time())
 
-        immune = has_ignored_role(role_ids, st.config.role_configs)
-        if immune:
+        if has_ignored_role(role_ids, st.config.role_configs):
             status_line = "🛡️ Immune"
         elif score >= ACTIVITY_FLOOR:
             status_line = "🐉 Active"
         else:
             status_line = "💤 Lurking"
 
-        bucket_count = len(buckets)
         role_note = f" (role: **{role_cfg.role_name}**)" if role_cfg else ""
 
-        embed = hikari.Embed(
-            title=f"📊 Activity Score — {member.display_name}",
-            description=(
-                f"**Score:** {score:.2f}\n"
-                f"**Status:** {status_line}\n"
-                f"**Contributions:** {bucket_count} hourly bucket(s){role_note}"
+        await ctx.edit_response(
+            response_id,
+            content="",
+            embed=hikari.Embed(
+                title=f"📊 Activity Score — {member.display_name}",
+                description=(
+                    f"**Score:** {score:.2f}\n"
+                    f"**Status:** {status_line}\n"
+                    f"**Contributions:** {len(buckets)} hourly bucket(s){role_note}"
+                ),
+                color=SOLARIZED_CYAN,
             ),
-            color=SOLARIZED_CYAN,
         )
-        await ctx.edit_response(response_id, content="", embed=embed)
         logger.info(
             "Activity score checked",
             guild=st.guild_name,
@@ -221,8 +233,7 @@ class ActivityReport(
             )
             return
 
-        now = time.time()
-        immune_members, scored_members = _classify_members(member_map, st, now)
+        immune_members, scored_members = _classify_members(member_map, st, time.time())
 
         if not immune_members and not scored_members:
             await ctx.edit_response(
@@ -232,14 +243,16 @@ class ActivityReport(
             return
 
         lines = _build_report_lines(immune_members, scored_members)
-        description = _truncate_description(lines)
 
-        embed = hikari.Embed(
-            title="📋 Activity Report",
-            description=description,
-            color=SOLARIZED_CYAN,
+        await ctx.edit_response(
+            response_id,
+            content="",
+            embed=hikari.Embed(
+                title="📋 Activity Report",
+                description=_truncate_description(lines),
+                color=SOLARIZED_CYAN,
+            ),
         )
-        await ctx.edit_response(response_id, content="", embed=embed)
         logger.info(
             "Activity report viewed",
             guild=st.guild_name,
