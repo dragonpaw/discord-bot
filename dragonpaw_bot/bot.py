@@ -18,8 +18,7 @@ import dragonpaw_bot.plugins as _plugins
 from dragonpaw_bot import structs
 from dragonpaw_bot.context import (
     GuildContext,
-    NotActivityViewer,
-    NotConfigAdmin,
+    NotAuthorized,
     guild_owner_only,
 )
 from dragonpaw_bot.logging import configure_logging
@@ -147,19 +146,11 @@ client = lightbulb.client_from_app(bot, default_enabled_guilds=TEST_GUILDS)
 async def on_command_error(
     exc: lightbulb.exceptions.ExecutionPipelineFailedException,
 ) -> bool:
-    if any(isinstance(c, NotConfigAdmin) for c in exc.causes):
+    if any(isinstance(c, NotAuthorized) for c in exc.causes):
         await exc.context.respond(
-            "*guards the treasure* 🐉 You need **Manage Server** permission to use this command!",
+            "*checks the list twice* 🐉 Hmm, doesn't look like you're on the approved list for this one! 🐾",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        return True
-    viewer_exc = next((c for c in exc.causes if isinstance(c, NotActivityViewer)), None)
-    if viewer_exc is not None:
-        if viewer_exc.role_name:
-            msg = f"*snorts smoke* 🐉 You need the **{viewer_exc.role_name}** role to use activity commands!"
-        else:
-            msg = "*guards the hoard* 🐉 You need **Manage Server** permission to use activity commands!"
-        await exc.context.respond(msg, flags=hikari.MessageFlag.EPHEMERAL)
         return True
     for cause in exc.causes:
         logger.exception(

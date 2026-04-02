@@ -721,16 +721,8 @@ async def check_role_manageable(
 # ---------------------------------------------------------------------------- #
 
 
-class NotConfigAdmin(Exception):
-    """Raised when a user without MANAGE_GUILD invokes a config command."""
-
-
-class NotActivityViewer(Exception):
-    """Raised when a user without the viewer role invokes an activity view command."""
-
-    def __init__(self, role_name: str = "") -> None:
-        self.role_name = role_name
-        super().__init__()
+class NotAuthorized(Exception):
+    """Raised when a user lacks permission to invoke a command."""
 
 
 @lightbulb.hook(
@@ -739,8 +731,8 @@ class NotActivityViewer(Exception):
 def guild_owner_only(_: lightbulb.ExecutionPipeline, ctx: lightbulb.Context) -> None:
     """Hook: restricts a command to members with MANAGE_GUILD (or ADMINISTRATOR)."""
     if ctx.member is None:
-        raise NotConfigAdmin
+        raise NotAuthorized
     perms = ctx.member.permissions
     if perms & (hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD):
         return
-    raise NotConfigAdmin
+    raise NotAuthorized

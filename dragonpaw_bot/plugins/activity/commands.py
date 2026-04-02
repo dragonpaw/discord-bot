@@ -10,7 +10,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.colors import SOLARIZED_CYAN
-from dragonpaw_bot.context import NotActivityViewer
+from dragonpaw_bot.context import NotAuthorized
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
@@ -40,16 +40,16 @@ def activity_viewer_only(
 ) -> None:
     """Hook: allows guild admins and members with the configured activity viewer role."""
     if ctx.guild_id is None or ctx.member is None:
-        raise NotActivityViewer()
+        raise NotAuthorized()
     if ctx.member.permissions & (
         hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD
     ):
         return
     st = activity_state.load(int(ctx.guild_id))
     if st.config.viewer_role_id is None:
-        raise NotActivityViewer()
+        raise NotAuthorized()
     if st.config.viewer_role_id not in {int(r) for r in ctx.member.role_ids}:
-        raise NotActivityViewer(st.config.viewer_role_name)
+        raise NotAuthorized
 
 
 def _classify_members(
