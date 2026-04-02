@@ -250,7 +250,7 @@ async def _handle_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> Non
         _vc_sessions.setdefault(guild_id, {})[user_id] = time.time()
 
 
-@loader.task(lightbulb.crontrigger("0 * * * *"))
+@loader.task(lightbulb.crontrigger("20 * * * *"))
 async def activity_flush(bot: hikari.GatewayBot) -> None:
     """Hourly task: flush dirty in-memory state to disk."""
     bot = cast("DragonpawBot", bot)

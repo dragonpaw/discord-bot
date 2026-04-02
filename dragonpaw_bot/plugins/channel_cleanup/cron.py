@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
-@loader.task(lightbulb.crontrigger("0 * * * *"))
+@loader.task(lightbulb.crontrigger("45 * * * *"))
 async def channel_cleanup_hourly(bot: hikari.GatewayBot) -> None:
     """Hourly task: purge old messages from configured channels (all channels run concurrently)."""
     bot = cast("DragonpawBot", bot)

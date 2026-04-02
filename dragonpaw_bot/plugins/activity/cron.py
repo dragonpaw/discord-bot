@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
-@loader.task(lightbulb.crontrigger("0 4 * * *"))
+@loader.task(lightbulb.crontrigger("15 4 * * *"))
 async def activity_daily_cron(bot: hikari.GatewayBot) -> None:
     """Daily task: prune old buckets, remove departed users, sync lurker role."""
     bot = cast("DragonpawBot", bot)

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
-@loader.task(lightbulb.crontrigger("0 9 * * *"))
+@loader.task(lightbulb.crontrigger("30 9 * * *"))
 async def intros_daily_cleanup(bot: hikari.GatewayBot) -> None:
     """Daily task: delete intro posts from members who have left the guild."""
     bot = cast("DragonpawBot", bot)
@@ -94,7 +94,7 @@ async def _cleanup_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
         )
 
 
-@loader.task(lightbulb.crontrigger("0 20 * * 6"))
+@loader.task(lightbulb.crontrigger("15 20 * * 6"))
 async def intros_weekly_naughty_list(bot: hikari.GatewayBot) -> None:
     """Weekly task: post naughty list of members who haven't introduced themselves."""
     bot = cast("DragonpawBot", bot)

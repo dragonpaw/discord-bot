@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
-@loader.task(lightbulb.crontrigger("0 * * * *"))  # every hour
+@loader.task(lightbulb.crontrigger("15 * * * *"))  # every hour
 async def validation_reminder_cron(
     bot: hikari.GatewayBot = lightbulb.di.INJECTED,
 ) -> None:
