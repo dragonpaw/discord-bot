@@ -60,24 +60,13 @@ def _classify_members(
     """Split non-bot members into immune (with role name) and scored lists."""
     immune: list[tuple[hikari.Member, str]] = []
     scored: list[tuple[float, hikari.Member]] = []
-    role_id_to_name = {
-        rc.role_id: rc.role_name for rc in st.config.role_configs if rc.ignored
-    }
     for member in member_map.values():
         if member.is_bot:
             continue
         role_ids = [int(r) for r in member.role_ids]
-        if has_ignored_role(role_ids, st.config.role_configs):
-            immune.append(
-                (
-                    member,
-                    next(
-                        role_id_to_name[rid]
-                        for rid in role_ids
-                        if rid in role_id_to_name
-                    ),
-                )
-            )
+        immune_role = has_ignored_role(role_ids, st.config.role_configs)
+        if immune_role is not None:
+            immune.append((member, immune_role))
             continue
         user_activity = st.users.get(int(member.id))
         if user_activity is not None:
@@ -194,13 +183,7 @@ class ActivityScore(
         buckets = user_activity.buckets if user_activity else []
         score = calculate_score(buckets, role_cfg, now=time.time())
 
-        immune_role_names = {
-            rc.role_id: rc.role_name for rc in st.config.role_configs if rc.ignored
-        }
-        immune_role = next(
-            (immune_role_names[rid] for rid in role_ids if rid in immune_role_names),
-            None,
-        )
+        immune_role = has_ignored_role(role_ids, st.config.role_configs)
         if immune_role is not None:
             status_line = f"🛡️ Immune ({immune_role})"
         elif score >= ACTIVITY_FLOOR:

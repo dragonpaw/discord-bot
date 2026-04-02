@@ -119,7 +119,9 @@ def best_role_config(
     return max(non_ignored, key=lambda rc: rc.contribution_multiplier)
 
 
-def has_ignored_role(role_ids: list[int], role_configs: list[RoleConfig]) -> bool:
-    """Return True if any of the member's roles is marked ignored."""
-    ignored_ids = {rc.role_id for rc in role_configs if rc.ignored}
-    return bool(ignored_ids.intersection(role_ids))
+def has_ignored_role(role_ids: list[int], role_configs: list[RoleConfig]) -> str | None:
+    """Return the name of the first ignored role found, or None."""
+    role_name_by_id = {rc.role_id: rc.role_name for rc in role_configs if rc.ignored}
+    return next(
+        (role_name_by_id[rid] for rid in role_ids if rid in role_name_by_id), None
+    )
