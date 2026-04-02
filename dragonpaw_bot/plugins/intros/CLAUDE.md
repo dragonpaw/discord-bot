@@ -22,9 +22,10 @@ State is persisted to `state/intros_{guild_id}.yaml`.
 Runs at 9am UTC daily (`0 9 * * *`). For each configured guild:
 
 1. Checks bot permissions (`READ_MESSAGE_HISTORY`, `MANAGE_MESSAGES`) in the intros channel — logs a warning to the guild log channel and skips if missing.
-2. Builds the current set of guild member IDs.
-3. Iterates all messages in the intros channel; deletes any from authors no longer in the guild.
-4. If any were deleted, posts a log message naming the removed users.
+2. Fetches pinned message IDs — pinned messages are never touched.
+3. Builds the current set of guild member IDs.
+4. Iterates all messages in the intros channel (newest-first); skips pinned; deletes any from authors no longer in the guild; deletes older duplicate posts (keeping only the newest per author).
+5. If any were deleted, posts separate cute log messages for departed-member removals and duplicate removals.
 
 #### Weekly Naughty List Cron
 
@@ -32,7 +33,7 @@ Runs at 8pm UTC Saturday (`0 20 * * 6` = noon PST / 1pm PDT). For each configure
 
 1. Checks that `channel_id` is configured — skips if not.
 2. Reads `GuildState.general_channel_id` via `bot.state(guild_id)` — skips if not set.
-3. Same filter logic as `/intros missing`: fetches all messages, collects poster IDs, finds members (with required role if set) who haven't posted.
+3. Same filter logic as `/intros missing`: fetches pinned IDs, fetches all messages (skipping pinned and bots), collects poster IDs, finds members (with required role if set) who haven't posted.
 4. If nobody missing: posts an all-clear celebration message to the general channel.
 5. If members missing: posts @mentions with a "naughty list" message to the general channel.
 6. Logs summary to `gc.log()`.

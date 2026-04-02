@@ -40,10 +40,10 @@ class IntrosMissing(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
-        # Collect user IDs who have posted in the intros channel
+        # Collect user IDs who have posted in the intros channel (skip bots and pinned)
         posted_ids: set[int] = set()
         async for message in gc.bot.rest.fetch_messages(st.channel_id):
-            if not message.author.is_bot:
+            if not message.author.is_bot and not message.is_pinned:
                 posted_ids.add(int(message.author.id))
 
         # Collect eligible members (non-bot, with required role if configured)

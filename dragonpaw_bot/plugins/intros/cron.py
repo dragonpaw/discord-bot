@@ -20,6 +20,23 @@ logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
 
 
+async def _try_delete(message: hikari.Message, reason: str, guild_name: str) -> bool:
+    """Delete a message, logging on permission errors. Returns True if deleted."""
+    try:
+        await message.delete()
+    except hikari.ForbiddenError:
+        logger.warning(
+            f"Cannot delete {reason} — missing permissions",
+            guild=guild_name,
+            user=message.author.username,
+        )
+        return False
+    except hikari.NotFoundError:
+        return False
+    else:
+        return True
+
+
 @loader.task(lightbulb.crontrigger("30 9 * * *"))
 async def intros_daily_cleanup(bot: hikari.GatewayBot) -> None:
     """Daily task: delete intro posts from members who have left the guild."""
@@ -65,32 +82,46 @@ async def _cleanup_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     async for member in bot.rest.fetch_members(guild.id):
         member_ids.add(int(member.id))
 
-    # Delete intro posts from members no longer in the guild
-    removed: list[str] = []
+    # Delete intro posts from members no longer in the guild, or duplicate older posts.
+    # fetch_messages returns newest-first, so the first occurrence per author is their keeper.
+    removed_departed: list[str] = []
+    removed_dupes: list[str] = []
+    seen_authors: set[int] = set()
+
     async for message in bot.rest.fetch_messages(st.channel_id):
-        if int(message.author.id) not in member_ids:
-            author_name = message.author.username
-            try:
-                await message.delete()
-                removed.append(author_name)
+        if message.is_pinned:
+            continue
+
+        author_id = int(message.author.id)
+        author_name = message.author.username
+
+        if author_id not in member_ids:
+            if await _try_delete(message, "intro message", guild.name):
+                removed_departed.append(author_name)
                 logger.info(
                     "Removed departed member's intro",
                     guild=guild.name,
                     user=author_name,
                 )
-            except hikari.ForbiddenError:
-                logger.warning(
-                    "Cannot delete intro message — missing permissions",
-                    guild=guild.name,
-                    user=author_name,
+        elif author_id in seen_authors:
+            if await _try_delete(message, "duplicate intro", guild.name):
+                removed_dupes.append(author_name)
+                logger.info(
+                    "Removed duplicate intro", guild=guild.name, user=author_name
                 )
-            except hikari.NotFoundError:
-                pass  # Already deleted
+        else:
+            seen_authors.add(author_id)
 
-    if removed:
-        names = ", ".join(f"**{n}**" for n in removed)
+    if removed_departed:
+        names = ", ".join(f"**{n}**" for n in removed_departed)
         await gc.log(
-            f"🧹 *tidies the den* I nom'd {len(removed)} intro post(s) from members who've left: {names}."
+            f"🧹 *tidies the den* I nom'd {len(removed_departed)} intro post(s) from members who've left: {names}. 🐉"
+        )
+
+    if removed_dupes:
+        names = ", ".join(f"**{n}**" for n in removed_dupes)
+        await gc.log(
+            f"✂️ *snorts smoke* Spotted some sneaky double-intros and trimmed the older one(s) from: {names}. One intro per hoard member! 🐾"
         )
 
 
@@ -119,10 +150,10 @@ async def _naughty_list_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     if not bot_st or not bot_st.general_channel_id:
         return
 
-    # Collect user IDs who have posted in the intros channel
+    # Collect user IDs who have posted in the intros channel (skip bots and pinned)
     posted_ids: set[int] = set()
     async for message in bot.rest.fetch_messages(st.channel_id):
-        if not message.author.is_bot:
+        if not message.author.is_bot and not message.is_pinned:
             posted_ids.add(int(message.author.id))
 
     # Collect eligible members (non-bot, with required role if configured)
