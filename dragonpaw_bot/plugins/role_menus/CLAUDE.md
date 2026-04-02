@@ -54,7 +54,7 @@ Persisted as `state/role_menus_{guild_id}.yaml`, separate from the main guild st
 
 ### File Structure
 
-- **`__init__.py`** — Extension entry point (lightbulb Loader), `INTERACTION_HANDLERS` and `parse_role_config` exports
+- **`__init__.py`** — Extension entry point, `INTERACTION_HANDLERS` dispatch table
 - **`commands.py`** — `parse_role_config()`, embed building, select menu building, `configure_role_menus()`, `handle_role_menu_interaction()`
 - **`config.py`** — Config command (`/config roles setup`), `register()` for `/config` group integration
 - **`models.py`** — Pydantic models: config (`RoleMenuOptionConfig`, `RoleMenuConfig`, `RolesConfig`) and state (`RoleMenuState`, `RoleMenuGuildState`)

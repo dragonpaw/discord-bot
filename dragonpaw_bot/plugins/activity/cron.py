@@ -10,8 +10,8 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.context import GuildContext
-from dragonpaw_bot.plugins.activity import _dirty_guilds
 from dragonpaw_bot.plugins.activity import state as activity_state
+from dragonpaw_bot.plugins.activity.listeners import _dirty_guilds
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
     PRUNE_DAYS,
@@ -74,7 +74,20 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     _prune_state(st, set(members.keys()), now)
 
     if st.config.lurker_role_id:
-        await _sync_lurker_role(bot, gc, st, members, now)
+        bucket_count = _guild_bucket_count(st)
+        if bucket_count < 7 * 24:
+            logger.debug(
+                "Skipping lurker sync — not enough history yet",
+                guild=st.guild_name,
+                bucket_count=bucket_count,
+            )
+        else:
+            await _sync_lurker_role(bot, gc, st, members, now)
+
+
+def _guild_bucket_count(st: ActivityGuildState) -> int:
+    """Return the total number of contribution buckets across all users."""
+    return sum(len(u.buckets) for u in st.users.values())
 
 
 def _prune_state(st: ActivityGuildState, member_ids: set[int], now: float) -> None:

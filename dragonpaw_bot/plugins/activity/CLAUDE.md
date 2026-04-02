@@ -73,7 +73,8 @@ Persisted as `state/activity_{guild_id}.yaml`.
 
 ### File Structure
 
-- **`__init__.py`** — Extension entry point, event listeners, `/activity` command group
+- **`__init__.py`** — Extension entry point, `/activity` command group
+- **`listeners.py`** — Event listeners for message, reaction, and voice tracking; module-level `_dirty_guilds` and `_vc_sessions` state
 - **`models.py`** — Pydantic models, `calculate_score()`, `best_role_config()`, `has_ignored_role()`
 - **`state.py`** — YAML state persistence (load/save with in-memory cache)
 - **`commands.py`** — `/activity score` and `/activity leaderboard`

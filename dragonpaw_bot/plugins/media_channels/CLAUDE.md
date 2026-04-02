@@ -45,7 +45,8 @@ Runs at `:30` past each hour. For each media channel with `expiry_minutes` set, 
 
 ### File Structure
 
-- **`__init__.py`** — Extension entry point, message event listener
+- **`__init__.py`** — Extension entry point
+- **`listeners.py`** — Message event listener for media-only enforcement
 - **`cron.py`** — Hourly media channel cleanup cron task
 - **`models.py`** — Pydantic models: `MediaChannelEntry`, `MediaGuildState`
 - **`state.py`** — YAML state persistence (load/save with in-memory cache)
