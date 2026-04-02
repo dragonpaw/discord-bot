@@ -194,8 +194,15 @@ class ActivityScore(
         buckets = user_activity.buckets if user_activity else []
         score = calculate_score(buckets, role_cfg, now=time.time())
 
-        if has_ignored_role(role_ids, st.config.role_configs):
-            status_line = "🛡️ Immune"
+        immune_role_names = {
+            rc.role_id: rc.role_name for rc in st.config.role_configs if rc.ignored
+        }
+        immune_role = next(
+            (immune_role_names[rid] for rid in role_ids if rid in immune_role_names),
+            None,
+        )
+        if immune_role is not None:
+            status_line = f"🛡️ Immune ({immune_role})"
         elif score >= ACTIVITY_FLOOR:
             status_line = "🐉 Active"
         else:
