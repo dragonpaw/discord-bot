@@ -14,6 +14,7 @@ import structlog
 import uvloop
 import yaml
 
+import dragonpaw_bot.plugins as _plugins
 from dragonpaw_bot import structs
 from dragonpaw_bot.context import GuildContext, NotConfigAdmin, guild_owner_only
 from dragonpaw_bot.logging import configure_logging
@@ -553,26 +554,8 @@ async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None
 @bot.listen(hikari.StartingEvent)
 async def on_starting(_: hikari.StartingEvent) -> None:
     await loader.add_to_client(client)
-    await client.load_extensions(
-        "dragonpaw_bot.plugins.role_menus",
-        "dragonpaw_bot.plugins.subday.commands",
-        "dragonpaw_bot.plugins.subday.cron",
-        "dragonpaw_bot.plugins.birthdays",
-        "dragonpaw_bot.plugins.birthdays.commands",
-        "dragonpaw_bot.plugins.birthdays.cron",
-        "dragonpaw_bot.plugins.media_channels",
-        "dragonpaw_bot.plugins.media_channels.cron",
-        "dragonpaw_bot.plugins.channel_cleanup",
-        "dragonpaw_bot.plugins.channel_cleanup.cron",
-        "dragonpaw_bot.plugins.intros.commands",
-        "dragonpaw_bot.plugins.intros.cron",
-        "dragonpaw_bot.plugins.tickets",
-        "dragonpaw_bot.plugins.validation.commands",
-        "dragonpaw_bot.plugins.validation.cron",
-        "dragonpaw_bot.plugins.activity",
-        "dragonpaw_bot.plugins.activity.commands",
-        "dragonpaw_bot.plugins.activity.cron",
-    )
+
+    await client.load_extensions_from_package(_plugins, recursive=True)
     await client.start()
 
     # Log all registered cron tasks
