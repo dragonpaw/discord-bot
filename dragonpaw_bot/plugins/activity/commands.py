@@ -35,16 +35,22 @@ def _classify_members(
     member_map: dict[int, hikari.Member],
     st: ActivityGuildState,
     now: float,
-) -> tuple[list[hikari.Member], list[tuple[float, hikari.Member]]]:
-    """Split non-bot members into immune and scored lists."""
-    immune: list[hikari.Member] = []
+) -> tuple[list[tuple[hikari.Member, str]], list[tuple[float, hikari.Member]]]:
+    """Split non-bot members into immune (with role name) and scored lists."""
+    immune: list[tuple[hikari.Member, str]] = []
     scored: list[tuple[float, hikari.Member]] = []
+    role_id_to_name = {
+        rc.role_id: rc.role_name for rc in st.config.role_configs if rc.ignored
+    }
     for member in member_map.values():
         if member.is_bot:
             continue
         role_ids = [int(r) for r in member.role_ids]
         if has_ignored_role(role_ids, st.config.role_configs):
-            immune.append(member)
+            immune_role_name = next(
+                role_id_to_name[rid] for rid in role_ids if rid in role_id_to_name
+            )
+            immune.append((member, immune_role_name))
             continue
         role_cfg = best_role_config(role_ids, st.config.role_configs)
         user_activity = st.users.get(int(member.id))
@@ -58,7 +64,7 @@ def _classify_members(
 
 
 def _build_report_lines(
-    immune_members: list[hikari.Member],
+    immune_members: list[tuple[hikari.Member, str]],
     scored_members: list[tuple[float, hikari.Member]],
 ) -> list[str]:
     """Build display lines sorted alphabetically by display name."""
@@ -72,14 +78,20 @@ def _build_report_lines(
     score_by_id: dict[int, float] = {
         int(member.id): score for score, member in scored_members
     }
-    all_members = immune_members + [m for _, m in scored_members]
+    immune_role_by_id: dict[int, str] = {
+        int(member.id): role_name for member, role_name in immune_members
+    }
+    all_members: list[hikari.Member] = [m for m, _ in immune_members] + [
+        m for _, m in scored_members
+    ]
     all_members.sort(key=lambda m: m.display_name.lower())
 
     lines: list[str] = []
     for member in all_members:
         member_id = int(member.id)
         if member_id not in score_by_id:
-            lines.append(f"🛡️ {member.mention} — Immune")
+            role_name = immune_role_by_id[member_id]
+            lines.append(f"🛡️ {member.mention} — Immune ({role_name})")
             continue
         score = score_by_id[member_id]
         medal = medal_map.get(member_id)
