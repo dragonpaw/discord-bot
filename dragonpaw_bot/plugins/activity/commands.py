@@ -12,6 +12,7 @@ import structlog
 from dragonpaw_bot.colors import SOLARIZED_CYAN
 from dragonpaw_bot.context import NotAuthorized
 from dragonpaw_bot.plugins.activity import state as activity_state
+from dragonpaw_bot.plugins.activity.chart import render_activity_chart
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
     ActivityGuildMeta,
@@ -124,6 +125,18 @@ def _build_report_lines(
     return lines
 
 
+def _can_view_others(ctx: lightbulb.Context) -> bool:
+    """Return True if the invoker has admin/manage-guild or the configured viewer role."""
+    assert ctx.member and ctx.guild_id
+    if ctx.member.permissions & (
+        hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD
+    ):
+        return True
+    meta = activity_state.load_config(int(ctx.guild_id))
+    viewer_id = meta.config.viewer_role_id
+    return viewer_id is not None and viewer_id in {int(r) for r in ctx.member.role_ids}
+
+
 def _truncate_description(lines: list[str]) -> str:
     """Join lines into an embed description, truncating if needed."""
     description = "\n".join(lines)
@@ -147,13 +160,13 @@ class ActivityScore(
     lightbulb.SlashCommand,
     name="score",
     description="Show activity score for a member",
-    hooks=[activity_viewer_only],
 ):
     user = lightbulb.user("user", "Member to check (defaults to you)", default=None)
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
+        assert ctx.member
         bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
 
         response_id = await ctx.respond(
@@ -162,6 +175,15 @@ class ActivityScore(
         )
 
         target_user = self.user or ctx.user
+
+        # Anyone can check their own score; viewing others requires viewer permission.
+        if int(target_user.id) != int(ctx.user.id) and not _can_view_others(ctx):
+            await ctx.edit_response(
+                response_id,
+                content="*snorts smoke* 🐉 You need the viewer role to check someone else's score! 🐾",
+            )
+            return
+
         member = bot.cache.get_member(ctx.guild_id, target_user.id)
         if member is None:
             try:
@@ -190,26 +212,33 @@ class ActivityScore(
         if immune_role is None and int(member.id) == owner_id:
             immune_role = "Guild Owner"
         if immune_role is not None:
+            status_emoji = "🛡️"
             status_line = f"🛡️ Immune ({immune_role})"
         elif score >= ACTIVITY_FLOOR:
+            status_emoji = "🐉"
             status_line = "🐉 Active"
         else:
+            status_emoji = "💤"
             status_line = "💤 Lurking"
 
         role_note = f" (role: **{role_cfg.role_name}**)" if role_cfg else ""
 
+        chart = render_activity_chart(member.display_name, buckets, score, status_emoji)
+        embed = hikari.Embed(
+            title=f"📊 Activity Score — {member.display_name}",
+            description=(
+                f"**Score:** {score:.2f}\n"
+                f"**Status:** {status_line}\n"
+                f"**Contributions:** {len(buckets)} hourly bucket(s){role_note}"
+            ),
+            color=SOLARIZED_CYAN,
+        )
+        embed.set_image("attachment://activity_chart.png")
         await ctx.edit_response(
             response_id,
             content="",
-            embed=hikari.Embed(
-                title=f"📊 Activity Score — {member.display_name}",
-                description=(
-                    f"**Score:** {score:.2f}\n"
-                    f"**Status:** {status_line}\n"
-                    f"**Contributions:** {len(buckets)} hourly bucket(s){role_note}"
-                ),
-                color=SOLARIZED_CYAN,
-            ),
+            embed=embed,
+            attachments=[chart],
         )
         logger.info(
             "Activity score checked",
@@ -228,6 +257,7 @@ class ActivityReport(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
+        assert ctx.member
         bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
 
         response_id = await ctx.respond(

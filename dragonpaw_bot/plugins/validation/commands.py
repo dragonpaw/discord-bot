@@ -87,8 +87,13 @@ async def on_member_join(event: hikari.MemberCreateEvent) -> None:
             channel=st.lobby_channel_id,
             content=(
                 f"*flaps wings excitedly* Hiya {event.member.mention}! 🐉 Welcome to the server! "
-                f"Before I let you into the hoard proper, I need you to read the rules first. "
-                f"Give 'em a good read and then smack that button below! *happy tail wag* 🐾"
+                f"Before I let you into the hoard proper, I need you to read the rules first"
+                + (
+                    f" — you can find them in <#{st.about_channel_id}>!"
+                    if st.about_channel_id
+                    else "!"
+                )
+                + " Give 'em a good read and then smack that button below! *happy tail wag* 🐾"
             ),
             components=[row],
         )
@@ -316,9 +321,49 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
     )
 
 
+def _is_staff(
+    interaction: hikari.ComponentInteraction | hikari.ModalInteraction,
+    staff_role_id: int | None,
+) -> bool:
+    """Return True if the interacting member has admin permission or the staff role."""
+    if not interaction.member:
+        return False
+    if interaction.member.permissions & hikari.Permissions.ADMINISTRATOR:
+        return True
+    if staff_role_id is None:
+        return False
+    return staff_role_id in {int(r) for r in interaction.member.role_ids}
+
+
 async def handle_approve_button(interaction: hikari.ComponentInteraction) -> None:
     """Show the name-entry modal when staff clicks 'Looks good!'."""
+    if not interaction.guild_id:
+        return
+
     channel_id_str = interaction.custom_id.removeprefix(APPROVE_BUTTON_PREFIX)
+    try:
+        channel_id = int(channel_id_str)
+    except ValueError:
+        return
+
+    st = validation_state.load(int(interaction.guild_id))
+    member_entry = next((m for m in st.members if m.channel_id == channel_id), None)
+
+    if member_entry and int(interaction.user.id) == member_entry.user_id:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="*side-eyes you* 🐉 You can't approve your own verification! 🐾",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    if not _is_staff(interaction, st.staff_role_id):
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="*snorts smoke* 🐉 Only staff can approve verifications! 🐾",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
 
     name_row = hikari.impl.ModalActionRowBuilder()
     name_row.add_text_input(
@@ -355,6 +400,21 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
         )
         return
 
+    st = validation_state.load(int(interaction.guild_id))
+    member_entry_check = next(
+        (m for m in st.members if m.channel_id == channel_id), None
+    )
+    if member_entry_check and int(interaction.user.id) == member_entry_check.user_id:
+        await interaction.edit_initial_response(
+            content="*side-eyes you* 🐉 You can't approve your own verification! 🐾"
+        )
+        return
+    if not _is_staff(interaction, st.staff_role_id):
+        await interaction.edit_initial_response(
+            content="*snorts smoke* 🐉 Only staff can approve verifications! 🐾"
+        )
+        return
+
     name: str | None = None
     for row in interaction.components:
         for component in row.components:
@@ -368,9 +428,8 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
 
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
     gc = GuildContext.from_interaction(interaction)  # type: ignore[arg-type]
-    st = validation_state.load(int(interaction.guild_id))
 
-    member_entry = next((m for m in st.members if m.channel_id == channel_id), None)
+    member_entry = member_entry_check
     if not member_entry:
         await interaction.edit_initial_response(
             content="*confused head tilt* I couldn't find that validation entry — it may have already been processed. 🐉"
@@ -422,9 +481,9 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
             await bot.rest.create_message(
                 channel=general_channel_id,
                 content=(
-                    f"🎉 *does a happy little dragon wiggle* Everyone say hello to **{name}**! "
+                    f"🎉 *does a happy little dragon wiggle* Everyone say hello to <@{user_id}>! "
                     f"They're officially part of the hoard now~ 🐉\n\n"
-                    f"**{name}**, welcome welcome welcome!! A few things to get you settled in:\n"
+                    f"<@{user_id}>, welcome welcome welcome!! A few things to get you settled in:\n"
                     f"• Peek at {f'<#{st.about_channel_id}>' if st.about_channel_id else '#about'} to learn more about us 📖\n"
                     f"• I'll see you over in {f'<#{st.roles_channel_id}>' if st.roles_channel_id else '#roles'} to help pick out your roles — grab some shiny ones! ✨\n"
                     f"• Tell us a little about yourself in {f'<#{st.intros_channel_id}>' if st.intros_channel_id else '#introductions'} 🐾\n"

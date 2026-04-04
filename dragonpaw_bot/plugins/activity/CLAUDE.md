@@ -78,10 +78,10 @@ All require guild owner.
 
 ### Slash Commands (`/activity`)
 
-Both require the `activity_viewer_only` hook: passes if the invoker has `ADMINISTRATOR` or `MANAGE_GUILD`, or has the configured viewer role. Fails if no viewer role is set and the user lacks those permissions.
+`/activity report` requires the `activity_viewer_only` hook: passes if the invoker has `ADMINISTRATOR` or `MANAGE_GUILD`, or has the configured viewer role. Fails if no viewer role is set and the user lacks those permissions.
 
-- **`score [user]`** — Show activity score for a member (defaults to self). Responds ephemerally with score, status (🐉 Active / 💤 Lurking / 🛡️ Immune), bucket count, and role info. Guild owner always shows 🛡️ Immune (Guild Owner).
-- **`report`** — Show all non-bot members sorted alphabetically by display name. Each member gets an emoji badge: 🥇🥈🥉 for top 3 by score, 🐉 active, 💤 lurker, 🛡️ immune. Immune members (ignored role or guild owner) show their score. Members with no activity data appear with score 0.00 (lurker).
+- **`score [user]`** — Show activity score for a member (defaults to self). Any member can check their own score without restriction. Checking another member's score requires the viewer role or admin/manage-guild permission. Responds ephemerally with score, status (🐉 Active / 💤 Lurking / 🛡️ Immune), bucket count, role info, and a stacked bar chart image of daily activity over the past 60 days. Guild owner always shows 🛡️ Immune (Guild Owner).
+- **`report`** — Requires viewer permission. Show all non-bot members sorted alphabetically by display name. Each member gets an emoji badge: 🥇🥈🥉 for top 3 by score, 🐉 active, 💤 lurker, 🛡️ immune. Immune members (ignored role or guild owner) show their score. Members with no activity data appear with score 0.00 (lurker).
 
 ### Cron Tasks
 
