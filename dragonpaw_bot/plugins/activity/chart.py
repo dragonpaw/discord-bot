@@ -37,6 +37,9 @@ TEXT_COLOR = (60, 60, 60)
 AXIS_COLOR = (200, 195, 185)
 GRIDLINE_COLOR = (235, 230, 222)
 
+DAY_SHADE_A = (246, 242, 234, 255)  # slightly darker alternating day band
+DAY_SHADE_B = (*BG_COLOR, 255)  # base background
+
 KIND_COLORS: dict[ContributionKind, tuple[int, int, int]] = {
     ContributionKind.TEXT: (100, 180, 120),  # sage green
     ContributionKind.MEDIA: (80, 160, 210),  # sky blue
@@ -57,6 +60,7 @@ KIND_ORDER = [
 ]
 
 BAR_GAP = 1
+NOON_HOUR = 12
 
 
 def _apply_rounded_corners(img: Image.Image, radius: int) -> Image.Image:
@@ -146,17 +150,72 @@ def _draw_gridlines(
         )
 
 
+def _draw_day_shading(
+    img: Image.Image,
+    hours: list[int],
+    bar_slot: float,
+) -> None:
+    """Draw alternating subtle background bands, one per calendar day."""
+    if not hours:
+        return
+    draw = ImageDraw.Draw(img)
+    # Group consecutive hours by their day index (day number relative to first day)
+    first_day = hours[0] - (hours[0] % 86400)
+    current_day = first_day - 86400  # force a band start on first hour
+    shade_index = 0
+    band_start_x = CHART_X
+    for i, hour in enumerate(hours):
+        day = hour - (hour % 86400)
+        if day != current_day:
+            # Close previous band
+            band_end_x = int(CHART_X + i * bar_slot)
+            if band_end_x > band_start_x:
+                color = DAY_SHADE_A if shade_index % 2 == 0 else DAY_SHADE_B
+                draw.rectangle(
+                    [band_start_x, CHART_Y, band_end_x, CHART_Y + CHART_H],
+                    fill=color,
+                )
+            band_start_x = band_end_x
+            current_day = day
+            shade_index += 1
+    # Close final band
+    draw.rectangle(
+        [band_start_x, CHART_Y, CHART_X + CHART_W, CHART_Y + CHART_H],
+        fill=DAY_SHADE_A if shade_index % 2 == 0 else DAY_SHADE_B,
+    )
+
+
+def _draw_x_ticks(
+    draw: ImageDraw.ImageDraw,
+    hours: list[int],
+    bar_slot: float,
+) -> None:
+    """Draw tick marks: full-height faint gridline at midnight, short tick at noon."""
+    tick_color = (215, 210, 200)
+    noon_color = (225, 220, 212)
+    for i, hour in enumerate(hours):
+        h_of_day = (hour % 86400) // 3600
+        x = int(CHART_X + i * bar_slot)
+        if h_of_day == 0:
+            draw.line([(x, CHART_Y), (x, CHART_Y + CHART_H)], fill=tick_color, width=1)
+        elif h_of_day == NOON_HOUR:
+            draw.line(
+                [(x, CHART_Y + CHART_H - 6), (x, CHART_Y + CHART_H)],
+                fill=noon_color,
+                width=1,
+            )
+
+
 def _draw_bars(
     draw: ImageDraw.ImageDraw,
     hours: list[int],
     hourly: dict[int, dict[ContributionKind, float]],
     nice_max: float,
-) -> float:
-    """Draw one stacked bar per hour slot. Returns bar_slot width."""
-    num_hours = len(hours)
-    if num_hours == 0:
-        return 0.0
-    bar_slot = CHART_W / num_hours
+    bar_slot: float,
+) -> None:
+    """Draw one stacked bar per hour slot."""
+    if not hours:
+        return
     bar_w = max(1, bar_slot - BAR_GAP)
     for i, hour in enumerate(hours):
         bar_left = CHART_X + i * bar_slot + BAR_GAP / 2
@@ -172,7 +231,6 @@ def _draw_bars(
                 fill=(*KIND_COLORS[kind], 255),
             )
             bottom = top
-    return bar_slot
 
 
 def _draw_x_labels(
@@ -181,19 +239,21 @@ def _draw_x_labels(
     hours: list[int],
     bar_slot: float,
 ) -> None:
-    """Label day boundaries, stepping every 2 days to avoid crowding."""
+    """Label every day boundary (midnight), skipping if labels would overlap."""
     num_hours = len(hours)
     day_indices = [i for i, h in enumerate(hours) if h % 86400 == 0]
-    step = max(1, len(day_indices) // 7)  # aim for ~7 labels
-    labeled = {day_indices[i] for i in range(0, len(day_indices), step)}
-    # Always label the last day boundary if there is one
-    if day_indices:
-        labeled.add(day_indices[-1])
 
-    for i in labeled:
+    # Estimate label width to avoid overlap (~28px for "15 Mar" at 11pt)
+    min_spacing_px = 30
+    min_step = max(1, int(min_spacing_px / (bar_slot * 24)))
+    step = max(1, min_step)
+
+    for j, i in enumerate(day_indices):
+        if j % step != 0:
+            continue
         if i >= num_hours:
             continue
-        x = int(CHART_X + i * bar_slot + bar_slot / 2)
+        x = int(CHART_X + i * bar_slot)
         label = datetime.fromtimestamp(hours[i], tz=UTC).strftime("%-d %b")
         lb = font.getbbox(label)
         draw.text(
@@ -239,10 +299,15 @@ def render_activity_chart(
     label_font = ImageFont.truetype(str(FONT_REGULAR), 13)
     small_font = ImageFont.truetype(str(FONT_REGULAR), 11)
 
+    bar_slot = CHART_W / len(hours) if hours else 0.0
+
     _draw_title(draw, title_font, username, score, status_emoji)
     _draw_gridlines(draw, label_font, nice_max)
-    bar_slot = _draw_bars(draw, hours, hourly, nice_max)
     if bar_slot > 0:
+        _draw_day_shading(img, hours, bar_slot)
+    _draw_bars(draw, hours, hourly, nice_max, bar_slot)
+    if bar_slot > 0:
+        _draw_x_ticks(draw, hours, bar_slot)
         _draw_x_labels(draw, small_font, hours, bar_slot)
     _draw_legend(draw, small_font)
 
