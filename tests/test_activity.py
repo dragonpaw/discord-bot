@@ -2,19 +2,27 @@
 
 import time
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
-from dragonpaw_bot.plugins.activity import _add_contribution, _has_media
+import pydantic
+import pytest
+
 from dragonpaw_bot.plugins.activity import state as activity_state
-from dragonpaw_bot.plugins.activity.cron import _prune_state
+from dragonpaw_bot.plugins.activity.commands import _classify_members
+from dragonpaw_bot.plugins.activity.cron import _prune_state, _sync_lurker_role
+from dragonpaw_bot.plugins.activity.listeners import _add_contribution, _has_media
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
-    PRUNE_DAYS,
+    BASE_HALF_LIFE,
+    PRUNE_THRESHOLD,
     ActivityGuildConfig,
-    ActivityGuildState,
+    ActivityGuildMeta,
+    ChannelConfig,
     ContributionBucket,
     RoleConfig,
     UserActivity,
     best_role_config,
+    bucket_is_negligible,
     calculate_score,
     has_ignored_role,
 )
@@ -169,16 +177,16 @@ def test_best_role_config_all_ignored_returns_none():
 
 def test_has_ignored_role_true():
     staff = RoleConfig(role_id=99, role_name="Staff", ignored=True)
-    assert has_ignored_role([99, 100], [staff]) is True
+    assert has_ignored_role([99, 100], [staff]) == "Staff"
 
 
 def test_has_ignored_role_false():
     normal = RoleConfig(role_id=99, role_name="Member", ignored=False)
-    assert has_ignored_role([99], [normal]) is False
+    assert has_ignored_role([99], [normal]) is None
 
 
 def test_has_ignored_role_empty_configs():
-    assert has_ignored_role([1, 2, 3], []) is False
+    assert has_ignored_role([1, 2, 3], []) is None
 
 
 # ---------------------------------------------------------------------------- #
@@ -186,35 +194,46 @@ def test_has_ignored_role_empty_configs():
 # ---------------------------------------------------------------------------- #
 
 
-def test_add_contribution_new_user_creates_entry():
-    st = ActivityGuildState(guild_id=1)
-    _add_contribution(st, 42, "text", 1.0, now=1_000_000.0)
-    assert 42 in st.users
-    assert len(st.users[42].buckets) == 1
-    assert st.users[42].buckets[0].amount == 1.0
-    assert st.users[42].buckets[0].kind == "text"
+@pytest.fixture(autouse=False)
+def clear_user_state():
+    """Clear in-memory user caches before and after each test."""
+    activity_state._user_cache.clear()
+    activity_state._dirty_users.clear()
+    yield
+    activity_state._user_cache.clear()
+    activity_state._dirty_users.clear()
 
 
-def test_add_contribution_same_hour_same_kind_accumulates():
-    st = ActivityGuildState(guild_id=1)
-    _add_contribution(st, 42, "text", 1.0, now=1_000_000.0)
-    _add_contribution(st, 42, "text", 2.0, now=1_000_000.0)
-    assert len(st.users[42].buckets) == 1
-    assert st.users[42].buckets[0].amount == 3.0
+def test_add_contribution_new_user_creates_entry(clear_user_state):
+    _add_contribution(1, 42, "text", 1.0, now=1_000_000.0)
+    ua = activity_state._user_cache.get((1, 42))
+    assert ua is not None
+    assert len(ua.buckets) == 1
+    assert ua.buckets[0].amount == 1.0
+    assert ua.buckets[0].kind == "text"
+    assert (1, 42) in activity_state._dirty_users
 
 
-def test_add_contribution_different_kind_same_hour_separate_bucket():
-    st = ActivityGuildState(guild_id=1)
-    _add_contribution(st, 42, "text", 1.0, now=1_000_000.0)
-    _add_contribution(st, 42, "media", 1.0, now=1_000_000.0)
-    assert len(st.users[42].buckets) == 2
+def test_add_contribution_same_hour_same_kind_accumulates(clear_user_state):
+    _add_contribution(1, 42, "text", 1.0, now=1_000_000.0)
+    _add_contribution(1, 42, "text", 2.0, now=1_000_000.0)
+    ua = activity_state._user_cache[(1, 42)]
+    assert len(ua.buckets) == 1
+    assert ua.buckets[0].amount == 3.0
 
 
-def test_add_contribution_different_hour_creates_new_bucket():
-    st = ActivityGuildState(guild_id=1)
-    _add_contribution(st, 42, "text", 1.0, now=1_000_000.0)
-    _add_contribution(st, 42, "text", 1.0, now=1_000_000.0 + 3601)
-    assert len(st.users[42].buckets) == 2
+def test_add_contribution_different_kind_same_hour_separate_bucket(clear_user_state):
+    _add_contribution(1, 42, "text", 1.0, now=1_000_000.0)
+    _add_contribution(1, 42, "media", 1.0, now=1_000_000.0)
+    ua = activity_state._user_cache[(1, 42)]
+    assert len(ua.buckets) == 2
+
+
+def test_add_contribution_different_hour_creates_new_bucket(clear_user_state):
+    _add_contribution(1, 42, "text", 1.0, now=1_000_000.0)
+    _add_contribution(1, 42, "text", 1.0, now=1_000_000.0 + 3601)
+    ua = activity_state._user_cache[(1, 42)]
+    assert len(ua.buckets) == 2
 
 
 # ---------------------------------------------------------------------------- #
@@ -259,9 +278,23 @@ def test_has_media_http_url():
 # ---------------------------------------------------------------------------- #
 
 
-def _make_st_with_user(user_id: int, days_ago_list: list[float]) -> ActivityGuildState:
-    now = 1_000_000_000.0
-    st = ActivityGuildState(guild_id=1)
+def _fake_member(user_id: int, role_ids: list[int] | None = None):
+    """Minimal hikari.Member stand-in for prune tests."""
+    return SimpleNamespace(role_ids=role_ids or [])
+
+
+def _setup_prune(
+    tmp_path,
+    monkeypatch,
+    user_id: int,
+    days_ago_list: list[float],
+    now: float = 1_000_000_000.0,
+) -> tuple[ActivityGuildMeta, float]:
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._user_cache.clear()
+    activity_state._config_cache.clear()
+
+    meta = ActivityGuildMeta(guild_id=1)
     buckets = [
         ContributionBucket(
             hour=int(now - d * 86400) // 3600 * 3600,
@@ -270,34 +303,37 @@ def _make_st_with_user(user_id: int, days_ago_list: list[float]) -> ActivityGuil
         )
         for d in days_ago_list
     ]
-    st.users[user_id] = UserActivity(user_id=user_id, buckets=buckets)
-    return st, now
+    activity_state.save_user(1, user_id, UserActivity(user_id=user_id, buckets=buckets))
+    return meta, now
 
 
-def test_prune_removes_old_buckets_keeps_recent():
-    st, now = _make_st_with_user(1, [1, PRUNE_DAYS + 5])
-    _prune_state(st, {1}, now)
-    assert 1 in st.users
-    assert len(st.users[1].buckets) == 1  # only the 1-day-old bucket survives
+def test_prune_removes_negligible_buckets(tmp_path, monkeypatch):
+    # Bucket 110 days old is well past the negligibility threshold (~100d for default config)
+    meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1, 110])
+    _prune_state(meta, {1: _fake_member(1)}, now)
+    ua = activity_state.load_user(1, 1)
+    assert ua is not None
+    assert len(ua.buckets) == 1  # only the 1-day-old bucket survives
 
 
-def test_prune_removes_user_with_no_buckets_left():
-    st, now = _make_st_with_user(1, [PRUNE_DAYS + 5])  # only old bucket
-    _prune_state(st, {1}, now)
-    assert 1 not in st.users
+def test_prune_removes_user_with_no_buckets_left(tmp_path, monkeypatch):
+    meta, now = _setup_prune(tmp_path, monkeypatch, 1, [110])  # only negligible bucket
+    _prune_state(meta, {1: _fake_member(1)}, now)
+    assert activity_state.load_user(1, 1) is None
 
 
-def test_prune_removes_departed_member_with_recent_buckets():
-    st, now = _make_st_with_user(1, [1])  # recent bucket, but user left
-    _prune_state(st, set(), now)  # empty member_ids = user departed
-    assert 1 not in st.users
+def test_prune_removes_departed_member(tmp_path, monkeypatch):
+    meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1])  # recent bucket, user left
+    _prune_state(meta, {}, now)  # empty members = departed
+    assert activity_state.load_user(1, 1) is None
 
 
-def test_prune_keeps_active_present_member():
-    st, now = _make_st_with_user(1, [1])
-    _prune_state(st, {1}, now)
-    assert 1 in st.users
-    assert len(st.users[1].buckets) == 1
+def test_prune_keeps_active_present_member(tmp_path, monkeypatch):
+    meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1])
+    _prune_state(meta, {1: _fake_member(1)}, now)
+    ua = activity_state.load_user(1, 1)
+    assert ua is not None
+    assert len(ua.buckets) == 1
 
 
 # ---------------------------------------------------------------------------- #
@@ -305,11 +341,11 @@ def test_prune_keeps_active_present_member():
 # ---------------------------------------------------------------------------- #
 
 
-def test_state_round_trip(tmp_path, monkeypatch):
+def test_config_round_trip(tmp_path, monkeypatch):
     monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
-    activity_state._cache.clear()
+    activity_state._config_cache.clear()
 
-    st = ActivityGuildState(
+    meta = ActivityGuildMeta(
         guild_id=1234,
         guild_name="Test Guild",
         config=ActivityGuildConfig(
@@ -318,63 +354,433 @@ def test_state_round_trip(tmp_path, monkeypatch):
                     role_id=10,
                     role_name="Veteran",
                     contribution_multiplier=1.2,
-                    decay_multiplier=1.5,
+                    decay_multiplier=1.7,
                 )
             ],
             lurker_role_id=20,
             lurker_role_name="Lurker",
         ),
-        users={
-            42: UserActivity(
-                user_id=42,
-                buckets=[ContributionBucket(hour=1000000, kind="text", amount=3.0)],
-            )
-        },
     )
-    activity_state.save(st)
+    activity_state.save_config(meta)
+    activity_state._config_cache.clear()
 
-    activity_state._cache.clear()
-    loaded = activity_state.load(1234)
-
+    loaded = activity_state.load_config(1234)
     assert loaded.guild_id == 1234
     assert loaded.guild_name == "Test Guild"
     assert len(loaded.config.role_configs) == 1
     assert loaded.config.role_configs[0].role_id == 10
     assert loaded.config.role_configs[0].contribution_multiplier == 1.2
     assert loaded.config.lurker_role_id == 20
-    assert 42 in loaded.users
-    assert loaded.users[42].buckets[0].amount == 3.0
-    assert loaded.users[42].buckets[0].kind == "text"
 
 
-def test_state_load_missing_returns_default(tmp_path, monkeypatch):
+def test_user_round_trip(tmp_path, monkeypatch):
     monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
-    activity_state._cache.clear()
+    activity_state._user_cache.clear()
 
-    st = activity_state.load(9999)
-    assert st.guild_id == 9999
-    assert st.users == {}
+    ua = UserActivity(
+        user_id=42,
+        buckets=[ContributionBucket(hour=3600000, kind="text", amount=3.0)],
+    )
+    activity_state.save_user(1234, 42, ua)
+    activity_state._user_cache.clear()
+
+    loaded = activity_state.load_user(1234, 42)
+    assert loaded is not None
+    assert loaded.user_id == 42
+    assert loaded.buckets[0].amount == 3.0
+    assert loaded.buckets[0].kind == "text"
 
 
-def test_state_load_empty_yaml_returns_default(tmp_path, monkeypatch):
+def test_load_config_missing_returns_default(tmp_path, monkeypatch):
     monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
-    activity_state._cache.clear()
+    activity_state._config_cache.clear()
 
-    path = tmp_path / "activity_7777.yaml"
-    path.write_text("")
-
-    st = activity_state.load(7777)
-    assert st.guild_id == 7777
-    assert st.users == {}
+    meta = activity_state.load_config(9999)
+    assert meta.guild_id == 9999
 
 
-def test_state_load_uses_cache(tmp_path, monkeypatch):
+def test_load_user_missing_returns_none(tmp_path, monkeypatch):
     monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
-    activity_state._cache.clear()
+    activity_state._user_cache.clear()
 
-    st = ActivityGuildState(guild_id=5555, guild_name="Cached")
-    activity_state.save(st)
+    assert activity_state.load_user(9999, 42) is None
 
-    first = activity_state.load(5555)
-    second = activity_state.load(5555)
+
+def test_load_config_uses_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._config_cache.clear()
+
+    meta = ActivityGuildMeta(guild_id=5555, guild_name="Cached")
+    activity_state.save_config(meta)
+
+    first = activity_state.load_config(5555)
+    second = activity_state.load_config(5555)
     assert first is second
+
+
+def test_migration_from_old_combined_file(tmp_path, monkeypatch):
+    """Old activity_{guild_id}.yaml is split into config + per-user files on first load."""
+    import yaml
+
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._config_cache.clear()
+    activity_state._user_cache.clear()
+
+    old_data = {
+        "guild_id": 7777,
+        "guild_name": "Old Guild",
+        "config": {
+            "role_configs": [],
+            "channel_configs": [],
+            "lurker_role_id": None,
+            "lurker_role_name": "",
+            "viewer_role_id": None,
+            "viewer_role_name": "",
+        },
+        "users": {
+            99: {
+                "user_id": 99,
+                "buckets": [{"hour": 3600000, "kind": "text", "amount": 2.0}],
+            }
+        },
+    }
+    old_path = tmp_path / "activity_7777.yaml"
+    with open(old_path, "w") as f:
+        yaml.dump(old_data, f)
+
+    meta = activity_state.load_config(7777)
+    assert meta.guild_id == 7777
+    assert meta.guild_name == "Old Guild"
+
+    ua = activity_state.load_user(7777, 99)
+    assert ua is not None
+    assert ua.buckets[0].amount == 2.0
+
+    # Old file should be gone
+    assert not old_path.exists()
+    assert (tmp_path / "activity_config_7777.yaml").exists()
+    assert (tmp_path / "activity_user_7777_99.yaml").exists()
+
+
+def test_list_user_ids(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._user_cache.clear()
+
+    activity_state.save_user(1, 10, UserActivity(user_id=10, buckets=[]))
+    activity_state.save_user(1, 20, UserActivity(user_id=20, buckets=[]))
+    activity_state.save_user(
+        2, 10, UserActivity(user_id=10, buckets=[])
+    )  # different guild
+
+    ids = activity_state.list_user_ids(1)
+    assert sorted(ids) == [10, 20]
+
+
+def test_delete_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._user_cache.clear()
+
+    ua = UserActivity(user_id=42, buckets=[])
+    activity_state.save_user(1, 42, ua)
+    assert activity_state.load_user(1, 42) is not None
+
+    activity_state.delete_user(1, 42)
+    activity_state._user_cache.clear()
+    assert activity_state.load_user(1, 42) is None
+
+
+# ---------------------------------------------------------------------------- #
+#                            ContributionBucket validation                     #
+# ---------------------------------------------------------------------------- #
+
+
+def test_contribution_bucket_invalid_kind():
+    with pytest.raises(pydantic.ValidationError):
+        ContributionBucket(hour=3600, kind="invalid", amount=1.0)
+
+
+def test_contribution_bucket_unaligned_hour():
+    with pytest.raises(pydantic.ValidationError):
+        ContributionBucket(hour=3601, kind="text", amount=1.0)
+
+
+def test_contribution_bucket_aligned_hour_ok():
+    b = ContributionBucket(hour=3600, kind="text", amount=1.0)
+    assert b.hour == 3600
+
+
+def test_channel_config_zero_multiplier_allowed():
+    cc = ChannelConfig(channel_id=1, channel_name="silent", point_multiplier=0.0)
+    assert cc.point_multiplier == 0.0
+
+
+# ---------------------------------------------------------------------------- #
+#                            bucket_is_negligible                              #
+# ---------------------------------------------------------------------------- #
+
+
+def test_bucket_is_negligible_recent_not_negligible():
+    now = 1_000_000_000.0
+    hour = int(now) // 3600 * 3600
+    b = ContributionBucket(hour=hour, kind="text", amount=1.0)
+    assert not bucket_is_negligible(b, now, BASE_HALF_LIFE, 1.0)
+
+
+def test_bucket_is_negligible_old_is_negligible():
+    now = 1_000_000_000.0
+    old_hour = int(now - 110 * 24 * 3600) // 3600 * 3600
+    b = ContributionBucket(hour=old_hour, kind="text", amount=1.0)
+    assert bucket_is_negligible(b, now, BASE_HALF_LIFE, 1.0)
+
+
+def test_bucket_is_negligible_longer_half_life_delays_pruning():
+    now = 1_000_000_000.0
+    old_hour = int(now - 110 * 24 * 3600) // 3600 * 3600
+    b = ContributionBucket(hour=old_hour, kind="text", amount=1.0)
+    assert bucket_is_negligible(b, now, BASE_HALF_LIFE, 1.0)
+    assert not bucket_is_negligible(b, now, BASE_HALF_LIFE * 2, 1.0)
+
+
+def test_bucket_is_negligible_uses_prune_threshold():
+    """Max contribution just above PRUNE_THRESHOLD is not negligible."""
+    import math
+
+    now = 1_000_000_000.0
+    half_life = BASE_HALF_LIFE
+    # t_cross: age at which max contribution = PRUNE_THRESHOLD exactly
+    # max = 1/ln(2) * 0.5^(t/hl) = PRUNE_THRESHOLD
+    t_cross = half_life * math.log2(1.0 / (PRUNE_THRESHOLD * math.log(2)))
+    # Slightly newer than threshold → not negligible
+    newer_hour = int(now - t_cross * 0.98) // 3600 * 3600
+    assert not bucket_is_negligible(
+        ContributionBucket(hour=newer_hour, kind="text", amount=1.0),
+        now,
+        half_life,
+        1.0,
+    )
+    # Slightly older than threshold → negligible
+    older_hour = int(now - t_cross * 1.02) // 3600 * 3600
+    assert bucket_is_negligible(
+        ContributionBucket(hour=older_hour, kind="text", amount=1.0),
+        now,
+        half_life,
+        1.0,
+    )
+
+
+# ---------------------------------------------------------------------------- #
+#                            _prune_state return value                         #
+# ---------------------------------------------------------------------------- #
+
+
+def test_prune_returns_surviving_bucket_count(tmp_path, monkeypatch):
+    meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1, 2])
+    count = _prune_state(meta, {1: _fake_member(1)}, now)
+    assert count == 2
+
+
+def test_prune_returns_zero_when_all_pruned(tmp_path, monkeypatch):
+    meta, now = _setup_prune(tmp_path, monkeypatch, 1, [110])
+    count = _prune_state(meta, {1: _fake_member(1)}, now)
+    assert count == 0
+
+
+def test_prune_departed_user_not_counted(tmp_path, monkeypatch):
+    meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1])
+    count = _prune_state(meta, {}, now)
+    assert count == 0
+
+
+def test_prune_cleans_up_empty_user_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._user_cache.clear()
+    activity_state._config_cache.clear()
+
+    (tmp_path / "activity_user_1_77.yaml").write_text("")
+
+    meta = ActivityGuildMeta(guild_id=1)
+    _prune_state(meta, {77: _fake_member(77)}, 1_000_000_000.0)
+
+    activity_state._user_cache.clear()
+    assert activity_state.load_user(1, 77) is None
+    assert 77 not in activity_state.list_user_ids(1)
+
+
+# ---------------------------------------------------------------------------- #
+#                            list_user_ids robustness                          #
+# ---------------------------------------------------------------------------- #
+
+
+def test_list_user_ids_ignores_malformed_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._user_cache.clear()
+
+    activity_state.save_user(1, 10, UserActivity(user_id=10, buckets=[]))
+    (tmp_path / "activity_user_1_notanint.yaml").write_text("")
+
+    ids = activity_state.list_user_ids(1)
+    assert ids == [10]
+
+
+# ---------------------------------------------------------------------------- #
+#                            flush_dirty                                       #
+# ---------------------------------------------------------------------------- #
+
+
+def test_flush_dirty_returns_count(tmp_path, monkeypatch, clear_user_state):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+
+    _add_contribution(1, 42, "text", 1.0, now=1_000_000_000.0)
+    _add_contribution(1, 43, "text", 1.0, now=1_000_000_000.0)
+    count = activity_state.flush_dirty()
+    assert count == 2
+
+
+def test_flush_dirty_missing_cache_entry_cleaned_up(
+    tmp_path, monkeypatch, clear_user_state
+):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+
+    activity_state._dirty_users.add((1, 999))  # dirty but no cache entry
+
+    count = activity_state.flush_dirty()
+
+    assert count == 0
+    assert (1, 999) not in activity_state._dirty_users
+
+
+# ---------------------------------------------------------------------------- #
+#                            migration                                         #
+# ---------------------------------------------------------------------------- #
+
+
+def test_migration_empty_old_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._config_cache.clear()
+    activity_state._user_cache.clear()
+
+    old_path = tmp_path / "activity_8888.yaml"
+    old_path.write_text("")
+
+    meta = activity_state.load_config(8888)
+    assert meta.guild_id == 8888
+    assert not old_path.exists()
+
+
+# ---------------------------------------------------------------------------- #
+#                            _classify_members                                 #
+# ---------------------------------------------------------------------------- #
+
+
+def _fake_classify_member(user_id: int, role_ids=None, is_bot=False):
+    return SimpleNamespace(is_bot=is_bot, role_ids=role_ids or [], id=user_id)
+
+
+def test_classify_members_owner_is_immune(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._user_cache.clear()
+    activity_state._config_cache.clear()
+
+    meta = ActivityGuildMeta(guild_id=1)
+    now = 1_000_000_000.0
+    owner = _fake_classify_member(99)
+    other = _fake_classify_member(42)
+
+    immune, scored = _classify_members({99: owner, 42: other}, meta, now, owner_id=99)
+
+    assert len(immune) == 1
+    assert immune[0][0] is owner
+    assert immune[0][1] == "Guild Owner"
+    assert len(scored) == 1
+    assert scored[0][1] is other
+
+
+def test_classify_members_no_owner_id_owner_is_scored(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._user_cache.clear()
+    activity_state._config_cache.clear()
+
+    meta = ActivityGuildMeta(guild_id=1)
+    owner = _fake_classify_member(99)
+
+    immune, scored = _classify_members(
+        {99: owner}, meta, 1_000_000_000.0, owner_id=None
+    )
+
+    assert len(immune) == 0
+    assert len(scored) == 1
+
+
+def test_classify_members_immune_member_has_score(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._user_cache.clear()
+    activity_state._config_cache.clear()
+
+    now = 1_000_000_000.0
+    meta = ActivityGuildMeta(
+        guild_id=1,
+        config=ActivityGuildConfig(
+            role_configs=[RoleConfig(role_id=5, role_name="Staff", ignored=True)]
+        ),
+    )
+    hour = int(now) // 3600 * 3600
+    activity_state.save_user(
+        1,
+        50,
+        UserActivity(
+            user_id=50, buckets=[ContributionBucket(hour=hour, kind="text", amount=1.0)]
+        ),
+    )
+
+    member = _fake_classify_member(50, role_ids=[5])
+    immune, _ = _classify_members({50: member}, meta, now)
+
+    assert len(immune) == 1
+    _, role_name, score = immune[0]
+    assert role_name == "Staff"
+    assert score > 0.0
+
+
+# ---------------------------------------------------------------------------- #
+#                            _sync_lurker_role — owner skip                   #
+# ---------------------------------------------------------------------------- #
+
+
+async def test_sync_lurker_role_skips_owner(tmp_path, monkeypatch):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._user_cache.clear()
+    activity_state._config_cache.clear()
+
+    lurker_role_id = 999
+    owner_id = 88
+    now = 1_000_000_000.0
+
+    meta = ActivityGuildMeta(
+        guild_id=1,
+        config=ActivityGuildConfig(
+            lurker_role_id=lurker_role_id, lurker_role_name="Lurker"
+        ),
+    )
+
+    owner = SimpleNamespace(
+        is_bot=False,
+        id=owner_id,
+        role_ids=[],
+        display_name="Owner",
+        mention="<@88>",
+    )
+
+    bot_mock = MagicMock()
+    bot_mock.rest.add_role_to_member = AsyncMock()
+    bot_mock.rest.remove_role_from_member = AsyncMock()
+
+    gc = MagicMock()
+    gc.bot = bot_mock
+    gc.guild_id = 1
+    gc.name = "Test Guild"
+    gc.log = AsyncMock()
+
+    await _sync_lurker_role(gc, meta, {owner_id: owner}, now, owner_id)
+
+    bot_mock.rest.add_role_to_member.assert_not_called()
+    bot_mock.rest.remove_role_from_member.assert_not_called()

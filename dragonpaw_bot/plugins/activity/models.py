@@ -2,29 +2,46 @@
 
 from __future__ import annotations
 
+import enum
 import math
 import time
 
 import pydantic
 
-CONTRIBUTION_VALUES: dict[str, float] = {
-    "text": 1.0,
-    "media": 2.0,
-    "reaction": 0.1,
-    "vc": 0.1,  # per minute
+
+class ContributionKind(enum.StrEnum):
+    TEXT = "text"
+    MEDIA = "media"
+    REACTION = "reaction"
+    VC = "vc"
+
+
+CONTRIBUTION_VALUES: dict[ContributionKind, float] = {
+    ContributionKind.TEXT: 1.0,
+    ContributionKind.MEDIA: 2.0,
+    ContributionKind.REACTION: 0.1,
+    ContributionKind.VC: 0.1,  # per minute
 }
 
-BASE_HALF_LIFE = 7 * 24 * 3600  # 7 days in seconds
-ACTIVITY_FLOOR = 0.1
-PRUNE_DAYS = 30
+BASE_HALF_LIFE = 14 * 24 * 3600  # 14 days in seconds
+ACTIVITY_FLOOR = 0.3
+PRUNE_THRESHOLD = ACTIVITY_FLOOR * 0.1  # 0.01 — bucket is negligible at 1% of floor
+PRUNE_DAYS_MAX = 300  # hard cap; contribution-based pruning fires well before this
 
 
 class ContributionBucket(pydantic.BaseModel):
     """Hourly aggregate of contributions of the same kind."""
 
     hour: int  # Unix timestamp floored to hour boundary
-    kind: str  # "text" | "media" | "reaction" | "vc"
+    kind: ContributionKind
     amount: float = pydantic.Field(gt=0)  # sum of contributions in this hour
+
+    @pydantic.field_validator("hour")
+    @classmethod
+    def _hour_must_be_aligned(cls, v: int) -> int:
+        if v % 3600 != 0:
+            raise ValueError(f"hour must be aligned to 3600-second boundary, got {v}")
+        return v
 
 
 class UserActivity(pydantic.BaseModel):
@@ -43,7 +60,7 @@ class RoleConfig(pydantic.BaseModel):
 class ChannelConfig(pydantic.BaseModel):
     channel_id: int = pydantic.Field(gt=0)
     channel_name: str
-    point_multiplier: float = pydantic.Field(default=1.0, gt=0)
+    point_multiplier: float = pydantic.Field(default=1.0, ge=0)
 
 
 class ActivityGuildConfig(pydantic.BaseModel):
@@ -55,11 +72,37 @@ class ActivityGuildConfig(pydantic.BaseModel):
     viewer_role_name: str = ""
 
 
-class ActivityGuildState(pydantic.BaseModel):
+class ActivityGuildMeta(pydantic.BaseModel):
+    """Persisted guild-level config and metadata (no user data)."""
+
     guild_id: int = pydantic.Field(gt=0)
     guild_name: str = ""
     config: ActivityGuildConfig = pydantic.Field(default_factory=ActivityGuildConfig)
-    users: dict[int, UserActivity] = {}  # user_id → UserActivity
+
+
+class ActivityGuildState(pydantic.BaseModel):
+    """Legacy combined model — used only for migrating old YAML files. TODO: remove after migration cycle."""
+
+    guild_id: int = pydantic.Field(gt=0)
+    guild_name: str = ""
+    config: ActivityGuildConfig = pydantic.Field(default_factory=ActivityGuildConfig)
+    users: dict[int, UserActivity] = {}
+
+
+def bucket_is_negligible(
+    bucket: ContributionBucket,
+    now: float,
+    half_life: float,
+    contrib_mult: float,
+) -> bool:
+    """True when even at the best log_weight (position 0 = 1/ln(2)), the bucket's
+    contribution is below PRUNE_THRESHOLD. Safe to delete without affecting scores."""
+    t = now - bucket.hour
+    base = CONTRIBUTION_VALUES.get(bucket.kind, 1.0) * bucket.amount
+    max_contribution = (
+        base * (1.0 / math.log(2)) * contrib_mult * math.pow(0.5, t / half_life)
+    )
+    return max_contribution < PRUNE_THRESHOLD
 
 
 def calculate_score(
@@ -88,7 +131,7 @@ def calculate_score(
     half_life = BASE_HALF_LIFE * (1 + activity_bonus) * decay_mult
 
     # Group by kind
-    by_kind: dict[str, list[ContributionBucket]] = {}
+    by_kind: dict[ContributionKind, list[ContributionBucket]] = {}
     for b in buckets:
         by_kind.setdefault(b.kind, []).append(b)
 

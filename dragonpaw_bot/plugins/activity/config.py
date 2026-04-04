@@ -16,7 +16,7 @@ logger = structlog.get_logger(__name__)
 _ROLE_PRESETS: dict[str, tuple[str, float, float, bool]] = {
     "standard": ("Standard", 1.0, 1.0, False),
     "active": ("Active", 1.1, 1.3, False),
-    "veteran": ("Veteran", 1.2, 1.5, False),
+    "veteran": ("Veteran", 1.2, 1.7, False),
     "ignore": ("Ignore (staff/exempt)", 1.0, 1.0, True),
 }
 
@@ -58,18 +58,18 @@ class ActivityRoleAdd(
         preset_key = self.preset or "standard"
         label, contrib_mult, decay_mult, ignored = _ROLE_PRESETS[preset_key]
 
-        st = activity_state.load(int(ctx.guild_id))
-        st.guild_name = gc.name
+        meta = activity_state.load_config(int(ctx.guild_id))
+        meta.guild_name = gc.name
 
         # Upsert role config by role_id
         existing = next(
-            (rc for rc in st.config.role_configs if rc.role_id == int(self.role.id)),
+            (rc for rc in meta.config.role_configs if rc.role_id == int(self.role.id)),
             None,
         )
         if existing is not None:
-            st.config.role_configs.remove(existing)
+            meta.config.role_configs.remove(existing)
 
-        st.config.role_configs.append(
+        meta.config.role_configs.append(
             RoleConfig(
                 role_id=int(self.role.id),
                 role_name=self.role.name,
@@ -78,7 +78,7 @@ class ActivityRoleAdd(
                 ignored=ignored,
             )
         )
-        activity_state.save(st)
+        activity_state.save_config(meta)
 
         await ctx.respond(
             f"🐉 Role **{self.role.name}** set to preset **{label}**!"
@@ -115,21 +115,21 @@ class ActivityRoleRemove(
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
 
-        st = activity_state.load(int(ctx.guild_id))
-        before = len(st.config.role_configs)
-        st.config.role_configs = [
-            rc for rc in st.config.role_configs if rc.role_id != int(self.role.id)
+        meta = activity_state.load_config(int(ctx.guild_id))
+        before = len(meta.config.role_configs)
+        meta.config.role_configs = [
+            rc for rc in meta.config.role_configs if rc.role_id != int(self.role.id)
         ]
 
-        if len(st.config.role_configs) == before:
+        if len(meta.config.role_configs) == before:
             await ctx.respond(
                 f"🐉 **{self.role.name}** isn't configured — nothing to remove! 🐾",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
 
-        st.guild_name = gc.name
-        activity_state.save(st)
+        meta.guild_name = gc.name
+        activity_state.save_config(meta)
 
         await ctx.respond(
             f"🐉 Removed activity config for **{self.role.name}** 🐾",
@@ -159,29 +159,29 @@ class ActivityChannelAdd(
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
 
-        mult = max(0.01, self.multiplier)  # guard against zero/negative
-        st = activity_state.load(int(ctx.guild_id))
-        st.guild_name = gc.name
+        mult = max(0.0, self.multiplier)  # guard against negative
+        meta = activity_state.load_config(int(ctx.guild_id))
+        meta.guild_name = gc.name
 
         existing = next(
             (
                 cc
-                for cc in st.config.channel_configs
+                for cc in meta.config.channel_configs
                 if cc.channel_id == int(self.channel.id)
             ),
             None,
         )
         if existing is not None:
-            st.config.channel_configs.remove(existing)
+            meta.config.channel_configs.remove(existing)
 
-        st.config.channel_configs.append(
+        meta.config.channel_configs.append(
             ChannelConfig(
                 channel_id=int(self.channel.id),
                 channel_name=self.channel.name or str(self.channel.id),
                 point_multiplier=mult,
             )
         )
-        activity_state.save(st)
+        activity_state.save_config(meta)
 
         await ctx.respond(
             f"🐉 <#{self.channel.id}> set to **{mult}×** points 🐾",
@@ -210,23 +210,23 @@ class ActivityChannelRemove(
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
 
-        st = activity_state.load(int(ctx.guild_id))
-        before = len(st.config.channel_configs)
-        st.config.channel_configs = [
+        meta = activity_state.load_config(int(ctx.guild_id))
+        before = len(meta.config.channel_configs)
+        meta.config.channel_configs = [
             cc
-            for cc in st.config.channel_configs
+            for cc in meta.config.channel_configs
             if cc.channel_id != int(self.channel.id)
         ]
 
-        if len(st.config.channel_configs) == before:
+        if len(meta.config.channel_configs) == before:
             await ctx.respond(
                 f"🐉 <#{self.channel.id}> isn't configured — nothing to remove! 🐾",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
 
-        st.guild_name = gc.name
-        activity_state.save(st)
+        meta.guild_name = gc.name
+        activity_state.save_config(meta)
 
         await ctx.respond(
             f"🐉 Removed multiplier config for <#{self.channel.id}> 🐾",
@@ -251,13 +251,13 @@ class ActivityLurker(
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
 
-        st = activity_state.load(int(ctx.guild_id))
-        st.guild_name = gc.name
+        meta = activity_state.load_config(int(ctx.guild_id))
+        meta.guild_name = gc.name
 
         if self.role is None:
-            st.config.lurker_role_id = None
-            st.config.lurker_role_name = ""
-            activity_state.save(st)
+            meta.config.lurker_role_id = None
+            meta.config.lurker_role_name = ""
+            activity_state.save_config(meta)
             await ctx.respond(
                 "🐉 Lurker role cleared — I won't tag inactive members anymore 🐾",
                 flags=hikari.MessageFlag.EPHEMERAL,
@@ -271,9 +271,9 @@ class ActivityLurker(
         # Check bot can manage the role
         warning = await check_role_manageable(gc.bot, ctx.guild_id, self.role)
 
-        st.config.lurker_role_id = int(self.role.id)
-        st.config.lurker_role_name = self.role.name
-        activity_state.save(st)
+        meta.config.lurker_role_id = int(self.role.id)
+        meta.config.lurker_role_name = self.role.name
+        activity_state.save_config(meta)
 
         warn_suffix = f"\n⚠️ {warning}" if warning else ""
         await ctx.respond(
@@ -300,13 +300,13 @@ class ActivityViewer(
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
 
-        st = activity_state.load(int(ctx.guild_id))
-        st.guild_name = gc.name
+        meta = activity_state.load_config(int(ctx.guild_id))
+        meta.guild_name = gc.name
 
         if self.role is None:
-            st.config.viewer_role_id = None
-            st.config.viewer_role_name = ""
-            activity_state.save(st)
+            meta.config.viewer_role_id = None
+            meta.config.viewer_role_name = ""
+            activity_state.save_config(meta)
             await ctx.respond(
                 "🐉 Viewer role cleared — only Manage Server can use /activity commands now 🐾",
                 flags=hikari.MessageFlag.EPHEMERAL,
@@ -317,9 +317,9 @@ class ActivityViewer(
             )
             return
 
-        st.config.viewer_role_id = int(self.role.id)
-        st.config.viewer_role_name = self.role.name
-        activity_state.save(st)
+        meta.config.viewer_role_id = int(self.role.id)
+        meta.config.viewer_role_name = self.role.name
+        activity_state.save_config(meta)
 
         await ctx.respond(
             f"🐉 Viewer role set to **{self.role.name}** — members with this role can use /activity commands 🐾",
@@ -340,8 +340,8 @@ class ActivityStatus(
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
-        st = activity_state.load(int(ctx.guild_id))
-        cfg = st.config
+        meta = activity_state.load_config(int(ctx.guild_id))
+        cfg = meta.config
 
         # Roles section
         if cfg.role_configs:
@@ -386,7 +386,7 @@ class ActivityStatus(
         embed.add_field(name="Viewer Role", value=viewer_text, inline=False)
         embed.add_field(
             name="Tracked Members",
-            value=str(len(st.users)),
+            value=str(len(activity_state.list_user_ids(int(ctx.guild_id)))),
             inline=True,
         )
 

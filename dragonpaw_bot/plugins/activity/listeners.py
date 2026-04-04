@@ -13,6 +13,7 @@ import structlog
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     ContributionBucket,
+    ContributionKind,
     UserActivity,
     has_ignored_role,
 )
@@ -29,9 +30,6 @@ _URL_RE = re.compile(r"https?://", re.IGNORECASE)
 # guild_id → {user_id → join_timestamp}
 _vc_sessions: dict[int, dict[int, float]] = {}
 
-# Guilds with unsaved in-memory state changes
-_dirty_guilds: set[int] = set()
-
 
 def _has_media(message: hikari.Message) -> bool:
     return (
@@ -42,9 +40,9 @@ def _has_media(message: hikari.Message) -> bool:
 
 
 def _add_contribution(
-    state: activity_state.ActivityGuildState,
+    guild_id: int,
     user_id: int,
-    kind: str,
+    kind: ContributionKind,
     amount: float,
     now: float | None = None,
 ) -> None:
@@ -52,24 +50,34 @@ def _add_contribution(
     if now is None:
         now = time.time()
     hour = int(now) // 3600 * 3600
-    if user_id not in state.users:
-        state.users[user_id] = UserActivity(user_id=user_id)
-    buckets = state.users[user_id].buckets
-    for b in buckets:
+
+    ua = activity_state.load_user(guild_id, user_id)
+    if ua is None:
+        ua = UserActivity(user_id=user_id)
+        activity_state._user_cache[(guild_id, user_id)] = ua
+
+    for b in ua.buckets:
         if b.hour == hour and b.kind == kind:
             b.amount += amount
+            activity_state.mark_user_dirty(guild_id, user_id)
             return
-    buckets.append(ContributionBucket(hour=hour, kind=kind, amount=amount))
+
+    ua.buckets.append(ContributionBucket(hour=hour, kind=kind, amount=amount))
+    activity_state.mark_user_dirty(guild_id, user_id)
 
 
 def _ensure_guild_name(
-    st: activity_state.ActivityGuildState, bot: DragonpawBot, guild_id: int
+    meta: activity_state.ActivityGuildMeta, bot: DragonpawBot, guild_id: int
 ) -> None:
-    """Populate guild_name on state if it's missing (best-effort from cache)."""
-    if not st.guild_name:
+    """Populate guild_name on meta if it's missing (best-effort from cache)."""
+    if not meta.guild_name:
         guild = bot.cache.get_guild(guild_id)
         if guild:
-            st.guild_name = guild.name
+            meta.guild_name = guild.name
+            try:
+                activity_state.save_config(meta)
+            except Exception:
+                logger.warning("Failed to persist guild name", guild_id=guild_id)
 
 
 @loader.listener(hikari.GuildMessageCreateEvent)
@@ -87,8 +95,8 @@ async def _handle_message(event: hikari.GuildMessageCreateEvent) -> None:
 
     bot: DragonpawBot = event.app  # type: ignore[assignment]
     guild_id = int(event.guild_id)
-    st = activity_state.load(guild_id)
-    _ensure_guild_name(st, bot, guild_id)
+    meta = activity_state.load_config(guild_id)
+    _ensure_guild_name(meta, bot, guild_id)
 
     member = bot.cache.get_member(event.guild_id, event.author_id)
     if member is None:
@@ -99,7 +107,7 @@ async def _handle_message(event: hikari.GuildMessageCreateEvent) -> None:
         except hikari.HTTPError:
             logger.warning(
                 "Failed to fetch member for activity tracking",
-                guild=st.guild_name,
+                guild=meta.guild_name,
                 user_id=int(event.author_id),
             )
             return
@@ -108,20 +116,27 @@ async def _handle_message(event: hikari.GuildMessageCreateEvent) -> None:
     if not role_ids:
         return  # Not yet through onboarding
 
-    if has_ignored_role(role_ids, st.config.role_configs):
+    if has_ignored_role(role_ids, meta.config.role_configs):
         return
 
-    kind = "media" if _has_media(event.message) else "text"
+    kind = (
+        ContributionKind.MEDIA if _has_media(event.message) else ContributionKind.TEXT
+    )
 
     # Per-channel point multiplier
     channel_cfg = next(
-        (c for c in st.config.channel_configs if c.channel_id == int(event.channel_id)),
+        (
+            c
+            for c in meta.config.channel_configs
+            if c.channel_id == int(event.channel_id)
+        ),
         None,
     )
     amount = channel_cfg.point_multiplier if channel_cfg else 1.0
+    if amount == 0:
+        return
 
-    _add_contribution(st, int(event.author_id), kind, amount)
-    _dirty_guilds.add(guild_id)
+    _add_contribution(guild_id, int(event.author_id), kind, amount)
 
 
 @loader.listener(hikari.GuildReactionAddEvent)
@@ -136,8 +151,8 @@ async def on_reaction(event: hikari.GuildReactionAddEvent) -> None:
 async def _handle_reaction(event: hikari.GuildReactionAddEvent) -> None:
     bot: DragonpawBot = event.app  # type: ignore[assignment]
     guild_id = int(event.guild_id)
-    st = activity_state.load(guild_id)
-    _ensure_guild_name(st, bot, guild_id)
+    meta = activity_state.load_config(guild_id)
+    _ensure_guild_name(meta, bot, guild_id)
 
     member = bot.cache.get_member(event.guild_id, event.user_id)
     if member is None:
@@ -148,7 +163,7 @@ async def _handle_reaction(event: hikari.GuildReactionAddEvent) -> None:
         except hikari.HTTPError:
             logger.warning(
                 "Failed to fetch member for activity tracking",
-                guild=st.guild_name,
+                guild=meta.guild_name,
                 user_id=int(event.user_id),
             )
             return
@@ -160,11 +175,22 @@ async def _handle_reaction(event: hikari.GuildReactionAddEvent) -> None:
     if not role_ids:
         return
 
-    if has_ignored_role(role_ids, st.config.role_configs):
+    if has_ignored_role(role_ids, meta.config.role_configs):
         return
 
-    _add_contribution(st, int(event.user_id), "reaction", 1.0)
-    _dirty_guilds.add(guild_id)
+    channel_cfg = next(
+        (
+            c
+            for c in meta.config.channel_configs
+            if c.channel_id == int(event.channel_id)
+        ),
+        None,
+    )
+    amount = channel_cfg.point_multiplier if channel_cfg else 1.0
+    if amount == 0:
+        return
+
+    _add_contribution(guild_id, int(event.user_id), ContributionKind.REACTION, amount)
 
 
 @loader.listener(hikari.VoiceStateUpdateEvent)
@@ -212,14 +238,29 @@ async def _handle_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> Non
                         member = None
 
                 if member and not member.is_bot:
-                    st = activity_state.load(guild_id)
-                    _ensure_guild_name(st, bot, guild_id)
+                    meta = activity_state.load_config(guild_id)
+                    _ensure_guild_name(meta, bot, guild_id)
                     role_ids = [int(r) for r in member.role_ids]
-                    if role_ids and not has_ignored_role(
-                        role_ids, st.config.role_configs
+                    channel_cfg = next(
+                        (
+                            c
+                            for c in meta.config.channel_configs
+                            if c.channel_id == int(old_channel)
+                        ),
+                        None,
+                    )
+                    channel_mult = channel_cfg.point_multiplier if channel_cfg else 1.0
+                    if (
+                        role_ids
+                        and not has_ignored_role(role_ids, meta.config.role_configs)
+                        and channel_mult != 0
                     ):
-                        _add_contribution(st, user_id, "vc", minutes)
-                        _dirty_guilds.add(guild_id)
+                        _add_contribution(
+                            guild_id,
+                            user_id,
+                            ContributionKind.VC,
+                            minutes * channel_mult,
+                        )
 
     # Join (or switch to new channel): start tracking
     if new_channel is not None:

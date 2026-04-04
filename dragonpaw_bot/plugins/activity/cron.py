@@ -11,12 +11,13 @@ import structlog
 
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.activity import state as activity_state
-from dragonpaw_bot.plugins.activity.listeners import _dirty_guilds
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
-    PRUNE_DAYS,
-    ActivityGuildState,
+    BASE_HALF_LIFE,
+    PRUNE_DAYS_MAX,
+    ActivityGuildMeta,
     best_role_config,
+    bucket_is_negligible,
     calculate_score,
     has_ignored_role,
 )
@@ -30,14 +31,10 @@ loader = lightbulb.Loader()
 
 @loader.task(lightbulb.crontrigger("20 * * * *"))
 async def activity_flush(bot: hikari.GatewayBot) -> None:
-    """Hourly task: flush dirty in-memory state to disk."""
-    bot = cast("DragonpawBot", bot)
-    for guild_id in list(_dirty_guilds):
-        st = activity_state._cache.get(guild_id)
-        if st is not None:
-            activity_state.save(st)
-            logger.debug("Activity state flushed", guild=st.guild_name)
-        _dirty_guilds.discard(guild_id)
+    """Hourly task: flush dirty in-memory user state to disk."""
+    flushed = activity_state.flush_dirty()
+    if flushed:
+        logger.debug("Activity state flushed", users_written=flushed)
 
 
 @loader.task(lightbulb.crontrigger("15 4 * * *"))
@@ -56,7 +53,7 @@ async def activity_daily_cron(bot: hikari.GatewayBot) -> None:
 
 async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     gc = GuildContext.from_guild(bot, guild)
-    st = activity_state.load(int(guild.id))
+    meta = activity_state.load_config(int(guild.id))
     now = time.time()
 
     # Fetch members once for both prune and lurker sync
@@ -71,59 +68,90 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
         )
         return
 
-    _prune_state(st, set(members.keys()), now)
+    bucket_count = _prune_state(meta, members, now)
 
-    if st.config.lurker_role_id:
-        bucket_count = _guild_bucket_count(st)
+    if meta.config.lurker_role_id:
         if bucket_count < 7 * 24:
             logger.debug(
                 "Skipping lurker sync — not enough history yet",
-                guild=st.guild_name,
+                guild=meta.guild_name,
                 bucket_count=bucket_count,
             )
         else:
-            await _sync_lurker_role(bot, gc, st, members, now)
+            await _sync_lurker_role(gc, meta, members, now, int(guild.owner_id))
 
 
-def _guild_bucket_count(st: ActivityGuildState) -> int:
-    """Return the total number of contribution buckets across all users."""
-    return sum(len(u.buckets) for u in st.users.values())
-
-
-def _prune_state(st: ActivityGuildState, member_ids: set[int], now: float) -> None:
-    cutoff = now - PRUNE_DAYS * 24 * 3600
-    to_delete: list[int] = []
+def _prune_state(
+    meta: ActivityGuildMeta,
+    members: dict[int, hikari.Member],
+    now: float,
+) -> int:
+    """Prune old buckets and departed users. Returns total remaining bucket count."""
+    cutoff = now - PRUNE_DAYS_MAX * 24 * 3600
+    removed_users = 0
     changed = False
+    total_buckets = 0
 
-    for user_id, user_activity in list(st.users.items()):
-        original_count = len(user_activity.buckets)
-        user_activity.buckets = [b for b in user_activity.buckets if b.hour >= cutoff]
-        if user_id not in member_ids or not user_activity.buckets:
-            to_delete.append(user_id)
-            changed = True
-        elif len(user_activity.buckets) < original_count:
-            changed = True
+    for user_id in activity_state.list_user_ids(meta.guild_id):
+        try:
+            if user_id not in members:
+                activity_state.delete_user(meta.guild_id, user_id)
+                removed_users += 1
+                changed = True
+                continue
 
-    for user_id in to_delete:
-        del st.users[user_id]
+            member = members[user_id]
+            role_ids = [int(r) for r in member.role_ids]
+            rc = best_role_config(role_ids, meta.config.role_configs)
+            half_life = BASE_HALF_LIFE * (rc.decay_multiplier if rc else 1.0)
+            cm = rc.contribution_multiplier if rc else 1.0
+
+            ua = activity_state.load_user(meta.guild_id, user_id)
+            if ua is None:
+                activity_state.delete_user(meta.guild_id, user_id)
+                changed = True
+                continue
+
+            original_count = len(ua.buckets)
+            ua.buckets = [
+                b
+                for b in ua.buckets
+                if b.hour >= cutoff and not bucket_is_negligible(b, now, half_life, cm)
+            ]
+
+            if not ua.buckets:
+                activity_state.delete_user(meta.guild_id, user_id)
+                removed_users += 1
+                changed = True
+            else:
+                total_buckets += len(ua.buckets)
+                if len(ua.buckets) < original_count:
+                    activity_state.save_user(meta.guild_id, user_id, ua)
+                    changed = True
+        except Exception:
+            logger.exception(
+                "Error pruning user activity — skipping",
+                guild=meta.guild_name,
+                user_id=user_id,
+            )
 
     if changed:
-        activity_state.save(st)
         logger.debug(
             "Activity pruned",
-            guild=st.guild_name,
-            removed_users=len(to_delete),
+            guild=meta.guild_name,
+            removed_users=removed_users,
         )
+    return total_buckets
 
 
 async def _sync_lurker_role(
-    bot: DragonpawBot,
     gc: GuildContext,
-    st: ActivityGuildState,
+    meta: ActivityGuildMeta,
     members: dict[int, hikari.Member],
     now: float,
+    owner_id: int,
 ) -> None:
-    lurker_role_id = st.config.lurker_role_id
+    lurker_role_id = meta.config.lurker_role_id
     assert lurker_role_id
 
     added: list[str] = []
@@ -132,14 +160,16 @@ async def _sync_lurker_role(
     for member in members.values():
         if member.is_bot:
             continue
+        if int(member.id) == owner_id:
+            continue
         role_ids = [int(r) for r in member.role_ids]
-        if not role_ids or has_ignored_role(role_ids, st.config.role_configs):
+        if not role_ids or has_ignored_role(role_ids, meta.config.role_configs):
             continue
 
-        user_activity = st.users.get(int(member.id))
-        buckets = user_activity.buckets if user_activity else []
+        ua = activity_state.load_user(meta.guild_id, int(member.id))
+        buckets = ua.buckets if ua is not None else []
         score = calculate_score(
-            buckets, best_role_config(role_ids, st.config.role_configs), now=now
+            buckets, best_role_config(role_ids, meta.config.role_configs), now=now
         )
         should_be_lurker = score < ACTIVITY_FLOOR
         has_lurker = lurker_role_id in role_ids
@@ -147,7 +177,7 @@ async def _sync_lurker_role(
         if (
             should_be_lurker
             and not has_lurker
-            and await _set_lurker(bot, gc, member, lurker_role_id, add=True)
+            and await _set_lurker(gc, member, lurker_role_id, add=True)
         ):
             added.append(member.display_name)
             logger.info(
@@ -159,7 +189,7 @@ async def _sync_lurker_role(
         elif (
             not should_be_lurker
             and has_lurker
-            and await _set_lurker(bot, gc, member, lurker_role_id, add=False)
+            and await _set_lurker(gc, member, lurker_role_id, add=False)
         ):
             removed.append(member.display_name)
             logger.info(
@@ -179,7 +209,6 @@ async def _sync_lurker_role(
 
 
 async def _set_lurker(
-    bot: DragonpawBot,
     gc: GuildContext,
     member: hikari.Member,
     lurker_role_id: int,
@@ -191,9 +220,9 @@ async def _set_lurker(
     preposition = "to" if add else "from"
     try:
         if add:
-            await bot.rest.add_role_to_member(gc.guild_id, member.id, lurker_role_id)
+            await gc.bot.rest.add_role_to_member(gc.guild_id, member.id, lurker_role_id)
         else:
-            await bot.rest.remove_role_from_member(
+            await gc.bot.rest.remove_role_from_member(
                 gc.guild_id, member.id, lurker_role_id
             )
     except hikari.NotFoundError:

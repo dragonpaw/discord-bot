@@ -14,7 +14,7 @@ from dragonpaw_bot.context import NotAuthorized
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
-    ActivityGuildState,
+    ActivityGuildMeta,
     best_role_config,
     calculate_score,
     has_ignored_role,
@@ -45,47 +45,45 @@ def activity_viewer_only(
         hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD
     ):
         return
-    st = activity_state.load(int(ctx.guild_id))
-    if st.config.viewer_role_id is None:
+    meta = activity_state.load_config(int(ctx.guild_id))
+    if meta.config.viewer_role_id is None:
         raise NotAuthorized()
-    if st.config.viewer_role_id not in {int(r) for r in ctx.member.role_ids}:
-        raise NotAuthorized
+    if meta.config.viewer_role_id not in {int(r) for r in ctx.member.role_ids}:
+        raise NotAuthorized()
 
 
 def _classify_members(
     member_map: dict[int, hikari.Member],
-    st: ActivityGuildState,
+    meta: ActivityGuildMeta,
     now: float,
-) -> tuple[list[tuple[hikari.Member, str]], list[tuple[float, hikari.Member]]]:
-    """Split non-bot members into immune (with role name) and scored lists."""
-    immune: list[tuple[hikari.Member, str]] = []
+    owner_id: int | None = None,
+) -> tuple[list[tuple[hikari.Member, str, float]], list[tuple[float, hikari.Member]]]:
+    """Split non-bot members into immune (with role name and score) and scored lists."""
+    immune: list[tuple[hikari.Member, str, float]] = []
     scored: list[tuple[float, hikari.Member]] = []
     for member in member_map.values():
         if member.is_bot:
             continue
         role_ids = [int(r) for r in member.role_ids]
-        immune_role = has_ignored_role(role_ids, st.config.role_configs)
-        if immune_role is not None:
-            immune.append((member, immune_role))
-            continue
-        user_activity = st.users.get(int(member.id))
-        if user_activity is not None:
-            buckets = user_activity.buckets
-        else:
-            buckets = []
-        scored.append(
-            (
-                calculate_score(
-                    buckets, best_role_config(role_ids, st.config.role_configs), now=now
-                ),
-                member,
-            )
+        immune_role = has_ignored_role(role_ids, meta.config.role_configs)
+        if immune_role is None and owner_id is not None and int(member.id) == owner_id:
+            immune_role = "Guild Owner"
+        ua = activity_state.load_user(meta.guild_id, int(member.id))
+        buckets = ua.buckets if ua is not None else []
+        score = calculate_score(
+            buckets,
+            best_role_config(role_ids, meta.config.role_configs),
+            now=now,
         )
+        if immune_role is not None:
+            immune.append((member, immune_role, score))
+        else:
+            scored.append((score, member))
     return immune, scored
 
 
 def _build_report_lines(
-    immune_members: list[tuple[hikari.Member, str]],
+    immune_members: list[tuple[hikari.Member, str, float]],
     scored_members: list[tuple[float, hikari.Member]],
 ) -> list[str]:
     """Build display lines sorted alphabetically by display name."""
@@ -99,10 +97,11 @@ def _build_report_lines(
     score_by_id: dict[int, float] = {
         int(member.id): score for score, member in scored_members
     }
-    immune_role_by_id: dict[int, str] = {
-        int(member.id): role_name for member, role_name in immune_members
+    immune_by_id: dict[int, tuple[str, float]] = {
+        int(member.id): (role_name, score)
+        for member, role_name, score in immune_members
     }
-    all_members: list[hikari.Member] = [m for m, _ in immune_members] + [
+    all_members: list[hikari.Member] = [m for m, _, _ in immune_members] + [
         m for _, m in scored_members
     ]
     all_members.sort(key=lambda m: m.display_name.lower())
@@ -111,9 +110,8 @@ def _build_report_lines(
     for member in all_members:
         member_id = int(member.id)
         if member_id not in score_by_id:
-            lines.append(
-                f"🛡️ {member.mention} — Immune ({immune_role_by_id[member_id]})"
-            )
+            role_name, score = immune_by_id[member_id]
+            lines.append(f"🛡️ {member.mention} — Immune ({role_name}) — {score:.2f}")
             continue
         score = score_by_id[member_id]
         medal = medal_map.get(member_id)
@@ -175,15 +173,22 @@ class ActivityScore(
                 )
                 return
 
-        st = activity_state.load(int(ctx.guild_id))
+        meta = activity_state.load_config(int(ctx.guild_id))
         role_ids = [int(r) for r in member.role_ids]
-        role_cfg = best_role_config(role_ids, st.config.role_configs)
+        role_cfg = best_role_config(role_ids, meta.config.role_configs)
 
-        user_activity = st.users.get(int(member.id))
-        buckets = user_activity.buckets if user_activity else []
+        ua = activity_state.load_user(meta.guild_id, int(member.id))
+        buckets = ua.buckets if ua is not None else []
         score = calculate_score(buckets, role_cfg, now=time.time())
 
-        immune_role = has_ignored_role(role_ids, st.config.role_configs)
+        guild = bot.cache.get_guild(ctx.guild_id) or await bot.rest.fetch_guild(
+            ctx.guild_id
+        )
+        owner_id = int(guild.owner_id)
+
+        immune_role = has_ignored_role(role_ids, meta.config.role_configs)
+        if immune_role is None and int(member.id) == owner_id:
+            immune_role = "Guild Owner"
         if immune_role is not None:
             status_line = f"🛡️ Immune ({immune_role})"
         elif score >= ACTIVITY_FLOOR:
@@ -208,7 +213,7 @@ class ActivityScore(
         )
         logger.info(
             "Activity score checked",
-            guild=st.guild_name,
+            guild=meta.guild_name,
             target=member.display_name,
             score=score,
         )
@@ -230,21 +235,27 @@ class ActivityReport(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
-        st = activity_state.load(int(ctx.guild_id))
+        meta = activity_state.load_config(int(ctx.guild_id))
 
         member_map: dict[int, hikari.Member] = {}
         try:
             async for member in bot.rest.fetch_members(ctx.guild_id):
                 member_map[int(member.id)] = member
         except hikari.HTTPError:
-            logger.warning("Failed to fetch members for report", guild=st.guild_name)
+            logger.warning("Failed to fetch members for report", guild=meta.guild_name)
             await ctx.edit_response(
                 response_id,
                 content="🐉 Couldn't fetch member list right now — try again in a moment! 🐾",
             )
             return
 
-        immune_members, scored_members = _classify_members(member_map, st, time.time())
+        guild = bot.cache.get_guild(ctx.guild_id) or await bot.rest.fetch_guild(
+            ctx.guild_id
+        )
+        owner_id = int(guild.owner_id)
+        immune_members, scored_members = _classify_members(
+            member_map, meta, time.time(), owner_id
+        )
 
         if not immune_members and not scored_members:
             await ctx.edit_response(
@@ -266,7 +277,7 @@ class ActivityReport(
         )
         logger.info(
             "Activity report viewed",
-            guild=st.guild_name,
+            guild=meta.guild_name,
             member_count=len(lines),
         )
 
