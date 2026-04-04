@@ -123,6 +123,30 @@ async def on_member_update(event: hikari.MemberUpdateEvent) -> None:
     if hikari.Snowflake(st.member_role_id) not in event.member.role_ids:
         return
 
+    # Check the audit log to find who assigned the role
+    actor_id: hikari.Snowflake | None = None
+    try:
+        audit_log = await bot.rest.fetch_audit_log(
+            event.guild_id,
+            event_type=hikari.AuditLogEventType.MEMBER_ROLE_UPDATE,
+        )
+        matching = [
+            e
+            for page in audit_log
+            for e in page.entries.values()
+            if e.target_id == event.member.id
+        ]
+        if matching:
+            actor_id = max(matching, key=lambda e: e.id).user_id
+    except hikari.HTTPError:
+        logger.warning(
+            "Failed to fetch audit log for role assignment",
+            user=event.member.display_name,
+        )
+
+    if actor_id == bot.user_id:
+        return  # Bot's own approval — already handled in handle_approve_modal
+
     # They now have the member role — remove from onboarding
     gc = GuildContext.from_guild(
         bot,
@@ -135,9 +159,10 @@ async def on_member_update(event: hikari.MemberUpdateEvent) -> None:
     st.members = [m for m in st.members if m.user_id != int(event.member.id)]
     validation_state.save(st)
 
+    by_whom = f" — role given by <@{actor_id}>" if actor_id else ""
     await gc.log(
         f"*happy snort* Dropped {event.member.mention} from onboarding — "
-        f"they already have the member role! 🐉"
+        f"they already have the member role{by_whom}! 🐉"
     )
     logger.info(
         "Dropped member from onboarding (already has member role)",
@@ -438,6 +463,9 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
 
     user_id = hikari.Snowflake(member_entry.user_id)
 
+    st.members = [m for m in st.members if m.channel_id != channel_id]
+    validation_state.save(st)
+
     try:
         await bot.rest.edit_member(interaction.guild_id, user_id, nickname=name)
     except hikari.ForbiddenError:
@@ -470,9 +498,6 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
             await gc.log(
                 f"⚠️ Something went wrong assigning the member role to <@{user_id}> — check the logs! 🐉"
             )
-
-    st.members = [m for m in st.members if m.channel_id != channel_id]
-    validation_state.save(st)
 
     bot_st = bot.state(interaction.guild_id)
     general_channel_id = bot_st.general_channel_id if bot_st else None

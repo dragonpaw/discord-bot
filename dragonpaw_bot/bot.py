@@ -73,14 +73,17 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 STATE_DIR = ROOT_DIR / "state"
 
 OAUTH_PERMISSIONS = (
-    hikari.Permissions.SEND_MESSAGES
-    | hikari.Permissions.MANAGE_CHANNELS  # tickets/validation channel creation
-    | hikari.Permissions.MANAGE_ROLES
-    | hikari.Permissions.MANAGE_MESSAGES
-    | hikari.Permissions.MANAGE_NICKNAMES  # validation: set approved nickname
-    | hikari.Permissions.READ_MESSAGE_HISTORY
-    | hikari.Permissions.KICK_MEMBERS  # validation: auto-kick unvalidated members
-).value
+    (
+        hikari.Permissions.SEND_MESSAGES
+        | hikari.Permissions.MANAGE_CHANNELS  # tickets/validation channel creation
+        | hikari.Permissions.MANAGE_ROLES
+        | hikari.Permissions.MANAGE_MESSAGES
+        | hikari.Permissions.MANAGE_NICKNAMES  # validation: set approved nickname
+        | hikari.Permissions.READ_MESSAGE_HISTORY
+        | hikari.Permissions.KICK_MEMBERS  # validation: auto-kick unvalidated members
+        | hikari.Permissions.VIEW_AUDIT_LOG  # validation: detect who manually assigned member role
+    ).value
+)
 CLIENT_ID = environ["CLIENT_ID"]
 
 
