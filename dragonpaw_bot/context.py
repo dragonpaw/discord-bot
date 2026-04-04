@@ -184,7 +184,7 @@ class GuildContext:
         """Create a private text channel visible only to specified users and roles.
 
         Denies @everyone VIEW_CHANNEL, grants the bot MANAGE_MESSAGES, grants each
-        user_id and extra_role VIEW_CHANNEL + SEND_MESSAGES + READ_MESSAGE_HISTORY.
+        user_id and extra_role VIEW_CHANNEL + SEND_MESSAGES + READ_MESSAGE_HISTORY + ATTACH_FILES.
         Logs and re-raises on any hikari.HTTPError.
         """
         overwrites: list[hikari.PermissionOverwrite] = [
@@ -204,6 +204,7 @@ class GuildContext:
                         hikari.Permissions.VIEW_CHANNEL
                         | hikari.Permissions.SEND_MESSAGES
                         | hikari.Permissions.MANAGE_MESSAGES
+                        | hikari.Permissions.ATTACH_FILES
                     ),
                     deny=hikari.Permissions.NONE,
                 )
@@ -216,6 +217,7 @@ class GuildContext:
                     hikari.Permissions.VIEW_CHANNEL
                     | hikari.Permissions.SEND_MESSAGES
                     | hikari.Permissions.READ_MESSAGE_HISTORY
+                    | hikari.Permissions.ATTACH_FILES
                 ),
                 deny=hikari.Permissions.NONE,
             )
@@ -229,6 +231,7 @@ class GuildContext:
                     hikari.Permissions.VIEW_CHANNEL
                     | hikari.Permissions.SEND_MESSAGES
                     | hikari.Permissions.READ_MESSAGE_HISTORY
+                    | hikari.Permissions.ATTACH_FILES
                 ),
                 deny=hikari.Permissions.NONE,
             )

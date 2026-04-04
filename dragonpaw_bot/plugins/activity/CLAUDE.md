@@ -44,7 +44,7 @@ Times after last activity for score to drop below `ACTIVITY_FLOOR = 0.3`, assumi
 
 ### Event Listeners
 
-All three listeners skip the guild owner and members with ignored roles. If a channel's `point_multiplier` is 0, the event is silently ignored for all contribution types.
+All three listeners skip bots. If a channel's `point_multiplier` is 0, the event is silently ignored for all contribution types. Activity is recorded for all members regardless of role, including immune/ignored roles and the guild owner.
 
 - **`GuildMessageCreateEvent`** — skips bots, skips members with no roles (not through onboarding). Kind: `ContributionKind.MEDIA` if message has attachments/URLs/stickers, else `ContributionKind.TEXT`. Amount = per-channel `point_multiplier` (default 1.0).
 - **`GuildReactionAddEvent`** — same guards. Kind: `ContributionKind.REACTION`. Amount = per-channel `point_multiplier` (default 1.0).
@@ -85,6 +85,7 @@ Both require the `activity_viewer_only` hook: passes if the invoker has `ADMINIS
 
 ### Cron Tasks
 
+- **On shutdown (`StoppingEvent`):** `on_stopping` — flushes all remaining dirty in-memory user state to disk before the bot exits.
 - **Hourly (`:20`):** `activity_flush` — flushes dirty in-memory user state to disk.
 - **Daily (4:15am UTC):** `activity_daily_cron`:
   1. **Prune:** Per-user contribution-based bucket pruning (see above). Remove departed users.

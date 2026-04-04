@@ -74,11 +74,12 @@ STATE_DIR = ROOT_DIR / "state"
 
 OAUTH_PERMISSIONS = (
     hikari.Permissions.SEND_MESSAGES
+    | hikari.Permissions.MANAGE_CHANNELS  # tickets/validation channel creation
     | hikari.Permissions.MANAGE_ROLES
     | hikari.Permissions.MANAGE_MESSAGES
-    | hikari.Permissions.READ_MESSAGE_HISTORY  # Needed to find own old messages
-    | hikari.Permissions.KICK_MEMBERS
-    | hikari.Permissions.USE_APPLICATION_COMMANDS
+    | hikari.Permissions.MANAGE_NICKNAMES  # validation: set approved nickname
+    | hikari.Permissions.READ_MESSAGE_HISTORY
+    | hikari.Permissions.KICK_MEMBERS  # validation: auto-kick unvalidated members
 ).value
 CLIENT_ID = environ["CLIENT_ID"]
 

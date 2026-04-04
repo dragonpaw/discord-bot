@@ -29,6 +29,14 @@ logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
 
 
+@loader.listener(hikari.StoppingEvent)
+async def on_stopping(_: hikari.StoppingEvent) -> None:
+    """Flush any unsaved activity state to disk on shutdown."""
+    flushed = activity_state.flush_dirty()
+    if flushed:
+        logger.info("Activity state flushed on shutdown", users_written=flushed)
+
+
 @loader.task(lightbulb.crontrigger("20 * * * *"))
 async def activity_flush(bot: hikari.GatewayBot) -> None:
     """Hourly task: flush dirty in-memory user state to disk."""
