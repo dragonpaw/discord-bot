@@ -233,12 +233,11 @@ class ActivityScore(
             ),
             color=SOLARIZED_CYAN,
         )
-        embed.set_image("attachment://activity_chart.png")
+        embed.set_image(chart)
         await ctx.edit_response(
             response_id,
             content="",
             embed=embed,
-            attachments=[chart],
         )
         logger.info(
             "Activity score checked",
