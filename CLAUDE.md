@@ -14,7 +14,7 @@ The bot's persona is a cute, enthusiastic little hungry dragon who loves to snac
 
 ## Project Overview
 
-A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikari-lightbulb v3** framework. It provides features for Discord servers: select-menu-based role assignment, a lobby/welcome system with optional click-through rules, and a 52-week guided journal program (SubDay).
+A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikari-lightbulb v3** framework. It provides features for Discord servers: member validation/onboarding, select-menu role assignment, activity tracking with lurker role sync, a 52-week guided journal program (SubDay), birthday tracking, media-only channel enforcement, auto-expiry channel cleanup, introductions channel management, and private support tickets.
 
 ## Build & Run Commands
 
@@ -45,14 +45,17 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **Extensions** (loaded via `client.load_extensions` during `StartingEvent`):
 
-- **`plugins/role_menus/`** — Posts embed menus with text select menus (dropdowns) in a designated channel. Handles component interactions to assign/remove Discord roles. Supports single-select and multi-select menus. See `plugins/role_menus/CLAUDE.md` for details. Multi-file plugin with models, commands, state persistence, and constants.
-- **`plugins/lobby.py`** — Handles new member joins: auto-assigns a role, posts welcome messages, and optionally shows server rules with an "I agree" button that removes the lobby role.
+- **`plugins/validation/`** — Full member onboarding and age-verification flow. New members click rules, submit photos in a private channel, staff approves. Hourly cron sends reminders and auto-kicks after max reminders. See `plugins/validation/CLAUDE.md` for details.
+- **`plugins/tickets/`** — Private support ticket channels via `/ticket`. Staff pinged on open; anyone in channel can close or add users. See `plugins/tickets/CLAUDE.md` for details.
+- **`plugins/role_menus/`** — Posts embed menus with text select menus (dropdowns) in a designated channel. Handles component interactions to assign/remove Discord roles. Supports single-select and multi-select menus. See `plugins/role_menus/CLAUDE.md` for details.
+- **`plugins/activity/`** — Tracks member engagement (messages, reactions, VC time) with exponential decay scoring. Daily lurker role sync. Hourly state flush. See `plugins/activity/CLAUDE.md` for details.
 - **`plugins/subday/`** — 52-week guided journal program ("Where I am Led"). See `plugins/subday/CLAUDE.md` for details. Multi-file plugin with models, commands, cron scheduler, prompt parser, and state persistence.
 - **`plugins/birthdays/`** — Birthday tracking with announcements and wishlists. See `plugins/birthdays/CLAUDE.md` for details. Multi-file plugin with models, commands, daily cron task, and state persistence.
+- **`plugins/intros/`** — Manages a server introductions channel. Daily cron removes posts from departed members. Weekly "naughty list" cron posts missing-intros summary. See `plugins/intros/CLAUDE.md` for details.
 - **`plugins/media_channels/`** — Enforces media-only policy in configured channels; hourly cleanup cron. See `plugins/media_channels/CLAUDE.md` for details.
 - **`plugins/channel_cleanup/`** — Auto-deletes old messages from configured channels via hourly cron. See `plugins/channel_cleanup/CLAUDE.md` for details.
 
-**`/config` command group** — Defined in `bot.py` (main loader) and extended by each plugin's `config.py`. Each plugin that needs admin configuration exposes a `register(subgroup)` function in `plugin_dir/config.py`; `bot.py` imports these and wires them into the `/config` group. Subgroups: `/config bot` (logging, defined in `bot.py`), `/config media` (media channels), `/config cleanup` (channel cleanup), `/config subday` (SubDay journal), `/config birthday` (birthday tracking), `/config roles` (role menus).
+**`/config` command group** — Defined in `bot.py` (main loader) and extended by each plugin's `config.py`. Each plugin that needs admin configuration exposes a `register(subgroup)` function in `plugin_dir/config.py`; `bot.py` imports these and wires them into the `/config` group. Subgroups: `/config channels` (log + general channel, defined in `bot.py`), `/config media` (media channels), `/config cleanup` (channel cleanup), `/config intros` (introductions channel), `/config subday` (SubDay journal), `/config birthday` (birthday tracking), `/config roles` (role menus), `/config tickets` (support tickets), `/config validation` (member validation), `/config activity` (activity tracker).
 
 **`duration.py`** — Shared `parse_duration_minutes()` and `format_duration()` helpers used by plugin config commands.
 

@@ -4,7 +4,7 @@ Auto-deletes messages older than a configured duration from any channel. Runs ho
 
 ### Configuration
 
-Managed via `/config cleanup` (requires MANAGE_GUILD):
+Managed via `/config cleanup` (guild owner only):
 
 - **`add #channel expires:duration`** — Add a channel for auto-expiry.
 - **`remove #channel`** — Stop monitoring a channel.

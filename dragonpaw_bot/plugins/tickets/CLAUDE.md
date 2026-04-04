@@ -1,6 +1,6 @@
 ## Tickets Plugin
 
-Lets users open private support ticket channels via `/help`. Each ticket is a channel under a configurable category, visible only to the opener, bot, and support staff. Staff are pinged on open. Anyone in the channel can close the ticket (with confirmation) or add another user.
+Lets users open private support ticket channels via `/ticket`. Each ticket is a channel under a configurable category, visible only to the opener, bot, and support staff. Staff are pinged on open. Anyone in the channel can close the ticket (with confirmation) or add another user.
 
 ### User Commands
 

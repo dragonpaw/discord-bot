@@ -4,7 +4,7 @@ Enforces a media-only policy in configured channels: text-only posts are automat
 
 ### Configuration
 
-Managed via `/config media` (requires MANAGE_GUILD):
+Managed via `/config media` (guild owner only):
 
 - **`add #channel [redirect:#channel] [expires:duration]`** — Add a channel to media-only enforcement. Optionally set a per-channel redirect hint and/or an auto-expiry duration for old messages.
 - **`remove #channel`** — Stop monitoring a channel.
