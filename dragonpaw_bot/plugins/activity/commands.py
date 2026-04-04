@@ -278,6 +278,7 @@ class ActivityReport(
         logger.info(
             "Activity report viewed",
             guild=meta.guild_name,
+            user=ctx.member.display_name,
             member_count=len(lines),
         )
 

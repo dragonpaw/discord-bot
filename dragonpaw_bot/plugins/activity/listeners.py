@@ -15,7 +15,6 @@ from dragonpaw_bot.plugins.activity.models import (
     ContributionBucket,
     ContributionKind,
     UserActivity,
-    has_ignored_role,
 )
 
 if TYPE_CHECKING:
@@ -116,9 +115,6 @@ async def _handle_message(event: hikari.GuildMessageCreateEvent) -> None:
     if not role_ids:
         return  # Not yet through onboarding
 
-    if has_ignored_role(role_ids, meta.config.role_configs):
-        return
-
     kind = (
         ContributionKind.MEDIA if _has_media(event.message) else ContributionKind.TEXT
     )
@@ -173,9 +169,6 @@ async def _handle_reaction(event: hikari.GuildReactionAddEvent) -> None:
 
     role_ids = [int(r) for r in member.role_ids]
     if not role_ids:
-        return
-
-    if has_ignored_role(role_ids, meta.config.role_configs):
         return
 
     channel_cfg = next(
@@ -250,11 +243,7 @@ async def _handle_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> Non
                         None,
                     )
                     channel_mult = channel_cfg.point_multiplier if channel_cfg else 1.0
-                    if (
-                        role_ids
-                        and not has_ignored_role(role_ids, meta.config.role_configs)
-                        and channel_mult != 0
-                    ):
+                    if role_ids and channel_mult != 0:
                         _add_contribution(
                             guild_id,
                             user_id,
