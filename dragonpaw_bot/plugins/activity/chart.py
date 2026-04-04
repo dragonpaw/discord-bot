@@ -1,4 +1,4 @@
-"""Activity bar chart: stacked daily contributions by kind."""
+"""Activity bar chart: stacked hourly contributions by kind."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ CHART_Y = PADDING + MARGIN_TOP
 CHART_W = CANVAS_W - PADDING - MARGIN_LEFT - PADDING
 CHART_H = CANVAS_H - PADDING - MARGIN_TOP - MARGIN_BOTTOM - PADDING
 
-MAX_DAYS = 60
+MAX_HOURS = 14 * 24  # 14 days of hourly buckets
 
 BG_COLOR = (252, 248, 240)
 TEXT_COLOR = (60, 60, 60)
@@ -56,12 +56,7 @@ KIND_ORDER = [
     ContributionKind.VC,
 ]
 
-BAR_GAP = 2
-
-
-def _day_key(ts: float) -> int:
-    """Floor a unix timestamp to the start of its UTC day."""
-    return int(ts) - (int(ts) % 86400)
+BAR_GAP = 1
 
 
 def _apply_rounded_corners(img: Image.Image, radius: int) -> Image.Image:
@@ -81,38 +76,33 @@ def _nice_max(value: float) -> float:
     return value
 
 
-def _build_daily(
+def _build_hourly(
     buckets: list[ContributionBucket],
 ) -> tuple[list[int], dict[int, dict[ContributionKind, float]], float]:
-    """Aggregate buckets into daily totals.
+    """Aggregate buckets by hour.
 
-    Returns (days, daily, nice_max) where days is a contiguous list of day
-    timestamps from first bucket (capped at MAX_DAYS ago) through today.
+    Returns (hours, hourly, nice_max) where hours is a contiguous list of
+    hour timestamps from first bucket (capped at MAX_HOURS ago) through now.
     """
     now_ts = datetime.now(UTC).timestamp()
-    cutoff = _day_key(now_ts - MAX_DAYS * 86400)
-    today = _day_key(now_ts)
+    now_hour = int(now_ts) - (int(now_ts) % 3600)
+    cutoff = now_hour - MAX_HOURS * 3600
 
-    daily: dict[int, dict[ContributionKind, float]] = defaultdict(
+    hourly: dict[int, dict[ContributionKind, float]] = defaultdict(
         lambda: defaultdict(float)
     )
     for b in buckets:
-        day = _day_key(b.hour)
-        if day >= cutoff:
-            daily[day][b.kind] += b.amount
+        if b.hour >= cutoff:
+            hourly[b.hour][b.kind] += b.amount
 
-    first_day = max(min(daily), cutoff) if daily else today
-    days: list[int] = []
-    d = first_day
-    while d <= today:
-        days.append(d)
-        d += 86400
+    first_hour = max(min(hourly), cutoff) if hourly else now_hour
+    hours = list(range(first_hour, now_hour + 3600, 3600))
 
     max_total = max(
-        (sum(daily[day].values()) for day in days if day in daily),
+        (sum(hourly[h].values()) for h in hours if h in hourly),
         default=1.0,
     )
-    return days, daily, _nice_max(max(1.0, max_total))
+    return hours, hourly, _nice_max(max(1.0, max_total))
 
 
 def _draw_title(
@@ -158,21 +148,21 @@ def _draw_gridlines(
 
 def _draw_bars(
     draw: ImageDraw.ImageDraw,
-    days: list[int],
-    daily: dict[int, dict[ContributionKind, float]],
+    hours: list[int],
+    hourly: dict[int, dict[ContributionKind, float]],
     nice_max: float,
 ) -> float:
-    """Draw stacked bars. Returns bar_slot width (used by x-label drawing)."""
-    num_days = len(days)
-    if num_days == 0:
+    """Draw one stacked bar per hour slot. Returns bar_slot width."""
+    num_hours = len(hours)
+    if num_hours == 0:
         return 0.0
-    bar_slot = CHART_W / num_days
+    bar_slot = CHART_W / num_hours
     bar_w = max(1, bar_slot - BAR_GAP)
-    for i, day in enumerate(days):
+    for i, hour in enumerate(hours):
         bar_left = CHART_X + i * bar_slot + BAR_GAP / 2
         bottom = float(CHART_Y + CHART_H)
         for kind in KIND_ORDER:
-            amount = daily.get(day, {}).get(kind, 0.0)
+            amount = hourly.get(hour, {}).get(kind, 0.0)
             if amount <= 0:
                 continue
             bar_h = max(1, int(CHART_H * amount / nice_max))
@@ -188,16 +178,23 @@ def _draw_bars(
 def _draw_x_labels(
     draw: ImageDraw.ImageDraw,
     font: ImageFont.FreeTypeFont,
-    days: list[int],
+    hours: list[int],
     bar_slot: float,
 ) -> None:
-    num_days = len(days)
-    label_step = max(7, num_days // 8)
-    for i, day in enumerate(days):
-        if i % label_step != 0 and i != num_days - 1:
+    """Label day boundaries, stepping every 2 days to avoid crowding."""
+    num_hours = len(hours)
+    day_indices = [i for i, h in enumerate(hours) if h % 86400 == 0]
+    step = max(1, len(day_indices) // 7)  # aim for ~7 labels
+    labeled = {day_indices[i] for i in range(0, len(day_indices), step)}
+    # Always label the last day boundary if there is one
+    if day_indices:
+        labeled.add(day_indices[-1])
+
+    for i in labeled:
+        if i >= num_hours:
             continue
         x = int(CHART_X + i * bar_slot + bar_slot / 2)
-        label = datetime.fromtimestamp(day, tz=UTC).strftime("%-d %b")
+        label = datetime.fromtimestamp(hours[i], tz=UTC).strftime("%-d %b")
         lb = font.getbbox(label)
         draw.text(
             (x - (lb[2] - lb[0]) // 2, CHART_Y + CHART_H + 6),
@@ -233,8 +230,8 @@ def render_activity_chart(
     score: float,
     status_emoji: str,
 ) -> hikari.Bytes:
-    """Render a stacked daily-contribution bar chart and return as a PNG attachment."""
-    days, daily, nice_max = _build_daily(buckets)
+    """Render a stacked hourly-contribution bar chart and return as a PNG attachment."""
+    hours, hourly, nice_max = _build_hourly(buckets)
 
     img = Image.new("RGBA", (CANVAS_W, CANVAS_H), (*BG_COLOR, 255))
     draw = ImageDraw.Draw(img)
@@ -244,9 +241,9 @@ def render_activity_chart(
 
     _draw_title(draw, title_font, username, score, status_emoji)
     _draw_gridlines(draw, label_font, nice_max)
-    bar_slot = _draw_bars(draw, days, daily, nice_max)
+    bar_slot = _draw_bars(draw, hours, hourly, nice_max)
     if bar_slot > 0:
-        _draw_x_labels(draw, small_font, days, bar_slot)
+        _draw_x_labels(draw, small_font, hours, bar_slot)
     _draw_legend(draw, small_font)
 
     # Axis lines
