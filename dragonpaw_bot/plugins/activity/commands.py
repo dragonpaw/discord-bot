@@ -223,7 +223,16 @@ class ActivityScore(
 
         role_note = f" (role: **{role_cfg.role_name}**)" if role_cfg else ""
 
-        chart = render_activity_chart(member.display_name, buckets, score, status_emoji)
+        try:
+            chart = render_activity_chart(
+                member.display_name, buckets, score, status_emoji
+            )
+        except Exception:
+            logger.exception(
+                "Failed to render activity chart", target=member.display_name
+            )
+            chart = None
+
         embed = hikari.Embed(
             title=f"📊 Activity Score — {member.display_name}",
             description=(
@@ -233,7 +242,8 @@ class ActivityScore(
             ),
             color=SOLARIZED_CYAN,
         )
-        embed.set_image(chart)
+        if chart is not None:
+            embed.set_image(chart)
         await ctx.edit_response(
             response_id,
             content="",
