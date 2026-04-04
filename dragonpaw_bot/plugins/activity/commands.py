@@ -252,6 +252,7 @@ class ActivityScore(
         logger.info(
             "Activity score checked",
             guild=meta.guild_name,
+            user=ctx.member.display_name,
             target=member.display_name,
             score=score,
         )
