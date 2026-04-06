@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,6 +30,34 @@ ASSETS_DIR = Path(__file__).parent / "assets"
 MIN_PHOTOS = 2
 SAMPLE_ID_PATH = ASSETS_DIR / "validation-id.jpg"
 SAMPLE_SELFIE_PATH = ASSETS_DIR / "validation-selfie.jpg"
+CHANNEL_CLOSE_DELAY = 30
+
+
+async def _close_validate_channel(
+    gc: GuildContext, channel_id: int, notice: str
+) -> None:
+    """Post a closing notice in the validate channel, wait 30s, then delete it."""
+    try:
+        await gc.bot.rest.create_message(channel=channel_id, content=notice)
+    except hikari.NotFoundError:
+        gc.logger.debug(
+            "Validate channel already gone, skipping close notice",
+            channel_id=channel_id,
+        )
+        return
+    except hikari.ForbiddenError:
+        gc.logger.warning(
+            "Cannot send close notice — missing Send Messages permission",
+            channel_id=channel_id,
+        )
+    except hikari.HTTPError as exc:
+        gc.logger.warning(
+            "Failed to send close notice in validate channel",
+            channel_id=channel_id,
+            error=str(exc),
+        )
+    await asyncio.sleep(CHANNEL_CLOSE_DELAY)
+    await gc.delete_channel(channel_id)
 
 
 def _sanitize_channel_name(display_name: str) -> str:
@@ -155,13 +184,9 @@ async def on_member_update(event: hikari.MemberUpdateEvent) -> None:
         bot.cache.get_guild(event.guild_id)
         or await bot.rest.fetch_guild(event.guild_id),
     )
-    if member_entry.channel_id:
-        await gc.delete_channel(member_entry.channel_id)
-
+    by_whom = f" — role given by <@{actor_id}>" if actor_id else ""
     st.members = [m for m in st.members if m.user_id != int(event.member.id)]
     validation_state.save(st)
-
-    by_whom = f" — role given by <@{actor_id}>" if actor_id else ""
     await gc.log(
         f"*happy snort* Dropped {event.member.mention} from onboarding — "
         f"they already have the member role{by_whom}! 🐉"
@@ -170,6 +195,15 @@ async def on_member_update(event: hikari.MemberUpdateEvent) -> None:
         "Dropped member from onboarding (already has member role)",
         user=event.member.display_name,
     )
+    if member_entry.channel_id:
+        asyncio.get_running_loop().create_task(
+            _close_validate_channel(
+                gc,
+                member_entry.channel_id,
+                f"✅ *happy snort* Looks like you've already been added to the hoard{by_whom}! "
+                f"This channel will be deleted in {CHANNEL_CLOSE_DELAY} seconds~ 🐉",
+            )
+        )
 
 
 @loader.listener(hikari.GuildMessageCreateEvent)
@@ -506,6 +540,26 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
     bot_st = bot.state(interaction.guild_id)
     general_channel_id = bot_st.general_channel_id if bot_st else None
     if general_channel_id:
+        if st.about_channel_id:
+            about_ref = f"<#{st.about_channel_id}>"
+        else:
+            about_ref = "#about"
+        if st.roles_channel_id:
+            roles_ref = f"<#{st.roles_channel_id}>"
+        else:
+            roles_ref = "#roles"
+        if st.intros_channel_id:
+            intros_ref = f"<#{st.intros_channel_id}>"
+        else:
+            intros_ref = "#introductions"
+        if st.events_channel_id:
+            events_ref = f"<#{st.events_channel_id}>"
+        else:
+            events_ref = "#classes-and-events"
+        if st.chat_channel_id:
+            chat_ref = f"<#{st.chat_channel_id}>"
+        else:
+            chat_ref = "#general-often-lewd"
         try:
             await bot.rest.create_message(
                 channel=general_channel_id,
@@ -513,12 +567,12 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
                     f"🎉 *does a happy little dragon wiggle* Everyone say hello to <@{user_id}>! "
                     f"They're officially part of the hoard now~ 🐉\n\n"
                     f"<@{user_id}>, welcome welcome welcome!! A few things to get you settled in:\n"
-                    f"• Peek at {f'<#{st.about_channel_id}>' if st.about_channel_id else '#about'} to learn more about us 📖\n"
-                    f"• I'll see you over in {f'<#{st.roles_channel_id}>' if st.roles_channel_id else '#roles'} to help pick out your roles — grab some shiny ones! ✨\n"
-                    f"• Tell us a little about yourself in {f'<#{st.intros_channel_id}>' if st.intros_channel_id else '#introductions'} 🐾\n"
-                    f"• We host classes and have a SubDay Journal program — check out {f'<#{st.events_channel_id}>' if st.events_channel_id else '#classes-and-events'}! 📚\n"
+                    f"• Peek at {about_ref} to learn more about us 📖\n"
+                    f"• I'll see you over in {roles_ref} to help pick out your roles — grab some shiny ones! ✨\n"
+                    f"• Tell us a little about yourself in {intros_ref} 🐾\n"
+                    f"• We host classes and have a SubDay Journal program — check out {events_ref}! 📚\n"
                     f"• One tiny thing! I have a *very* hungry tummy for text in the media channels 🍽️ "
-                    f"*nom nom* Images and links are yummy, but please pop your comments over in {f'<#{st.chat_channel_id}>' if st.chat_channel_id else '#general-often-lewd'}~ 💜\n\n"
+                    f"*nom nom* Images and links are yummy, but please pop your comments over in {chat_ref}~ 💜\n\n"
                     f"Also — we'd love to know: **how did you find out about OGL?** Drop it in the chat! 🐾"
                 ),
             )
@@ -545,4 +599,11 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
     await interaction.edit_initial_response(
         content=f"*happy tail wag* Done! **{name}** is in the hoard! 🐉🎉"
     )
-    await gc.delete_channel(channel_id)
+    asyncio.get_running_loop().create_task(
+        _close_validate_channel(
+            gc,
+            channel_id,
+            f"✅ *happy tail wag* You've been approved and welcomed to the hoard as **{name}**! "
+            f"This channel will be deleted in {CHANNEL_CLOSE_DELAY} seconds — see you on the other side! 🐉🎉",
+        )
+    )

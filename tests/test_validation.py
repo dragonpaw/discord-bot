@@ -246,3 +246,104 @@ def test_state_uses_cache(tmp_path, monkeypatch):
     first = validation_state.load(300)
     second = validation_state.load(300)
     assert first is second
+
+
+# ---------------------------------------------------------------------------- #
+#                         _close_validate_channel                               #
+# ---------------------------------------------------------------------------- #
+
+
+def _make_gc(rest_mock: Mock) -> Mock:
+    bot = Mock()
+    bot.rest = rest_mock
+    gc = Mock()
+    gc.bot = bot
+    gc.logger = Mock()
+    gc.delete_channel = Mock(return_value=None)
+    return gc
+
+
+async def _noop(*_args, **_kwargs) -> None:
+    return None
+
+
+async def _raise_not_found(*_args, **_kwargs) -> None:
+    raise hikari.NotFoundError("", {}, b"")
+
+
+async def _raise_forbidden(*_args, **_kwargs) -> None:
+    raise hikari.ForbiddenError("", {}, b"")
+
+
+async def _raise_http(*_args, **_kwargs) -> None:
+    raise hikari.HTTPError("http error")
+
+
+async def test_close_validate_channel_happy_path(monkeypatch):
+    """Notice is posted, then channel is deleted."""
+    from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
+
+    rest = Mock()
+    rest.create_message = Mock(return_value=_noop())
+    gc = _make_gc(rest)
+    gc.delete_channel = Mock(return_value=_noop())
+
+    monkeypatch.setattr("asyncio.sleep", lambda _: _noop())
+
+    await _close_validate_channel(gc, 123, "closing!")
+
+    rest.create_message.assert_called_once_with(channel=123, content="closing!")
+    gc.delete_channel.assert_called_once_with(123)
+
+
+async def test_close_validate_channel_not_found_returns_early(monkeypatch):
+    """NotFoundError from create_message short-circuits — no sleep, no delete."""
+    from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
+
+    rest = Mock()
+    rest.create_message = Mock(return_value=_raise_not_found())
+    gc = _make_gc(rest)
+    gc.delete_channel = Mock(return_value=_noop())
+
+    sleep_calls = []
+    monkeypatch.setattr("asyncio.sleep", lambda d: (sleep_calls.append(d), _noop())[1])
+
+    await _close_validate_channel(gc, 123, "closing!")
+
+    assert sleep_calls == []
+    gc.delete_channel.assert_not_called()
+    gc.logger.debug.assert_called_once()
+
+
+async def test_close_validate_channel_forbidden_still_deletes(monkeypatch):
+    """ForbiddenError from create_message logs a warning but still deletes the channel."""
+    from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
+
+    rest = Mock()
+    rest.create_message = Mock(return_value=_raise_forbidden())
+    gc = _make_gc(rest)
+    gc.delete_channel = Mock(return_value=_noop())
+
+    monkeypatch.setattr("asyncio.sleep", lambda _: _noop())
+
+    await _close_validate_channel(gc, 123, "closing!")
+
+    gc.logger.warning.assert_called_once()
+    gc.delete_channel.assert_called_once_with(123)
+
+
+async def test_close_validate_channel_http_error_still_deletes(monkeypatch):
+    """Generic HTTPError from create_message logs a warning but still deletes the channel."""
+    from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
+
+    rest = Mock()
+    rest.create_message = Mock(return_value=_raise_http())
+    gc = _make_gc(rest)
+    gc.delete_channel = Mock(return_value=_noop())
+
+    monkeypatch.setattr("asyncio.sleep", lambda _: _noop())
+
+    await _close_validate_channel(gc, 123, "closing!")
+
+    gc.logger.warning.assert_called_once()
+    gc.delete_channel.assert_called_once_with(123)
