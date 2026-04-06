@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock
 
 import hikari
@@ -14,12 +14,14 @@ def _msg(age_hours: float, *, pinned: bool = False) -> Mock:
     """Create a mock message with a created_at offset from now."""
     msg = Mock(spec=hikari.Message)
     msg.id = hikari.Snowflake(int(age_hours * 1000))
-    msg.created_at = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+    msg.created_at = datetime.now(UTC) - timedelta(hours=age_hours)
     msg.is_pinned = pinned
     return msg
 
 
-def _make_cc(*messages: Mock, fetch_side_effect: Exception | None = None) -> ChannelContext:
+def _make_cc(
+    *messages: Mock, fetch_side_effect: Exception | None = None
+) -> ChannelContext:
     bot = Mock()
     if fetch_side_effect:
         bot.rest.fetch_messages = Mock(side_effect=fetch_side_effect)
@@ -115,7 +117,7 @@ async def test_not_found_in_single_delete_is_swallowed():
 
 
 async def test_mixed_bulk_and_single():
-    bulk_msg = _msg(age_hours=48)     # < 14 days → bulk
+    bulk_msg = _msg(age_hours=48)  # < 14 days → bulk
     single_msg = _msg(age_hours=24 * 20)  # > 14 days → single
     cc = _make_cc(bulk_msg, single_msg)
     count = await cc.purge_old_messages(expiry_minutes=60)
@@ -216,3 +218,157 @@ async def test_single_delete_limit_custom():
     count = await cc.purge_old_messages(expiry_minutes=60, single_delete_limit=10)
     assert count == 10
     assert cc.bot.rest.delete_message.call_count == 10
+
+
+# ---------------------------------------------------------------------------- #
+#                            purge_old_threads tests                           #
+# ---------------------------------------------------------------------------- #
+
+
+def _thread(
+    age_hours: float,
+    *,
+    has_messages: bool = True,
+    channel_id: int = CHANNEL_ID,
+) -> Mock:
+    """Create a mock GuildPublicThread."""
+    thread = Mock(spec=hikari.GuildPublicThread)
+    thread.id = hikari.Snowflake(int(age_hours * 10000 + 100_000))
+    thread.name = f"thread-{age_hours}h"
+    thread.parent_id = hikari.Snowflake(channel_id)
+    thread.created_at = datetime.now(UTC) - timedelta(hours=age_hours)
+    if has_messages:
+        last_msg = Mock()
+        last_msg.created_at = datetime.now(UTC) - timedelta(hours=age_hours)
+        thread.last_message_id = last_msg
+    else:
+        thread.last_message_id = None
+    return thread
+
+
+def _make_cc_threads(
+    active: list[Mock] | None = None,
+    archived: list[Mock] | None = None,
+    *,
+    fetch_active_side_effect: Exception | None = None,
+    fetch_archived_side_effect: Exception | None = None,
+) -> ChannelContext:
+    bot = Mock()
+
+    if fetch_active_side_effect:
+        bot.rest.fetch_active_threads = AsyncMock(side_effect=fetch_active_side_effect)
+    else:
+        bot.rest.fetch_active_threads = AsyncMock(return_value=active or [])
+
+    if fetch_archived_side_effect:
+        bot.rest.fetch_public_archived_threads = Mock(
+            side_effect=fetch_archived_side_effect
+        )
+    else:
+        _archived = archived or []
+
+        async def _archived_gen(*args, **kwargs):
+            for t in _archived:
+                yield t
+
+        bot.rest.fetch_public_archived_threads = Mock(side_effect=_archived_gen)
+
+    bot.rest.delete_channel = AsyncMock()
+    bot.rest.create_message = AsyncMock()
+
+    return ChannelContext(
+        bot=bot,
+        guild_id=hikari.Snowflake(1),
+        name=GUILD,
+        log_channel_id=None,
+        channel_id=hikari.Snowflake(CHANNEL_ID),
+        channel_name=CHANNEL,
+    )
+
+
+async def test_purge_old_threads_stale_active_thread_deleted():
+    t = _thread(age_hours=48)  # 48h old, expiry 1h → delete
+    cc = _make_cc_threads(active=[t])
+    count = await cc.purge_old_threads(expiry_minutes=60)
+    assert count == 1
+    cc.bot.rest.delete_channel.assert_called_once_with(t.id)
+
+
+async def test_purge_old_threads_fresh_active_thread_kept():
+    t = _thread(age_hours=0.5)  # 30m old, expiry 2h → keep
+    cc = _make_cc_threads(active=[t])
+    count = await cc.purge_old_threads(expiry_minutes=120)
+    assert count == 0
+    cc.bot.rest.delete_channel.assert_not_called()
+
+
+async def test_purge_old_threads_stale_archived_thread_deleted():
+    t = _thread(age_hours=72)  # archived thread, 72h old, expiry 1h
+    cc = _make_cc_threads(archived=[t])
+    count = await cc.purge_old_threads(expiry_minutes=60)
+    assert count == 1
+    cc.bot.rest.delete_channel.assert_called_once_with(t.id)
+
+
+async def test_purge_old_threads_skips_threads_from_other_channels():
+    t = _thread(age_hours=48, channel_id=999)  # different parent
+    cc = _make_cc_threads(active=[t])
+    count = await cc.purge_old_threads(expiry_minutes=60)
+    assert count == 0
+    cc.bot.rest.delete_channel.assert_not_called()
+
+
+async def test_purge_old_threads_no_messages_uses_created_at():
+    # Thread has no messages; created 48h ago; expiry 1h → stale
+    t = _thread(age_hours=48, has_messages=False)
+    cc = _make_cc_threads(active=[t])
+    count = await cc.purge_old_threads(expiry_minutes=60)
+    assert count == 1
+    cc.bot.rest.delete_channel.assert_called_once_with(t.id)
+
+
+async def test_purge_old_threads_not_found_on_delete_swallowed():
+    t = _thread(age_hours=48)
+    cc = _make_cc_threads(active=[t])
+    cc.bot.rest.delete_channel = AsyncMock(
+        side_effect=hikari.NotFoundError(url="x", headers={}, raw_body=b"")
+    )
+    count = await cc.purge_old_threads(expiry_minutes=60)
+    assert count == 1  # Still counted as deleted (was already gone)
+
+
+async def test_purge_old_threads_forbidden_on_delete_breaks_loop_and_logs():
+    threads = [_thread(age_hours=48 + i) for i in range(3)]
+    cc = _make_cc_threads(active=threads, archived=[])
+    cc.bot.rest.delete_channel = AsyncMock(
+        side_effect=hikari.ForbiddenError(url="x", headers={}, raw_body=b"")
+    )
+    cc.log_channel_id = hikari.Snowflake(99)
+    count = await cc.purge_old_threads(expiry_minutes=60)
+    # Stops after first failure
+    assert cc.bot.rest.delete_channel.call_count == 1
+    # Posts to log channel
+    cc.bot.rest.create_message.assert_called_once()
+    content = cc.bot.rest.create_message.call_args.kwargs["content"]
+    assert "Manage Threads" in content
+
+
+async def test_purge_old_threads_forbidden_on_fetch_active_returns_zero():
+    cc = _make_cc_threads(
+        fetch_active_side_effect=hikari.ForbiddenError(
+            url="x", headers={}, raw_body=b""
+        )
+    )
+    count = await cc.purge_old_threads(expiry_minutes=60)
+    assert count == 0
+    cc.bot.rest.delete_channel.assert_not_called()
+
+
+async def test_purge_old_threads_mixed_active_and_archived():
+    active_stale = _thread(age_hours=48)
+    archived_stale = _thread(age_hours=96)
+    fresh = _thread(age_hours=0.5)
+    cc = _make_cc_threads(active=[active_stale, fresh], archived=[archived_stale])
+    count = await cc.purge_old_threads(expiry_minutes=60)
+    assert count == 2
+    assert cc.bot.rest.delete_channel.call_count == 2
