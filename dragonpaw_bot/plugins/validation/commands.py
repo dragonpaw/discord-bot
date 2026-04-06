@@ -518,7 +518,8 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
                     f"• Tell us a little about yourself in {f'<#{st.intros_channel_id}>' if st.intros_channel_id else '#introductions'} 🐾\n"
                     f"• We host classes and have a SubDay Journal program — check out {f'<#{st.events_channel_id}>' if st.events_channel_id else '#classes-and-events'}! 📚\n"
                     f"• One tiny thing! I have a *very* hungry tummy for text in the media channels 🍽️ "
-                    f"*nom nom* Images and links are yummy, but please pop your comments over in {f'<#{st.chat_channel_id}>' if st.chat_channel_id else '#general-often-lewd'}~ 💜"
+                    f"*nom nom* Images and links are yummy, but please pop your comments over in {f'<#{st.chat_channel_id}>' if st.chat_channel_id else '#general-often-lewd'}~ 💜\n\n"
+                    f"Also — we'd love to know: **how did you find out about OGL?** Drop it in the chat! 🐾"
                 ),
             )
         except hikari.HTTPError:
