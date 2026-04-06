@@ -345,7 +345,8 @@ async def test_purge_old_threads_forbidden_on_delete_breaks_loop_and_logs():
     )
     cc.log_channel_id = hikari.Snowflake(99)
     count = await cc.purge_old_threads(expiry_minutes=60)
-    # Stops after first failure
+    # Stops after first failure — ForbiddenError fires before deleted += 1
+    assert count == 0
     assert cc.bot.rest.delete_channel.call_count == 1
     # Posts to log channel
     cc.bot.rest.create_message.assert_called_once()
