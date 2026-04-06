@@ -570,7 +570,7 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
                     f"• Peek at {about_ref} to learn more about us 📖\n"
                     f"• I'll see you over in {roles_ref} to help pick out your roles — grab some shiny ones! ✨\n"
                     f"• Tell us a little about yourself in {intros_ref} 🐾\n"
-                    f"• We host classes and have a SubDay Journal program — check out {events_ref}! 📚\n"
+                    f"• We host classes and have a SubDay Journal program — check out {events_ref}, or run `/subday about` to learn more! 📚\n"
                     f"• One tiny thing! I have a *very* hungry tummy for text in the media channels 🍽️ "
                     f"*nom nom* Images and links are yummy, but please pop your comments over in {chat_ref}~ 💜\n\n"
                     f"Also — we'd love to know: **how did you find out about OGL?** Drop it in the chat! 🐾"
