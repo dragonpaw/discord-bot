@@ -328,7 +328,9 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
                 f"you're almost in the hoard!\n\n"
                 f"To finish up, I need you to post **two photos** in this channel:\n"
                 f"1. 📄 A photo of your **government-issued ID** showing your date of birth\n"
-                f"2. 🤳 A **selfie of you holding that same ID** so we can see it's really you\n\n"
+                f"2. 🤳 A **selfie of you holding that same ID**, along with a handwritten note showing "
+                f'**"{gc.name}"** and today\'s date (**{interaction.created_at.strftime("%B %d, %Y")}**) '
+                f"so we know it's a fresh photo just for us!\n\n"
                 f"*I've attached some examples below so you know what I'm looking for!* "
                 f"Once you post both, I'll ping staff to take a look. 🐾"
             ),
