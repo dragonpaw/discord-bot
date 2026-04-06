@@ -496,10 +496,14 @@ class ChannelContext(GuildContext):
             return 0
 
         try:
-            async for thread in self.bot.rest.fetch_public_archived_threads(
-                self.channel_id
-            ):
-                threads.append(thread)
+            threads.extend(
+                [
+                    thread
+                    async for thread in self.bot.rest.fetch_public_archived_threads(
+                        self.channel_id
+                    )
+                ]
+            )
         except (hikari.ForbiddenError, hikari.NotFoundError) as exc:
             self.logger.warning(
                 "Cannot fetch archived threads for cleanup",
