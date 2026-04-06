@@ -70,6 +70,19 @@ Sample images live in `assets/` and are attached via `hikari.File`:
 - **`state.py`** — YAML state persistence (load/save with in-memory cache)
 - **`assets/`** — Sample verification images
 
+### Security Invariants
+
+These properties are enforced in code and must be preserved:
+
+- **Button ownership** — The rules-agreed button embeds the member's user ID in its custom ID (`validation_rules_agreed:{user_id}`). `handle_rules_agreed` rejects any clicker whose ID doesn't match. No other user can advance someone else through onboarding.
+- **Self-approval prevention** — Both `handle_approve_button` and `handle_approve_modal` reject the interaction if the clicker's user ID matches the `user_id` on the state entry for that channel.
+- **Staff-only approval** — `_is_staff` requires either ADMINISTRATOR permission or the configured staff role. Non-staff get an ephemeral rejection before any modal is shown.
+- **Photo counting isolation** — `on_message_create` only counts photos when all three conditions are true: the message is in the member's assigned validate channel, the author is that specific member, and the member's stage is `AWAITING_PHOTOS`. Photos posted to other channels, by other users, or after the stage has advanced are silently ignored.
+- **Nickname strip** — The approved name is `.strip()`-ed before the empty check, preventing whitespace-only nicknames from passing `if not name`.
+- **Channel name safety** — `_sanitize_channel_name` falls back to `"validate-member"` if the display name produces an empty string after stripping non-alphanumeric characters (e.g. emoji-only display names).
+
+**Known limitation — double-approval race:** Two staff members clicking approve simultaneously can both pass all checks (shared in-memory state cache, no locking). Both runs will set the nickname and role (idempotent on Discord's side) and attempt to delete the validate channel (second attempt silently swallowed by `delete_channel`'s `NotFoundError` handler), but the general-channel welcome announcement will fire twice. This is an accepted risk given the low probability and the operational complexity of adding a distributed lock.
+
 ### Required Discord Permissions
 
 - `MANAGE_CHANNELS` — create and delete validate channels, set permission overwrites

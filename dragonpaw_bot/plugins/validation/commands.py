@@ -38,6 +38,8 @@ def _sanitize_channel_name(display_name: str) -> str:
     name = re.sub(r"[^a-z0-9-]", "-", name)
     name = re.sub(r"-+", "-", name)
     name = name.strip("-")
+    if not name:
+        name = "member"
     return f"validate-{name}"[:100]
 
 
@@ -444,7 +446,7 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
     for row in interaction.components:
         for component in row.components:
             if component.custom_id == "validation_name_input":
-                name = component.value
+                name = component.value.strip()
     if not name:
         await interaction.edit_initial_response(
             content="*confused head tilt* I didn't catch a name — please try again! 🐉"
