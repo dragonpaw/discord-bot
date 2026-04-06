@@ -473,6 +473,74 @@ class ChannelContext(GuildContext):
 
         return len(to_bulk) + len(to_single)
 
+    async def purge_old_threads(self, expiry_minutes: int) -> int:
+        """Delete threads in this channel whose last activity is older than expiry_minutes.
+
+        Checks both active threads (filtered to this channel) and archived public threads.
+        Last activity is taken from last_message_id.created_at, falling back to thread
+        creation time when no messages exist. Returns count of deleted threads.
+        """
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(minutes=expiry_minutes)
+        threads: list[hikari.GuildThreadChannel] = []
+
+        try:
+            active = await self.bot.rest.fetch_active_threads(self.guild_id)
+            threads.extend(t for t in active if t.parent_id == self.channel_id)
+        except (hikari.ForbiddenError, hikari.NotFoundError) as exc:
+            self.logger.warning(
+                "Cannot fetch active threads for cleanup",
+                channel=self.channel_name,
+                error=str(exc),
+            )
+            return 0
+
+        try:
+            async for thread in self.bot.rest.fetch_public_archived_threads(
+                self.channel_id
+            ):
+                threads.append(thread)
+        except (hikari.ForbiddenError, hikari.NotFoundError) as exc:
+            self.logger.warning(
+                "Cannot fetch archived threads for cleanup",
+                channel=self.channel_name,
+                error=str(exc),
+            )
+
+        deleted = 0
+        for thread in threads:
+            last_activity = (
+                thread.last_message_id.created_at
+                if thread.last_message_id is not None
+                else thread.created_at
+            )
+            if last_activity >= cutoff:
+                continue
+            try:
+                await self.bot.rest.delete_channel(thread.id)
+                deleted += 1
+            except hikari.NotFoundError:
+                deleted += 1  # Already gone — count it as done
+            except hikari.ForbiddenError as exc:
+                self.logger.warning(
+                    "Cannot delete thread, stopping",
+                    channel=self.channel_name,
+                    thread=thread.name,
+                    error=str(exc),
+                )
+                await self.log(
+                    f"⚠️ I can't delete threads in **#{self.channel_name}**. "
+                    f"Please grant me **Manage Threads** permission in that channel."
+                )
+                break
+
+        if deleted:
+            self.logger.info(
+                "Purged old threads", channel=self.channel_name, count=deleted
+            )
+
+        return deleted
+
     async def delete_my_messages(self) -> None:
         """Delete all bot messages from this channel."""
         self.logger.debug(
@@ -579,6 +647,7 @@ CHANNEL_CLEANUP_PERMS: dict[hikari.Permissions, str] = {
     hikari.Permissions.VIEW_CHANNEL: "View Channel",
     hikari.Permissions.READ_MESSAGE_HISTORY: "Read Message History",
     hikari.Permissions.MANAGE_MESSAGES: "Manage Messages",
+    hikari.Permissions.MANAGE_THREADS: "Manage Threads",
 }
 
 
