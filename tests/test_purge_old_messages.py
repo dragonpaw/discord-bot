@@ -372,3 +372,23 @@ async def test_purge_old_threads_mixed_active_and_archived():
     count = await cc.purge_old_threads(expiry_minutes=60)
     assert count == 2
     assert cc.bot.rest.delete_channel.call_count == 2
+
+
+# ---------------------------------------------------------------------------- #
+#                    run_cleanup calls purge_old_threads                       #
+# ---------------------------------------------------------------------------- #
+
+
+async def test_run_cleanup_calls_purge_old_threads(monkeypatch):
+    """run_cleanup should purge threads as well as messages."""
+    cc = _make_cc_threads()
+    monkeypatch.setattr(cc, "check_perms", AsyncMock(return_value=[]))
+    mock_msgs = AsyncMock(return_value=0)
+    mock_threads = AsyncMock(return_value=0)
+    monkeypatch.setattr(cc, "purge_old_messages", mock_msgs)
+    monkeypatch.setattr(cc, "purge_old_threads", mock_threads)
+
+    await cc.run_cleanup(expiry_minutes=60)
+
+    mock_msgs.assert_awaited_once_with(60)
+    mock_threads.assert_awaited_once_with(60)

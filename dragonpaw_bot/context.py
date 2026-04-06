@@ -557,10 +557,11 @@ class ChannelContext(GuildContext):
                 await message.delete()
 
     async def run_cleanup(self, expiry_minutes: int) -> None:
-        """Check permissions then purge old messages, logging any issues to the guild log channel.
+        """Check permissions then purge old messages and threads, logging any issues to the guild log channel.
 
-        Combines the proactive permission check with purge_old_messages and error handling.
-        Use this from cron tasks instead of calling purge_old_messages directly.
+        Combines the proactive permission check with purge_old_messages and
+        purge_old_threads with error handling. Use this from cron tasks instead
+        of calling purge methods directly.
         """
         missing = await self.check_perms(CHANNEL_CLEANUP_PERMS)
         if missing:
@@ -589,6 +590,16 @@ class ChannelContext(GuildContext):
             )
             await self.log(
                 f"🐛 I hit an unexpected error cleaning **#{self.channel_name}** — check the bot logs."
+            )
+        try:
+            await self.purge_old_threads(expiry_minutes)
+        except Exception:
+            self.logger.exception(
+                "Thread cleanup cron error",
+                channel=self.channel_name,
+            )
+            await self.log(
+                f"🐛 I hit an unexpected error cleaning threads in **#{self.channel_name}** — check the bot logs."
             )
 
     async def check_perms(
