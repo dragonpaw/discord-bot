@@ -26,10 +26,13 @@ async def media_channels_hourly(bot: hikari.GatewayBot) -> None:
 
     tasks = []
     for guild in guilds:
-        gc = GuildContext.from_guild(bot, guild)
-        for entry in media_state.load(int(guild.id)).channels:
-            if entry.expiry_minutes is not None:
-                cc = ChannelContext.from_entry(gc, entry)
-                tasks.append(cc.run_cleanup(entry.expiry_minutes))
+        try:
+            gc = GuildContext.from_guild(bot, guild)
+            for entry in media_state.load(int(guild.id)).channels:
+                if entry.expiry_minutes is not None:
+                    cc = ChannelContext.from_entry(gc, entry)
+                    tasks.append(cc.run_cleanup(entry.expiry_minutes))
+        except Exception:
+            logger.exception("Error building cleanup tasks for guild", guild=guild.name)
     if tasks:
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*tasks, return_exceptions=True)

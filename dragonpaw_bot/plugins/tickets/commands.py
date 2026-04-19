@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
+loader = lightbulb.Loader()
+
 TOPIC_MODAL_ID = "ticket_topic_modal"
 TOPIC_INPUT_ID = "ticket_topic_input"
 
@@ -50,6 +52,7 @@ def _sanitize_channel_name(display_name: str) -> str:
     return f"help-{name}"[:100]
 
 
+@loader.command
 class AdultierAdultCommand(
     lightbulb.SlashCommand,
     name="adultier-adult",
@@ -92,7 +95,7 @@ class AdultierAdultCommand(
             min_length=1,
             max_length=200,
         )
-        await ctx.interaction.create_modal_response(
+        await ctx.respond_with_modal(
             title="*flaps wings* What's the snack? 🐉",
             custom_id=TOPIC_MODAL_ID,
             components=[topic_row],
