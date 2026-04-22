@@ -322,6 +322,92 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
         )
 
 
+async def _reconcile_guild(bot: DragonpawBot, guild_id: int) -> None:
+    """Check all in-progress validations for one guild and remove stale entries."""
+    st = validation_state.load(guild_id)
+    if not st.members:
+        return
+
+    gc = GuildContext.from_guild(
+        bot,
+        bot.cache.get_guild(guild_id) or await bot.rest.fetch_guild(guild_id),
+    )
+
+    to_remove: list[int] = []
+
+    for member_entry in st.members:
+        try:
+            await bot.rest.fetch_member(guild_id, member_entry.user_id)
+        except hikari.NotFoundError:
+            to_remove.append(member_entry.user_id)
+            await gc.log(
+                f"*sad snort* <@{member_entry.user_id}> left the server while I was napping — "
+                f"cleaning up their onboarding! 🐉"
+            )
+            logger.info(
+                "Startup reconcile: member left while offline",
+                user_id=member_entry.user_id,
+            )
+            if member_entry.channel_id:
+                asyncio.get_running_loop().create_task(
+                    _close_validate_channel(
+                        gc,
+                        member_entry.channel_id,
+                        f"*sad snort* Looks like they flew away while I was napping! "
+                        f"This channel will be deleted in {CHANNEL_CLOSE_DELAY} seconds~ 🐉",
+                    )
+                )
+            continue
+        except hikari.HTTPError:
+            logger.warning(
+                "Startup reconcile: failed to fetch member",
+                user_id=member_entry.user_id,
+                guild_id=guild_id,
+            )
+            continue
+
+        if not member_entry.channel_id:
+            continue
+
+        try:
+            await bot.rest.fetch_channel(member_entry.channel_id)
+        except hikari.NotFoundError:
+            to_remove.append(member_entry.user_id)
+            await gc.log(
+                f"*confused sniff* Validate channel for <@{member_entry.user_id}> is gone — "
+                f"cleaned up their onboarding entry! 🐉"
+            )
+            logger.info(
+                "Startup reconcile: validate channel gone",
+                user_id=member_entry.user_id,
+                channel_id=member_entry.channel_id,
+            )
+        except hikari.HTTPError:
+            logger.warning(
+                "Startup reconcile: failed to fetch channel",
+                user_id=member_entry.user_id,
+                channel_id=member_entry.channel_id,
+                guild_id=guild_id,
+            )
+
+    if to_remove:
+        remove_ids = set(to_remove)
+        st.members = [m for m in st.members if m.user_id not in remove_ids]
+        validation_state.save(st)
+
+
+@loader.listener(hikari.StartedEvent)
+async def on_startup_reconcile(event: hikari.StartedEvent) -> None:
+    """On startup, clean up validation state for members who left or had channels deleted."""
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
+    logger.info("Running startup validation reconcile")
+    for guild_id in validation_state.all_guild_ids():
+        try:
+            await _reconcile_guild(bot, guild_id)
+        except Exception:
+            logger.exception("Startup reconcile failed for guild", guild_id=guild_id)
+
+
 # ---------------------------------------------------------------------------- #
 #                           Interaction handlers                                #
 # ---------------------------------------------------------------------------- #

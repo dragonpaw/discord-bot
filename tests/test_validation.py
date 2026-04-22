@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import hikari
 import pytest
@@ -365,3 +366,155 @@ def test_all_guild_ids_finds_state_files(tmp_path, monkeypatch):
     (tmp_path / "validation_222.yaml").touch()
     (tmp_path / "other_333.yaml").touch()  # not a validation file — must be excluded
     assert sorted(validation_state.all_guild_ids()) == [111, 222]
+
+
+# ---------------------------------------------------------------------------- #
+#                           _reconcile_guild                                    #
+# ---------------------------------------------------------------------------- #
+
+
+def _make_reconcile_bot(*, fetch_member_raises=None, fetch_channel_raises=None):
+    """Minimal bot mock for _reconcile_guild tests.
+
+    bot.state() returns None so GuildContext sets log_channel_id=None,
+    making gc.log() a silent no-op — no REST create_message calls needed.
+    """
+    bot = Mock()
+    bot.cache = Mock()
+    bot.cache.get_guild = Mock(return_value=None)
+    bot.state = Mock(return_value=None)
+
+    guild = Mock()
+    guild.id = hikari.Snowflake(1)
+    guild.name = "Test Guild"
+
+    bot.rest = Mock()
+    bot.rest.fetch_guild = AsyncMock(return_value=guild)
+    bot.rest.fetch_member = AsyncMock(side_effect=fetch_member_raises)
+    bot.rest.fetch_channel = AsyncMock(side_effect=fetch_channel_raises)
+    return bot
+
+
+async def test_reconcile_guild_no_members(tmp_path, monkeypatch):
+    """Skip guilds with no members — no REST calls made."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    st = ValidationGuildState(guild_id=1, guild_name="Test")
+    validation_state.save(st)
+
+    bot = _make_reconcile_bot()
+
+    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
+
+    await _reconcile_guild(bot, 1)
+
+    bot.rest.fetch_member.assert_not_called()
+
+
+async def test_reconcile_guild_member_present_channel_exists(tmp_path, monkeypatch):
+    """Member still in guild and channel still exists — no state changes."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="Test",
+        members=[ValidationMember(user_id=10, joined_at=now, channel_id=99)],
+    )
+    validation_state.save(st)
+
+    bot = _make_reconcile_bot()
+
+    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
+
+    await _reconcile_guild(bot, 1)
+
+    validation_state._cache.clear()
+    loaded = validation_state.load(1)
+    assert len(loaded.members) == 1
+
+
+async def test_reconcile_guild_member_left(tmp_path, monkeypatch):
+    """Member left while bot was offline — removed from state, channel closed."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="Test",
+        members=[ValidationMember(user_id=10, joined_at=now, channel_id=99)],
+    )
+    validation_state.save(st)
+
+    bot = _make_reconcile_bot(fetch_member_raises=hikari.NotFoundError("", {}, b""))
+    close_calls: list[int] = []
+
+    async def _fake_close(_gc, channel_id, _notice):
+        close_calls.append(channel_id)
+
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.validation.commands._close_validate_channel",
+        _fake_close,
+    )
+
+    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
+
+    await _reconcile_guild(bot, 1)
+    await asyncio.sleep(0)  # let the create_task coroutine run
+
+    validation_state._cache.clear()
+    loaded = validation_state.load(1)
+    assert loaded.members == []
+    assert close_calls == [99]
+
+
+async def test_reconcile_guild_channel_deleted(tmp_path, monkeypatch):
+    """Member present but validate channel was deleted — removed from state."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="Test",
+        members=[ValidationMember(user_id=10, joined_at=now, channel_id=99)],
+    )
+    validation_state.save(st)
+
+    bot = _make_reconcile_bot(fetch_channel_raises=hikari.NotFoundError("", {}, b""))
+
+    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
+
+    await _reconcile_guild(bot, 1)
+
+    validation_state._cache.clear()
+    loaded = validation_state.load(1)
+    assert loaded.members == []
+
+
+async def test_reconcile_guild_no_channel_id_skips_channel_check(tmp_path, monkeypatch):
+    """Member still at AWAITING_RULES (no channel yet) and present — no channel fetch."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="Test",
+        members=[ValidationMember(user_id=10, joined_at=now)],  # channel_id=None
+    )
+    validation_state.save(st)
+
+    bot = _make_reconcile_bot()
+
+    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
+
+    await _reconcile_guild(bot, 1)
+
+    bot.rest.fetch_channel.assert_not_called()
+    validation_state._cache.clear()
+    loaded = validation_state.load(1)
+    assert len(loaded.members) == 1
