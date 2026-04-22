@@ -347,3 +347,21 @@ async def test_close_validate_channel_http_error_still_deletes(monkeypatch):
 
     gc.logger.warning.assert_called_once()
     gc.delete_channel.assert_called_once_with(123)
+
+
+# ---------------------------------------------------------------------------- #
+#                              all_guild_ids()                                 #
+# ---------------------------------------------------------------------------- #
+
+
+def test_all_guild_ids_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    assert validation_state.all_guild_ids() == []
+
+
+def test_all_guild_ids_finds_state_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    (tmp_path / "validation_111.yaml").touch()
+    (tmp_path / "validation_222.yaml").touch()
+    (tmp_path / "other_333.yaml").touch()  # not a validation file — must be excluded
+    assert sorted(validation_state.all_guild_ids()) == [111, 222]

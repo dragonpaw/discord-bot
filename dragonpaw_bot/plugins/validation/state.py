@@ -83,3 +83,11 @@ def save(guild_state: ValidationGuildState) -> None:
         )
         raise
     _cache[guild_state.guild_id] = guild_state
+
+
+def all_guild_ids() -> list[int]:
+    """Return all guild IDs that have persisted validation state on disk."""
+    return [
+        int(p.stem.removeprefix("validation_"))
+        for p in STATE_DIR.glob("validation_*.yaml")
+    ]
