@@ -301,9 +301,10 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
         bot.cache.get_guild(event.guild_id)
         or await bot.rest.fetch_guild(event.guild_id),
     )
-    display = (
-        event.old_member.display_name if event.old_member else str(int(event.user_id))
-    )
+    if event.old_member:
+        display = event.old_member.display_name
+    else:
+        display = str(event.user_id)
     await gc.log(
         f"*sad snort* <@{event.user_id}> flew away before finishing onboarding — "
         f"cleaning up! 🐉"
