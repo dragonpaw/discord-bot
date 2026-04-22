@@ -281,6 +281,46 @@ async def on_message_create(event: hikari.GuildMessageCreateEvent) -> None:
         )
 
 
+@loader.listener(hikari.MemberDeleteEvent)
+async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
+    """Clean up state and validate channel when a member leaves mid-onboarding."""
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
+    st = validation_state.load(int(event.guild_id))
+
+    member_entry = next(
+        (m for m in st.members if m.user_id == int(event.user_id)), None
+    )
+    if not member_entry:
+        return
+
+    st.members = [m for m in st.members if m.user_id != int(event.user_id)]
+    validation_state.save(st)
+
+    gc = GuildContext.from_guild(
+        bot,
+        bot.cache.get_guild(event.guild_id)
+        or await bot.rest.fetch_guild(event.guild_id),
+    )
+    display = (
+        event.old_member.display_name if event.old_member else str(int(event.user_id))
+    )
+    await gc.log(
+        f"*sad snort* <@{event.user_id}> flew away before finishing onboarding — "
+        f"cleaning up! 🐉"
+    )
+    logger.info("Removed member from onboarding on leave", user=display)
+
+    if member_entry.channel_id:
+        asyncio.get_running_loop().create_task(
+            _close_validate_channel(
+                gc,
+                member_entry.channel_id,
+                f"*sad snort* Looks like they flew away before finishing! "
+                f"This channel will be deleted in {CHANNEL_CLOSE_DELAY} seconds~ 🐉",
+            )
+        )
+
+
 # ---------------------------------------------------------------------------- #
 #                           Interaction handlers                                #
 # ---------------------------------------------------------------------------- #
