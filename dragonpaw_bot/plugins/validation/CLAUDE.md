@@ -26,12 +26,31 @@ a private verify channel where they submit age-verification photos for staff rev
 5. **Reminders / auto-kick** — hourly cron checks members stuck at `AWAITING_RULES`. Every
    24 hours a lobby reminder is posted. After `max_reminders` reminders the member is kicked.
 
+### Member Leave Cleanup
+
+If a member leaves the server mid-onboarding, `on_member_leave` (`MemberDeleteEvent`)
+removes them from state and fires `_close_validate_channel` with a 30-second delay so
+staff see a goodbye notice before the channel disappears. `event.old_member` may be
+`None` (cache miss) — user ID is always used for the Discord mention.
+
+### Startup Reconciliation
+
+`on_startup_reconcile` (`StartedEvent`) iterates all guilds with persisted state via
+`all_guild_ids()` and calls `_reconcile_guild()` for each. For every member entry:
+
+- **Member left while offline** — REST 404 on `fetch_member` → remove from state, fire
+  `_close_validate_channel` (30-second delay) if a channel exists.
+- **Channel deleted while offline** — member present but REST 404 on `fetch_channel` →
+  remove from state (no channel to delete).
+- HTTP errors other than 404 → log a warning and skip that entry.
+
+Each guild is wrapped in its own `try/except` so one failure doesn't abort others.
+
 ### Rejection
 
 There is no reject button. Staff close the validate channel manually (deleting the channel
 removes the member from Discord's view; bot state is cleaned up on the next
-`MemberUpdateEvent` or left for garbage collection — no orphan tracking is needed since
-the channel deletion is the source of truth for staff).
+`MemberDeleteEvent` or `StartedEvent` reconcile).
 
 ### Configuration
 
@@ -64,10 +83,14 @@ Sample images live in `assets/` and are attached via `hikari.File`:
 ### File Structure
 
 - **`__init__.py`** — Loader re-export, `INTERACTION_HANDLERS`, `MODAL_HANDLERS`
-- **`commands.py`** — All event listeners, cron task, interaction/modal handlers
+- **`commands.py`** — All event listeners (`on_member_join`, `on_member_leave`,
+  `on_startup_reconcile`, `on_member_update`, `on_message_create`), cron task,
+  interaction/modal handlers, and helpers (`_close_validate_channel`, `_reconcile_guild`,
+  `_sanitize_channel_name`, `_is_staff`)
 - **`config.py`** — `/config validation` subcommands
 - **`models.py`** — `ValidationStage`, `ValidationMember`, `ValidationGuildState`
-- **`state.py`** — YAML state persistence (load/save with in-memory cache)
+- **`state.py`** — YAML state persistence (load/save with in-memory cache).
+  `all_guild_ids()` returns all guild IDs with persisted state files on disk.
 - **`assets/`** — Sample verification images
 
 ### Security Invariants
