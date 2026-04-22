@@ -52,12 +52,12 @@ A small helper that globs `STATE_DIR` for `validation_*.yaml` files and yields t
 2. Wrap each guild in its own `try/except` so one failure doesn't abort others.
 3. Load state for the guild. Skip if no members in onboarding.
 4. For each `ValidationMember` in state:
-   - **Member still in guild?** REST-fetch `(guild_id, user_id)`. On `NotFoundError`: member left while bot was offline → remove from state, delete their channel immediately (no delay, no notice — they're gone).
+   - **Member still in guild?** REST-fetch `(guild_id, user_id)`. On `NotFoundError`: member left while bot was offline → remove from state, fire `_close_validate_channel` as a background task (30s delay, same as the live-leave handler) with notice: `"*sad snort* Looks like they flew away while I was napping! This channel will be deleted in 30 seconds~ 🐉"`
    - **Channel still exists?** If member is present and `channel_id` is set, REST-fetch the channel. On `NotFoundError`: staff deleted it → remove from state (nothing to delete).
 5. If any entries were removed, save state and log each cleanup to the staff channel.
 
 **Log messages:**
-- Member left offline: `"*sad snort* <@id> left the server while I was napping — cleaned up their onboarding entry! 🐉"`
+- Member left offline: `"*sad snort* <@id> left the server while I was napping — cleaning up their onboarding! 🐉"`
 - Channel gone: `"*confused sniff* Validate channel for <@id> is gone — cleaned up their onboarding entry! 🐉"`
 
 ---
@@ -75,5 +75,5 @@ A small helper that globs `STATE_DIR` for `validation_*.yaml` files and yields t
 ## What Is Not Changed
 
 - No changes to the approval flow, rejection flow, or reminder/kick cron.
-- No new delay constants — reuses existing `CHANNEL_CLOSE_DELAY = 30`.
+- No new delay constants — reuses existing `CHANNEL_CLOSE_DELAY = 30` and `_close_validate_channel` in all three cleanup paths.
 - No changes to state schema or models.
