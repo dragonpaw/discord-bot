@@ -285,9 +285,9 @@ async def test_close_validate_channel_happy_path(monkeypatch):
     from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
 
     rest = Mock()
-    rest.create_message = Mock(return_value=_noop())
+    rest.create_message = AsyncMock()
     gc = _make_gc(rest)
-    gc.delete_channel = Mock(return_value=_noop())
+    gc.delete_channel = AsyncMock()
 
     monkeypatch.setattr("asyncio.sleep", lambda _: _noop())
 
@@ -304,7 +304,7 @@ async def test_close_validate_channel_not_found_returns_early(monkeypatch):
     rest = Mock()
     rest.create_message = Mock(return_value=_raise_not_found())
     gc = _make_gc(rest)
-    gc.delete_channel = Mock(return_value=_noop())
+    gc.delete_channel = AsyncMock()
 
     sleep_calls = []
     monkeypatch.setattr("asyncio.sleep", lambda d: (sleep_calls.append(d), _noop())[1])
@@ -323,7 +323,7 @@ async def test_close_validate_channel_forbidden_still_deletes(monkeypatch):
     rest = Mock()
     rest.create_message = Mock(return_value=_raise_forbidden())
     gc = _make_gc(rest)
-    gc.delete_channel = Mock(return_value=_noop())
+    gc.delete_channel = AsyncMock()
 
     monkeypatch.setattr("asyncio.sleep", lambda _: _noop())
 
@@ -340,7 +340,7 @@ async def test_close_validate_channel_http_error_still_deletes(monkeypatch):
     rest = Mock()
     rest.create_message = Mock(return_value=_raise_http())
     gc = _make_gc(rest)
-    gc.delete_channel = Mock(return_value=_noop())
+    gc.delete_channel = AsyncMock()
 
     monkeypatch.setattr("asyncio.sleep", lambda _: _noop())
 
