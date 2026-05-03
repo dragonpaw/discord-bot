@@ -14,6 +14,8 @@ from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.media_channels import state as media_state
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
@@ -23,12 +25,25 @@ loader = lightbulb.Loader()
 _URL_RE = re.compile(r"https?://", re.IGNORECASE)
 
 
-def _has_media(message: hikari.Message) -> bool:
-    """Return True if this message contains an attachment, URL, or sticker."""
+def _msg_has_media(
+    attachments: Sequence[hikari.Attachment],
+    content: str | None,
+    stickers: Sequence[hikari.PartialSticker],
+) -> bool:
     return (
-        bool(message.attachments)
-        or _URL_RE.search(message.content or "") is not None
-        or bool(message.stickers)
+        bool(attachments) or _URL_RE.search(content or "") is not None or bool(stickers)
+    )
+
+
+def _has_media(message: hikari.Message) -> bool:
+    """Return True if this message (or any forwarded snapshot) contains media."""
+    if _msg_has_media(message.attachments, message.content, message.stickers):
+        return True
+    # Forwarded messages carry their media inside message_snapshots, not on the
+    # message itself — check each snapshot with the same rules.
+    return any(
+        _msg_has_media(s.attachments, s.content, s.stickers)
+        for s in message.message_snapshots
     )
 
 

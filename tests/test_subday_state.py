@@ -2,7 +2,8 @@ import datetime
 
 import yaml
 
-from dragonpaw_bot.plugins.subday import MILESTONE_WEEKS, state
+from dragonpaw_bot.plugins.subday import state
+from dragonpaw_bot.plugins.subday.constants import MILESTONE_WEEKS
 from dragonpaw_bot.plugins.subday.models import (
     SubDayGuildConfig,
     SubDayGuildState,

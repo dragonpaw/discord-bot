@@ -3,8 +3,8 @@ from unittest.mock import Mock
 import hikari
 import pytest
 
-from dragonpaw_bot.plugins.media_channels import _has_media
 from dragonpaw_bot.plugins.media_channels import state as media_state
+from dragonpaw_bot.plugins.media_channels.listeners import _has_media
 from dragonpaw_bot.plugins.media_channels.models import (
     MediaChannelEntry,
     MediaGuildState,
@@ -15,15 +15,29 @@ from dragonpaw_bot.plugins.media_channels.models import (
 # ---------------------------------------------------------------------------- #
 
 
+def _mock_snapshot(
+    content: str | None = None,
+    attachments: list | None = None,
+    stickers: list | None = None,
+) -> Mock:
+    snap = Mock(spec=hikari.messages.MessageSnapshot)
+    snap.content = content
+    snap.attachments = attachments or []
+    snap.stickers = stickers or []
+    return snap
+
+
 def _mock_message(
     content: str | None = None,
     attachments: list | None = None,
     stickers: list | None = None,
+    snapshots: list | None = None,
 ) -> Mock:
     msg = Mock(spec=hikari.Message)
     msg.content = content
     msg.attachments = attachments or []
     msg.stickers = stickers or []
+    msg.message_snapshots = snapshots or []
     return msg
 
 
@@ -66,6 +80,30 @@ def test_has_media_requires_scheme():
 def test_has_media_url_case_insensitive():
     msg = _mock_message(content="HTTPS://EXAMPLE.COM")
     assert _has_media(msg) is True
+
+
+def test_has_media_forwarded_with_attachment():
+    snap = _mock_snapshot(attachments=[Mock()])
+    msg = _mock_message(snapshots=[snap])
+    assert _has_media(msg) is True
+
+
+def test_has_media_forwarded_with_url():
+    snap = _mock_snapshot(content="https://example.com/pic.png")
+    msg = _mock_message(snapshots=[snap])
+    assert _has_media(msg) is True
+
+
+def test_has_media_forwarded_with_sticker():
+    snap = _mock_snapshot(stickers=[Mock()])
+    msg = _mock_message(snapshots=[snap])
+    assert _has_media(msg) is True
+
+
+def test_has_media_forwarded_text_only():
+    snap = _mock_snapshot(content="just text")
+    msg = _mock_message(snapshots=[snap])
+    assert _has_media(msg) is False
 
 
 # ---------------------------------------------------------------------------- #
