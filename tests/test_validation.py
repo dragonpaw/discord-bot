@@ -153,13 +153,7 @@ def test_validation_guild_state_defaults():
     assert st.lobby_channel_id is None
     assert st.member_role_id is None
     assert st.staff_role_id is None
-    assert st.max_reminders == 3
     assert st.members == []
-
-
-def test_validation_guild_state_max_reminders_min_1():
-    with pytest.raises(Exception):
-        ValidationGuildState(guild_id=1, guild_name="x", max_reminders=0)
 
 
 def test_validation_guild_state_round_trip():
@@ -177,7 +171,6 @@ def test_validation_guild_state_round_trip():
         lobby_channel_id=200,
         member_role_id=300,
         staff_role_id=400,
-        max_reminders=5,
         members=[member],
     )
     data = st.model_dump(mode="json")
@@ -186,7 +179,6 @@ def test_validation_guild_state_round_trip():
     assert loaded.lobby_channel_id == 200
     assert loaded.member_role_id == 300
     assert loaded.staff_role_id == 400
-    assert loaded.max_reminders == 5
     assert len(loaded.members) == 1
     assert loaded.members[0].user_id == 10
     assert loaded.members[0].stage == ValidationStage.AWAITING_PHOTOS
