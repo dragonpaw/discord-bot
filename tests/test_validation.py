@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock
 
 import hikari
@@ -510,3 +510,281 @@ async def test_reconcile_guild_no_channel_id_skips_channel_check(tmp_path, monke
     validation_state._cache.clear()
     loaded = validation_state.load(1)
     assert len(loaded.members) == 1
+
+
+# ---------------------------------------------------------------------------- #
+#                         validation_reminder_cron                              #
+# ---------------------------------------------------------------------------- #
+
+
+def _make_cron_bot(*, guild_id: int = 1, guild_name: str = "TestGuild"):
+    """Minimal bot mock for cron tests. bot.state returns None so gc.log() is a no-op."""
+    guild = Mock()
+    guild.id = hikari.Snowflake(guild_id)
+    guild.name = guild_name
+
+    bot = Mock()
+    bot.cache = Mock()
+    bot.cache.get_guilds_view = Mock(return_value={guild_id: guild})
+    bot.state = Mock(return_value=None)
+    bot.rest = Mock()
+    bot.rest.kick_user = AsyncMock()
+    bot.rest.create_message = AsyncMock()
+    return bot
+
+
+async def test_cron_skips_awaiting_staff(tmp_path, monkeypatch):
+    """AWAITING_STAFF members are not pinged or kicked, even past the 7-day deadline."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(days=8),
+                stage=ValidationStage.AWAITING_STAFF,
+                channel_id=55,
+            )
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+
+    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
+
+    await validation_reminder_cron(bot)
+
+    bot.rest.kick_user.assert_not_called()
+    bot.rest.create_message.assert_not_called()
+
+
+async def test_cron_no_reminder_before_18h(tmp_path, monkeypatch):
+    """Member joined 10h ago — too soon for first reminder; nothing happens."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(hours=10),
+                stage=ValidationStage.AWAITING_RULES,
+            )
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+
+    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
+
+    await validation_reminder_cron(bot)
+
+    bot.rest.create_message.assert_not_called()
+    bot.rest.kick_user.assert_not_called()
+
+
+async def test_cron_18h_reminder_awaiting_rules(tmp_path, monkeypatch):
+    """AWAITING_RULES member 20h after join gets a reminder in the lobby channel."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(hours=20),
+                stage=ValidationStage.AWAITING_RULES,
+            )
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+
+    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
+
+    await validation_reminder_cron(bot)
+
+    bot.rest.create_message.assert_called_once()
+    assert bot.rest.create_message.call_args.kwargs["channel"] == 10
+
+    validation_state._cache.clear()
+    assert validation_state.load(1).members[0].reminder_count == 1
+
+
+async def test_cron_18h_reminder_awaiting_photos(tmp_path, monkeypatch):
+    """AWAITING_PHOTOS member 20h after join gets a reminder in their validate channel."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(hours=20),
+                stage=ValidationStage.AWAITING_PHOTOS,
+                channel_id=55,
+            )
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+
+    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
+
+    await validation_reminder_cron(bot)
+
+    bot.rest.create_message.assert_called_once()
+    assert bot.rest.create_message.call_args.kwargs["channel"] == 55
+
+    validation_state._cache.clear()
+    assert validation_state.load(1).members[0].reminder_count == 1
+
+
+async def test_cron_deadline_kicks_awaiting_rules(tmp_path, monkeypatch):
+    """AWAITING_RULES member past 7 days is kicked and removed from state. No channel close."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(days=8),
+                stage=ValidationStage.AWAITING_RULES,
+            )
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+    close_calls: list[int] = []
+
+    async def _fake_close(_gc, channel_id, _notice):
+        close_calls.append(channel_id)
+
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.validation.cron._close_validate_channel",
+        _fake_close,
+    )
+
+    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
+
+    await validation_reminder_cron(bot)
+
+    bot.rest.kick_user.assert_called_once()
+    assert close_calls == []
+
+    validation_state._cache.clear()
+    assert validation_state.load(1).members == []
+
+
+async def test_cron_deadline_kicks_and_closes_awaiting_photos(tmp_path, monkeypatch):
+    """AWAITING_PHOTOS member past 7 days is kicked and validate channel is closed."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(days=8),
+                stage=ValidationStage.AWAITING_PHOTOS,
+                channel_id=55,
+            )
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+    close_calls: list[int] = []
+
+    async def _fake_close(_gc, channel_id, _notice):
+        close_calls.append(channel_id)
+
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.validation.cron._close_validate_channel",
+        _fake_close,
+    )
+
+    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
+
+    await validation_reminder_cron(bot)
+    await asyncio.sleep(0)  # let the create_task fire
+
+    bot.rest.kick_user.assert_called_once()
+    assert close_calls == [55]
+
+    validation_state._cache.clear()
+    assert validation_state.load(1).members == []
+
+
+async def test_cron_deadline_missing_channel_still_kicks(tmp_path, monkeypatch):
+    """AWAITING_PHOTOS past deadline with no channel_id is still kicked; no close attempted."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(days=8),
+                stage=ValidationStage.AWAITING_PHOTOS,
+                channel_id=None,
+            )
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+    close_calls: list[int] = []
+
+    async def _fake_close(_gc, channel_id, _notice):
+        close_calls.append(channel_id)
+
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.validation.cron._close_validate_channel",
+        _fake_close,
+    )
+
+    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
+
+    await validation_reminder_cron(bot)
+
+    bot.rest.kick_user.assert_called_once()
+    assert close_calls == []
+
+    validation_state._cache.clear()
+    assert validation_state.load(1).members == []
