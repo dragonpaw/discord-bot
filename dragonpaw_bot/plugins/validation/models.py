@@ -29,7 +29,6 @@ class ValidationGuildState(pydantic.BaseModel):
     validate_category_id: int | None = None
     member_role_id: int | None = None
     staff_role_id: int | None = None
-    max_reminders: int = pydantic.Field(default=3, ge=1)
     # welcome message channel links
     about_channel_id: int | None = None
     roles_channel_id: int | None = None
