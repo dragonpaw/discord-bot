@@ -49,13 +49,6 @@ class ValidationSetup(
         "Staff role added to validate channels and pinged on photo submission",
         default=None,
     )
-    max_reminders = lightbulb.integer(
-        "max_reminders",
-        "How many 24h lobby reminders before auto-kick (default: 3)",
-        default=None,
-        min_value=1,
-        max_value=10,
-    )
     about_channel = lightbulb.channel(
         "about_channel",
         "Channel linked in the welcome message for server info",
@@ -103,8 +96,6 @@ class ValidationSetup(
             st.member_role_id = int(self.member_role.id)
         if self.staff_role is not None:
             st.staff_role_id = int(self.staff_role.id)
-        if self.max_reminders is not None:
-            st.max_reminders = self.max_reminders
         if self.about_channel is not None:
             st.about_channel_id = int(self.about_channel.id)
         if self.roles_channel is not None:
@@ -125,7 +116,6 @@ class ValidationSetup(
             else None,
             member_role=self.member_role.name if self.member_role else None,
             staff_role=self.staff_role.name if self.staff_role else None,
-            max_reminders=self.max_reminders,
         )
 
         parts = []
@@ -137,8 +127,6 @@ class ValidationSetup(
             parts.append(f"member role: <@&{self.member_role.id}>")
         if self.staff_role:
             parts.append(f"staff role: <@&{self.staff_role.id}>")
-        if self.max_reminders is not None:
-            parts.append(f"max reminders: {self.max_reminders}")
         if self.about_channel:
             parts.append(f"about: <#{self.about_channel.id}>")
         if self.roles_channel:
@@ -237,7 +225,7 @@ class ValidationStatus(
         lines.append(
             f"• Staff role: {f'<@&{st.staff_role_id}>' if st.staff_role_id else 'not set'}"
         )
-        lines.append(f"• Max reminders before kick: {st.max_reminders}")
+        lines.append("• Validation timeout: 7 days from join, reminders every 18 hours")
         lines.append(
             f"• About channel: {f'<#{st.about_channel_id}>' if st.about_channel_id else 'not set'}"
         )
