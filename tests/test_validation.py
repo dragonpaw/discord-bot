@@ -738,7 +738,6 @@ async def test_cron_deadline_kicks_and_closes_awaiting_photos(tmp_path, monkeypa
     from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
 
     await validation_reminder_cron(bot)
-    await asyncio.sleep(0)  # let the create_task fire
 
     bot.rest.kick_user.assert_called_once()
     assert close_calls == [55]

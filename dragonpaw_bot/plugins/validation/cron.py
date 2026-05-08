@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, cast
 
@@ -23,7 +22,7 @@ REMINDER_INTERVAL_HOURS = 18
 MAX_VALIDATION_DAYS = 7
 
 
-async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:
+async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR0912
     """Ping unvalidated members every 18h; kick and close channel after 7 days."""
     bot = cast("DragonpawBot", bot)
     now = datetime.now(UTC)
@@ -49,15 +48,13 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:
                         reason=f"Did not complete validation within {MAX_VALIDATION_DAYS} days",
                     )
                     if member.channel_id:
-                        asyncio.create_task(
-                            _close_validate_channel(
-                                gc,
-                                member.channel_id,
-                                f"*puffs a small smoke ring* ⏰ Hey <@{member.user_id}> — "
-                                f"your {MAX_VALIDATION_DAYS}-day validation window has closed. "
-                                f"This channel will disappear shortly. "
-                                f"You're welcome to rejoin the server and try again! 🐉",
-                            )
+                        await _close_validate_channel(
+                            gc,
+                            member.channel_id,
+                            f"*puffs a small smoke ring* ⏰ Hey <@{member.user_id}> — "
+                            f"your {MAX_VALIDATION_DAYS}-day validation window has closed. "
+                            f"This channel will disappear shortly. "
+                            f"You're welcome to rejoin the server and try again! 🐉",
                         )
                     to_remove.append(member.user_id)
                     continue
