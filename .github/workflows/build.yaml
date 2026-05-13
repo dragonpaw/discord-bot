@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build
         run: |
@@ -32,7 +32,7 @@ jobs:
 
       - name: Login to GitHub Container Registry
         if: github.event_name == 'push'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -45,6 +45,9 @@ jobs:
           docker push ${IMAGE}:latest
           docker push ${IMAGE}:${TAG}
 
+      # actions/delete-package-versions v5 still runs on Node 20 (no Node 24
+      # release available upstream as of 2026-05). GitHub forces Node 24 on
+      # 2026-06-02; check for a newer release before then.
       - name: Prune old container images
         if: github.event_name == 'push'
         uses: actions/delete-package-versions@v5
