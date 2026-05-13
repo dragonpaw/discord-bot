@@ -21,9 +21,11 @@ from dragonpaw_bot.plugins.activity.models import (
     calculate_score,
     has_ignored_role,
 )
+from dragonpaw_bot.plugins.intros import state as intros_state
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
+    from dragonpaw_bot.plugins.intros.models import IntrosGuildState
 
 logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
@@ -152,7 +154,73 @@ def _prune_state(
     return total_buckets
 
 
-async def _sync_lurker_role(
+async def _load_intros_data(
+    gc: GuildContext,
+) -> tuple[IntrosGuildState, set[int]] | None:
+    """Return (intros_state, posted_user_ids) if intros is configured & readable, else None.
+
+    None means the no-introduction lurker check is skipped — either intros isn't
+    configured, or the channel can't be read (permissions / HTTP error).
+    """
+    intros_st = intros_state.load(gc.guild_id)
+    if intros_st.channel_id is None:
+        return None
+    posted: set[int] = set()
+    try:
+        async for message in gc.bot.rest.fetch_messages(intros_st.channel_id):
+            if not message.author.is_bot and not message.is_pinned:
+                posted.add(int(message.author.id))
+    except hikari.ForbiddenError:
+        logger.warning(
+            "Cannot read intros channel for lurker sync",
+            guild=gc.name,
+            channel=intros_st.channel_name,
+        )
+        await gc.log(
+            f"⚠️ I couldn't peek inside <#{intros_st.channel_id}> for the "
+            "no-introduction lurker check — I need **Read Message History**! 🐾"
+        )
+        return None
+    except hikari.HTTPError:
+        logger.warning(
+            "HTTP error fetching intros for lurker sync",
+            guild=gc.name,
+            channel=intros_st.channel_name,
+        )
+        return None
+    return intros_st, posted
+
+
+def _evaluate_lurker(
+    member: hikari.Member,
+    role_ids: list[int],
+    score: float,
+    meta: ActivityGuildMeta,
+    intros: tuple[IntrosGuildState, set[int]] | None,
+) -> tuple[bool, str]:
+    """Decide whether the member should hold the lurker role.
+
+    The reason is the state-transition label used when the role is actually
+    added or removed (members already in the correct state are filtered out
+    by the caller, so the label is only surfaced for true transitions):
+      should_be_lurker=True  → 'no longer active' | 'no introduction'
+      should_be_lurker=False → 'gained immunity' | 'now active'
+    """
+    if has_ignored_role(role_ids, meta.config.role_configs):
+        return False, "gained immunity"
+    if score < ACTIVITY_FLOOR:
+        return True, "no longer active"
+    if intros is not None:
+        intros_st, posted_ids = intros
+        applies = (
+            intros_st.required_role_id is None or intros_st.required_role_id in role_ids
+        )
+        if applies and int(member.id) not in posted_ids:
+            return True, "no introduction"
+    return False, "now active"
+
+
+async def _sync_lurker_role(  # noqa: PLR0912
     gc: GuildContext,
     meta: ActivityGuildMeta,
     members: dict[int, hikari.Member],
@@ -162,8 +230,10 @@ async def _sync_lurker_role(
     lurker_role_id = meta.config.lurker_role_id
     assert lurker_role_id
 
-    added: list[str] = []
-    removed: list[str] = []
+    intros = await _load_intros_data(gc)
+
+    added_by_reason: dict[str, list[str]] = {}
+    removed_by_reason: dict[str, list[str]] = {}
 
     for member in members.values():
         if member.is_bot:
@@ -171,49 +241,58 @@ async def _sync_lurker_role(
         if int(member.id) == owner_id:
             continue
         role_ids = [int(r) for r in member.role_ids]
-        if not role_ids or has_ignored_role(role_ids, meta.config.role_configs):
+        if not role_ids:
             continue
 
         ua = activity_state.load_user(meta.guild_id, int(member.id))
-        buckets = ua.buckets if ua is not None else []
+        if ua is None:
+            buckets = []
+        else:
+            buckets = ua.buckets
         score = calculate_score(
             buckets, best_role_config(role_ids, meta.config.role_configs), now=now
         )
-        should_be_lurker = score < ACTIVITY_FLOOR
+        should_be_lurker, reason = _evaluate_lurker(
+            member, role_ids, score, meta, intros
+        )
         has_lurker = lurker_role_id in role_ids
 
-        if (
-            should_be_lurker
-            and not has_lurker
-            and await _set_lurker(gc, member, lurker_role_id, add=True)
-        ):
-            added.append(member.display_name)
+        if should_be_lurker == has_lurker:
+            continue
+
+        if should_be_lurker:
+            if not await _set_lurker(gc, member, lurker_role_id, add=True):
+                continue
+            added_by_reason.setdefault(reason, []).append(member.mention)
             logger.info(
                 "Lurker role added",
                 guild=gc.name,
                 user=member.display_name,
+                reason=reason,
                 score=score,
             )
-        elif (
-            not should_be_lurker
-            and has_lurker
-            and await _set_lurker(gc, member, lurker_role_id, add=False)
-        ):
-            removed.append(member.display_name)
+        else:
+            if not await _set_lurker(gc, member, lurker_role_id, add=False):
+                continue
+            removed_by_reason.setdefault(reason, []).append(member.mention)
             logger.info(
                 "Lurker role removed",
                 guild=gc.name,
                 user=member.display_name,
+                reason=reason,
                 score=score,
             )
 
-    if added or removed:
-        parts: list[str] = []
-        if added:
-            parts.append(f"added to **{len(added)}**: {', '.join(added)}")
-        if removed:
-            parts.append(f"removed from **{len(removed)}**: {', '.join(removed)}")
-        await gc.log(f"💤 Lurker role sync — {'; '.join(parts)} 🐉")
+    if not (added_by_reason or removed_by_reason):
+        return
+
+    lines = ["💤 Lurker role shuffle —"]
+    for r, names in added_by_reason.items():
+        lines.append(f"• Added ({r}) **{len(names)}**: {', '.join(names)}")
+    for r, names in removed_by_reason.items():
+        lines.append(f"• Removed ({r}) **{len(names)}**: {', '.join(names)}")
+    lines.append("🐉")
+    await gc.log("\n".join(lines))
 
 
 async def _set_lurker(

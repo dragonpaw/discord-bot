@@ -89,7 +89,13 @@ All require guild owner.
 - **Hourly (`:20`):** `activity_flush` — flushes dirty in-memory user state to disk.
 - **Daily (4:15am UTC):** `activity_daily_cron`:
   1. **Prune:** Per-user contribution-based bucket pruning (see above). Remove departed users.
-  2. **Lurker sync:** For each non-bot, non-ignored, non-owner member: compute score. Assign lurker role if `score < ACTIVITY_FLOOR` and not already lurker. Remove lurker role if `score >= ACTIVITY_FLOOR` and currently lurker. Logs role changes to `gc.log()`. Skipped if total guild bucket count < 168 (7 days × 24h — not enough history yet). Guild owner is always skipped.
+  2. **Lurker sync:** For each non-bot, non-owner member with at least one role, decide whether they should be a lurker. The decision short-circuits in this order:
+     - **Immune** (`has_ignored_role`) → never lurker. If they currently have it, remove it with reason `gained immunity`.
+     - **Activity** `score < ACTIVITY_FLOOR` → lurker with reason `no longer active`.
+     - **Intros** — if the intros plugin is configured for this guild (`channel_id` set), fetch the posters in that channel (skipping bots & pinned messages). A member subject to the intros check (everyone, or only members holding the configured `required_role_id`) who hasn't posted is marked lurker with reason `no introduction`.
+     - Otherwise → not a lurker; if they currently have it, remove it with reason `now active`.
+
+     Role changes are logged to `gc.log()` grouped by reason: `Added (no longer active)`, `Added (no introduction)`, `Removed (gained immunity)`, `Removed (now active)`. Skipped if total guild bucket count < 168 (7 days × 24h — not enough history yet). Guild owner is always skipped. If the bot lacks `READ_MESSAGE_HISTORY` on the intros channel, the no-introduction check is skipped and a warning is posted to the log channel (so staff can fix the permission). Transient HTTP failures fetching intros are logged but not surfaced to staff — the next daily run retries.
 
 ### State
 
