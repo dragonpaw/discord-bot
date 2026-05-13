@@ -1,3 +1,5 @@
+from dragonpaw_bot.plugins.tickets import state as tickets_state
+from dragonpaw_bot.plugins.tickets.commands import _sanitize_channel_name
 from dragonpaw_bot.plugins.tickets.models import OpenTicket, TicketGuildState
 
 
@@ -43,9 +45,6 @@ def test_ticket_guild_state_round_trip():
     assert loaded.required_role_id == 700
     assert len(loaded.open_tickets) == 1
     assert loaded.open_tickets[0].topic == "help me"
-
-
-from dragonpaw_bot.plugins.tickets import state as tickets_state
 
 
 def test_state_round_trip(tmp_path, monkeypatch):
@@ -100,9 +99,6 @@ def test_state_round_trip_no_tickets(tmp_path, monkeypatch):
 
     loaded = tickets_state.load(400)
     assert loaded.open_tickets == []
-
-
-from dragonpaw_bot.plugins.tickets.commands import _sanitize_channel_name
 
 
 def test_sanitize_simple_name():

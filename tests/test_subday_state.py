@@ -3,7 +3,8 @@ import datetime
 import yaml
 
 from dragonpaw_bot.plugins.subday import state
-from dragonpaw_bot.plugins.subday.constants import MILESTONE_WEEKS
+from dragonpaw_bot.plugins.subday.commands import _prepare_backfill
+from dragonpaw_bot.plugins.subday.constants import MILESTONE_WEEKS, TOTAL_WEEKS
 from dragonpaw_bot.plugins.subday.models import (
     SubDayGuildConfig,
     SubDayGuildState,
@@ -145,9 +146,6 @@ def test_graduated_participant():
 
 def test_prepare_backfill_auto_enrolls():
     """Backfill auto-enrolls a new participant and sets the week."""
-    from dragonpaw_bot.plugins.subday.commands import _prepare_backfill
-    from dragonpaw_bot.plugins.subday.models import SubDayGuildState
-
     guild_state = SubDayGuildState(guild_id=1, guild_name="test")
     participant, auto_enrolled = _prepare_backfill(guild_state, 123, week=9)
 
@@ -158,9 +156,6 @@ def test_prepare_backfill_auto_enrolls():
 
 def test_prepare_backfill_existing_participant():
     """Backfill on existing participant updates week and returns auto_enrolled=False."""
-    from dragonpaw_bot.plugins.subday.commands import _prepare_backfill
-    from dragonpaw_bot.plugins.subday.models import SubDayGuildState
-
     guild_state = SubDayGuildState(guild_id=1, guild_name="test")
     # First call auto-enrolls
     _prepare_backfill(guild_state, 123, week=3)
@@ -179,7 +174,6 @@ def test_sent_next_advances_and_prevents_cron_resend():
     p.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
 
     # Simulate sent_next logic from commands.py
-    from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
 
     if p.current_week < TOTAL_WEEKS:
         p.current_week += 1
@@ -194,7 +188,6 @@ def test_sent_next_advances_and_prevents_cron_resend():
 
 def test_sent_next_blocked_at_total_weeks():
     """sent=True on week 52 does not advance past 52."""
-    from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
 
     p = _sample_participant(current_week=TOTAL_WEEKS)
     p.week_completed = True

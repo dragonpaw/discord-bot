@@ -32,7 +32,7 @@ def _sample_state() -> GuildState:
         id=hikari.Snowflake(99),
         name="Test Guild",
         config_url="https://example.com/config.toml",
-        config_last=datetime.datetime(2025, 6, 1, 0, 0, 0),
+        config_last=datetime.datetime(2025, 6, 1, 0, 0, 0, tzinfo=datetime.UTC),
     )
 
 
@@ -205,8 +205,6 @@ def test_parse_role_config_dragonpaw_gist():
 
 
 def test_yaml_dict_round_trip_general_channel_id(state_dir):
-    import yaml
-
     raw = {
         "id": 99,
         "name": "Test Guild",

@@ -1,6 +1,7 @@
 import datetime
 
 import hikari
+import pydantic
 import pytest
 
 from dragonpaw_bot.structs import GuildState
@@ -12,7 +13,7 @@ def test_guild_state_minimal():
         id=hikari.Snowflake(123456789),
         name="Test Guild",
         config_url="https://example.com/config.toml",
-        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0),
+        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.UTC),
     )
     assert state.id == hikari.Snowflake(123456789)
     assert state.log_channel_id is None
@@ -24,7 +25,7 @@ def test_guild_state_round_trip():
         id=hikari.Snowflake(123456789),
         name="Test Guild",
         config_url="https://example.com/config.toml",
-        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0),
+        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.UTC),
         log_channel_id=hikari.Snowflake(777),
     )
 
@@ -40,7 +41,6 @@ def test_guild_state_round_trip():
 
 def test_guild_state_missing_required_fields():
     """GuildState raises ValidationError when required fields are missing."""
-    import pydantic
 
     with pytest.raises(pydantic.ValidationError):
         GuildState.model_validate({"name": "Test Guild"})
@@ -51,7 +51,7 @@ def test_guild_state_general_channel_id_defaults_to_none():
         id=hikari.Snowflake(123456789),
         name="Test Guild",
         config_url="https://example.com/config.toml",
-        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0),
+        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.UTC),
     )
     assert state.general_channel_id is None
 
@@ -61,7 +61,7 @@ def test_guild_state_general_channel_id_round_trip():
         id=hikari.Snowflake(123456789),
         name="Test Guild",
         config_url="https://example.com/config.toml",
-        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0),
+        config_last=datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.UTC),
         general_channel_id=hikari.Snowflake(888),
     )
     dumped = state.model_dump()

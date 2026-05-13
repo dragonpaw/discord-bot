@@ -6,7 +6,7 @@ import pytest
 os.environ.setdefault("BOT_TOKEN", "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.GabcDE.fake-token-for-tests-only")
 os.environ.setdefault("CLIENT_ID", "000000000000000000")
 
-import dragonpaw_bot.bot as bot_module  # noqa: E402
+import dragonpaw_bot.bot as bot_module
 
 
 @pytest.fixture()

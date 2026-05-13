@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+
 import hikari
 from PIL import Image
 
@@ -8,8 +10,6 @@ from dragonpaw_bot.plugins.subday.chart import render_star_chart
 
 def _to_image(result: hikari.Bytes) -> Image.Image:
     """Convert hikari.Bytes to a PIL Image for inspection."""
-    import io
-
     return Image.open(io.BytesIO(result.data))
 
 

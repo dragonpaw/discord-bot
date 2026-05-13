@@ -10,7 +10,13 @@ import hikari
 import pytest
 
 from dragonpaw_bot.plugins.validation import state as validation_state
-from dragonpaw_bot.plugins.validation.commands import _is_staff, _sanitize_channel_name
+from dragonpaw_bot.plugins.validation.commands import (
+    _close_validate_channel,
+    _is_staff,
+    _reconcile_guild,
+    _sanitize_channel_name,
+)
+from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
 from dragonpaw_bot.plugins.validation.models import (
     ValidationGuildState,
     ValidationMember,
@@ -274,7 +280,6 @@ async def _raise_http(*_args, **_kwargs) -> None:
 
 async def test_close_validate_channel_happy_path(monkeypatch):
     """Notice is posted, then channel is deleted."""
-    from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
 
     rest = Mock()
     rest.create_message = AsyncMock()
@@ -291,7 +296,6 @@ async def test_close_validate_channel_happy_path(monkeypatch):
 
 async def test_close_validate_channel_not_found_returns_early(monkeypatch):
     """NotFoundError from create_message short-circuits — no sleep, no delete."""
-    from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
 
     rest = Mock()
     rest.create_message = Mock(return_value=_raise_not_found())
@@ -310,7 +314,6 @@ async def test_close_validate_channel_not_found_returns_early(monkeypatch):
 
 async def test_close_validate_channel_forbidden_still_deletes(monkeypatch):
     """ForbiddenError from create_message logs a warning but still deletes the channel."""
-    from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
 
     rest = Mock()
     rest.create_message = Mock(return_value=_raise_forbidden())
@@ -327,7 +330,6 @@ async def test_close_validate_channel_forbidden_still_deletes(monkeypatch):
 
 async def test_close_validate_channel_http_error_still_deletes(monkeypatch):
     """Generic HTTPError from create_message logs a warning but still deletes the channel."""
-    from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
 
     rest = Mock()
     rest.create_message = Mock(return_value=_raise_http())
@@ -397,8 +399,6 @@ async def test_reconcile_guild_no_members(tmp_path, monkeypatch):
 
     bot = _make_reconcile_bot()
 
-    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
-
     await _reconcile_guild(bot, 1)
 
     bot.rest.fetch_member.assert_not_called()
@@ -418,8 +418,6 @@ async def test_reconcile_guild_member_present_channel_exists(tmp_path, monkeypat
     validation_state.save(st)
 
     bot = _make_reconcile_bot()
-
-    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
 
     await _reconcile_guild(bot, 1)
 
@@ -452,8 +450,6 @@ async def test_reconcile_guild_member_left(tmp_path, monkeypatch):
         _fake_close,
     )
 
-    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
-
     await _reconcile_guild(bot, 1)
     await asyncio.sleep(0)  # let the create_task coroutine run
 
@@ -478,8 +474,6 @@ async def test_reconcile_guild_channel_deleted(tmp_path, monkeypatch):
 
     bot = _make_reconcile_bot(fetch_channel_raises=hikari.NotFoundError("", {}, b""))
 
-    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
-
     await _reconcile_guild(bot, 1)
 
     validation_state._cache.clear()
@@ -501,8 +495,6 @@ async def test_reconcile_guild_no_channel_id_skips_channel_check(tmp_path, monke
     validation_state.save(st)
 
     bot = _make_reconcile_bot()
-
-    from dragonpaw_bot.plugins.validation.commands import _reconcile_guild
 
     await _reconcile_guild(bot, 1)
 
@@ -556,8 +548,6 @@ async def test_cron_skips_awaiting_staff(tmp_path, monkeypatch):
 
     bot = _make_cron_bot()
 
-    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
-
     await validation_reminder_cron(bot)
 
     bot.rest.kick_user.assert_not_called()
@@ -586,8 +576,6 @@ async def test_cron_no_reminder_before_18h(tmp_path, monkeypatch):
 
     bot = _make_cron_bot()
 
-    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
-
     await validation_reminder_cron(bot)
 
     bot.rest.create_message.assert_not_called()
@@ -615,8 +603,6 @@ async def test_cron_18h_reminder_awaiting_rules(tmp_path, monkeypatch):
     validation_state.save(st)
 
     bot = _make_cron_bot()
-
-    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
 
     await validation_reminder_cron(bot)
 
@@ -649,8 +635,6 @@ async def test_cron_18h_reminder_awaiting_photos(tmp_path, monkeypatch):
     validation_state.save(st)
 
     bot = _make_cron_bot()
-
-    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
 
     await validation_reminder_cron(bot)
 
@@ -691,8 +675,6 @@ async def test_cron_deadline_kicks_awaiting_rules(tmp_path, monkeypatch):
         "dragonpaw_bot.plugins.validation.cron._close_validate_channel",
         _fake_close,
     )
-
-    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
 
     await validation_reminder_cron(bot)
 
@@ -735,8 +717,6 @@ async def test_cron_deadline_kicks_and_closes_awaiting_photos(tmp_path, monkeypa
         _fake_close,
     )
 
-    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
-
     await validation_reminder_cron(bot)
 
     bot.rest.kick_user.assert_called_once()
@@ -777,8 +757,6 @@ async def test_cron_deadline_missing_channel_still_kicks(tmp_path, monkeypatch):
         "dragonpaw_bot.plugins.validation.cron._close_validate_channel",
         _fake_close,
     )
-
-    from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
 
     await validation_reminder_cron(bot)
 
