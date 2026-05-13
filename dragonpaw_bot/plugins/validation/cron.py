@@ -9,7 +9,10 @@ import structlog
 
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.validation import state as validation_state
-from dragonpaw_bot.plugins.validation.commands import _close_validate_channel
+from dragonpaw_bot.plugins.validation.commands import (
+    RULES_AGREED_PREFIX,
+    _close_validate_channel,
+)
 from dragonpaw_bot.plugins.validation.models import ValidationStage
 
 if TYPE_CHECKING:
@@ -20,6 +23,19 @@ loader = lightbulb.Loader()
 
 REMINDER_INTERVAL_HOURS = 18
 MAX_VALIDATION_DAYS = 7
+
+
+def _build_rules_button_row(
+    bot: hikari.GatewayBot, user_id: int
+) -> hikari.api.MessageActionRowBuilder:
+    """Build a fresh 'I've read the rules' button for the given member."""
+    row = bot.rest.build_message_action_row()
+    row.add_interactive_button(
+        hikari.ButtonStyle.SUCCESS,
+        f"{RULES_AGREED_PREFIX}{user_id}",
+        label="I've read the rules! ✅",
+    )
+    return row
 
 
 async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR0912
@@ -72,8 +88,9 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                             content=(
                                 f"*gentle nudge* Hey <@{member.user_id}>! 🐉 Just a little reminder — "
                                 f"you haven't finished reading the rules yet! Give 'em a read and "
-                                f"click the button in my earlier message when you're ready~ 🐾"
+                                f"smack the button below when you're ready~ 🐾"
                             ),
+                            components=[_build_rules_button_row(bot, member.user_id)],
                         )
                     except hikari.HTTPError:
                         logger.warning(

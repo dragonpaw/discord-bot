@@ -25,9 +25,12 @@ a private verify channel where they submit age-verification photos for staff rev
 
 5. **Reminders / timeout** — hourly cron checks members at `AWAITING_RULES` and `AWAITING_PHOTOS`.
    Every 18 hours a reminder is posted: lobby channel for `AWAITING_RULES`, validate channel for
-   `AWAITING_PHOTOS`. After 7 days from `joined_at` the member is kicked and their validate channel
-   (if any) is closed with a timeout notice. `AWAITING_STAFF` members are excluded — staff handles
-   those manually. Constants: `REMINDER_INTERVAL_HOURS = 18`, `MAX_VALIDATION_DAYS = 7` in `cron.py`.
+   `AWAITING_PHOTOS`. The `AWAITING_RULES` reminder re-attaches a fresh "I've read the rules! ✅"
+   button (same `validation_rules_agreed:{user_id}` custom ID) so the flow still works even if the
+   original welcome message has been purged. After 7 days from `joined_at` the member is kicked and
+   their validate channel (if any) is closed with a timeout notice. `AWAITING_STAFF` members are
+   excluded — staff handles those manually. Constants: `REMINDER_INTERVAL_HOURS = 18`,
+   `MAX_VALIDATION_DAYS = 7` in `cron.py`.
 
 ### Member Leave Cleanup
 
