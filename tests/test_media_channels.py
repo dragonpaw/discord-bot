@@ -1,8 +1,10 @@
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import hikari
 import pytest
 
+from dragonpaw_bot.plugins.media_channels import cron as media_cron
 from dragonpaw_bot.plugins.media_channels import state as media_state
 from dragonpaw_bot.plugins.media_channels.listeners import _has_media
 from dragonpaw_bot.plugins.media_channels.models import (
@@ -204,3 +206,88 @@ def test_expiry_minutes_negative_rejected():
 def test_channel_name_cannot_be_empty():
     with pytest.raises(Exception):
         MediaChannelEntry(channel_id=1, channel_name="")
+
+
+# ---------------------------------------------------------------------------- #
+#                      Per-guild cron isolation                                #
+# ---------------------------------------------------------------------------- #
+
+
+def _make_cron_bot(guild_ids: list[int]) -> MagicMock:
+    bot = MagicMock()
+    guilds = {
+        gid: SimpleNamespace(id=gid, name=f"G{gid}", owner_id=99) for gid in guild_ids
+    }
+    bot.cache.get_guilds_view.return_value = guilds
+    bot.state.return_value = None
+    return bot
+
+
+async def test_cron_isolates_guild_state_load_failures(monkeypatch):
+    """A corrupt state YAML for one guild must not prevent other guilds from being processed."""
+    bot = _make_cron_bot([1, 2])
+    good_entry = MediaChannelEntry(
+        channel_id=300, channel_name="art", expiry_minutes=60
+    )
+
+    def fake_load(guild_id: int):
+        if guild_id == 1:
+            raise RuntimeError("corrupt state YAML")
+        return MediaGuildState(guild_id=guild_id, channels=[good_entry])
+
+    monkeypatch.setattr(media_state, "load", fake_load)
+
+    run_cleanup_mock = AsyncMock()
+    monkeypatch.setattr(
+        "dragonpaw_bot.context.ChannelContext.run_cleanup", run_cleanup_mock
+    )
+
+    await media_cron.media_channels_hourly(bot)
+
+    assert run_cleanup_mock.await_count == 1
+
+
+async def test_cron_isolates_run_cleanup_failures(monkeypatch):
+    """A task raising during gather must not prevent other tasks from completing."""
+    bot = _make_cron_bot([1, 2])
+    entry_a = MediaChannelEntry(channel_id=300, channel_name="art", expiry_minutes=60)
+    entry_b = MediaChannelEntry(channel_id=400, channel_name="memes", expiry_minutes=60)
+
+    def fake_load(guild_id: int):
+        return MediaGuildState(
+            guild_id=guild_id,
+            channels=[entry_a if guild_id == 1 else entry_b],
+        )
+
+    monkeypatch.setattr(media_state, "load", fake_load)
+
+    async def flaky_run_cleanup(self, expiry_minutes):
+        if int(self.channel_id) == 300:
+            raise RuntimeError("simulated cleanup error")
+
+    monkeypatch.setattr(
+        "dragonpaw_bot.context.ChannelContext.run_cleanup", flaky_run_cleanup
+    )
+
+    await media_cron.media_channels_hourly(bot)
+
+
+async def test_cron_skips_entries_without_expiry(monkeypatch):
+    """Media channels without expiry_minutes set must not trigger cleanup."""
+    bot = _make_cron_bot([1])
+    no_expiry = MediaChannelEntry(channel_id=500, channel_name="memes")
+
+    monkeypatch.setattr(
+        media_state,
+        "load",
+        lambda gid: MediaGuildState(guild_id=gid, channels=[no_expiry]),
+    )
+
+    run_cleanup_mock = AsyncMock()
+    monkeypatch.setattr(
+        "dragonpaw_bot.context.ChannelContext.run_cleanup", run_cleanup_mock
+    )
+
+    await media_cron.media_channels_hourly(bot)
+
+    run_cleanup_mock.assert_not_awaited()

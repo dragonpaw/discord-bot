@@ -17,7 +17,23 @@ logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
 
 
-@loader.task(lightbulb.crontrigger("45 * * * *"))
+async def _safe_run_cleanup(cc: ChannelContext, expiry_minutes: int) -> None:
+    """Run cleanup for one channel, isolating failures so concurrent tasks aren't lost.
+
+    `run_cleanup` already catches purge errors internally; this wrapper exists
+    so anything that escapes (e.g., NotFoundError from check_perms when a
+    channel has been deleted) doesn't vanish into asyncio.gather's result list.
+    """
+    try:
+        await cc.run_cleanup(expiry_minutes)
+    except Exception:
+        logger.exception(
+            "Unhandled cleanup error",
+            guild=cc.name,
+            channel=cc.channel_name,
+        )
+
+
 async def channel_cleanup_hourly(bot: hikari.GatewayBot) -> None:
     """Hourly task: purge old messages from configured channels (all channels run concurrently)."""
     bot = cast("DragonpawBot", bot)
@@ -30,8 +46,13 @@ async def channel_cleanup_hourly(bot: hikari.GatewayBot) -> None:
             gc = GuildContext.from_guild(bot, guild)
             for entry in cleanup_state.load(int(guild.id)).channels:
                 cc = ChannelContext.from_entry(gc, entry)
-                tasks.append(cc.run_cleanup(entry.expiry_minutes))
+                tasks.append(_safe_run_cleanup(cc, entry.expiry_minutes))
         except Exception:
             logger.exception("Error building cleanup tasks for guild", guild=guild.name)
     if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*tasks)
+
+
+@loader.task(lightbulb.crontrigger("45 * * * *"))
+async def _channel_cleanup_hourly_task(bot: hikari.GatewayBot) -> None:
+    await channel_cleanup_hourly(bot)
