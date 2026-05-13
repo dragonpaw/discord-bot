@@ -641,6 +641,10 @@ def has_any_role_permission(
     return any(member_has_role(member, name) for name in role_names)
 
 
+# Shared by every member/role overwrite the bot grants in private channels
+# (ticket openers, ticket staff role, users added via /ticket Add Person).
+# Defined once so adding a permission propagates to all sites — divergence
+# here is what caused the original "Add Person can't attach files" bug.
 PRIVATE_CHANNEL_USER_PERMS: hikari.Permissions = (
     hikari.Permissions.VIEW_CHANNEL
     | hikari.Permissions.SEND_MESSAGES

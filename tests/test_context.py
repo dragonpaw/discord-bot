@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, Mock
 
 import hikari
 
-from dragonpaw_bot.context import GuildContext, check_guild_perms
+from dragonpaw_bot.context import (
+    PRIVATE_CHANNEL_USER_PERMS,
+    GuildContext,
+    check_guild_perms,
+)
 
 GUILD_ID = hikari.Snowflake(50)
 BOT_USER_ID = hikari.Snowflake(1)
@@ -217,6 +221,8 @@ async def test_create_private_channel_grants_user():
     assert hikari.Permissions.VIEW_CHANNEL in user_ow.allow
     assert hikari.Permissions.SEND_MESSAGES in user_ow.allow
     assert hikari.Permissions.READ_MESSAGE_HISTORY in user_ow.allow
+    assert hikari.Permissions.ATTACH_FILES in user_ow.allow
+    assert user_ow.allow == PRIVATE_CHANNEL_USER_PERMS
 
 
 async def test_create_private_channel_grants_extra_role():
@@ -239,6 +245,20 @@ async def test_create_private_channel_grants_extra_role():
     )
     assert role_ow is not None
     assert hikari.Permissions.VIEW_CHANNEL in role_ow.allow
+    assert hikari.Permissions.ATTACH_FILES in role_ow.allow
+    assert role_ow.allow == PRIVATE_CHANNEL_USER_PERMS
+
+
+def test_private_channel_user_perms_constant_contents():
+    """Lock in the contract of PRIVATE_CHANNEL_USER_PERMS so a future cleanup
+    PR can't silently drop a flag — that's the exact bug ce60ddf fixed."""
+    expected = (
+        hikari.Permissions.VIEW_CHANNEL
+        | hikari.Permissions.SEND_MESSAGES
+        | hikari.Permissions.READ_MESSAGE_HISTORY
+        | hikari.Permissions.ATTACH_FILES
+    )
+    assert expected == PRIVATE_CHANNEL_USER_PERMS
 
 
 async def test_create_private_channel_with_category():
