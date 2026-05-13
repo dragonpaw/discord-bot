@@ -8,7 +8,12 @@ import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot.context import GuildContext, check_channel_perms, check_guild_perms
+from dragonpaw_bot.context import (
+    PRIVATE_CHANNEL_USER_PERMS,
+    GuildContext,
+    check_channel_perms,
+    check_guild_perms,
+)
 from dragonpaw_bot.plugins.tickets import state as tickets_state
 from dragonpaw_bot.plugins.tickets.models import OpenTicket
 
@@ -302,11 +307,7 @@ async def handle_ticket_add_person_select(
             channel=channel_id,
             target=selected_user_id,
             target_type=hikari.PermissionOverwriteType.MEMBER,
-            allow=(
-                hikari.Permissions.VIEW_CHANNEL
-                | hikari.Permissions.SEND_MESSAGES
-                | hikari.Permissions.READ_MESSAGE_HISTORY
-            ),
+            allow=PRIVATE_CHANNEL_USER_PERMS,
         )
     except hikari.ForbiddenError:
         await interaction.create_initial_response(

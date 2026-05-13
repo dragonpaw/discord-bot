@@ -213,12 +213,7 @@ class GuildContext:
             hikari.PermissionOverwrite(
                 type=hikari.PermissionOverwriteType.MEMBER,
                 id=hikari.Snowflake(user_id),
-                allow=(
-                    hikari.Permissions.VIEW_CHANNEL
-                    | hikari.Permissions.SEND_MESSAGES
-                    | hikari.Permissions.READ_MESSAGE_HISTORY
-                    | hikari.Permissions.ATTACH_FILES
-                ),
+                allow=PRIVATE_CHANNEL_USER_PERMS,
                 deny=hikari.Permissions.NONE,
             )
             for user_id in user_ids
@@ -227,12 +222,7 @@ class GuildContext:
             hikari.PermissionOverwrite(
                 type=hikari.PermissionOverwriteType.ROLE,
                 id=hikari.Snowflake(role_id),
-                allow=(
-                    hikari.Permissions.VIEW_CHANNEL
-                    | hikari.Permissions.SEND_MESSAGES
-                    | hikari.Permissions.READ_MESSAGE_HISTORY
-                    | hikari.Permissions.ATTACH_FILES
-                ),
+                allow=PRIVATE_CHANNEL_USER_PERMS,
                 deny=hikari.Permissions.NONE,
             )
             for role_id in (extra_roles or [])
@@ -649,6 +639,14 @@ def has_any_role_permission(
     if member.id == guild.owner_id:
         return True
     return any(member_has_role(member, name) for name in role_names)
+
+
+PRIVATE_CHANNEL_USER_PERMS: hikari.Permissions = (
+    hikari.Permissions.VIEW_CHANNEL
+    | hikari.Permissions.SEND_MESSAGES
+    | hikari.Permissions.READ_MESSAGE_HISTORY
+    | hikari.Permissions.ATTACH_FILES
+)
 
 
 CHANNEL_POST_PERMS: dict[hikari.Permissions, str] = {
