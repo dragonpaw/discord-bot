@@ -1,5 +1,7 @@
-# Claude Code internals — only memory/ is project-relevant
+# Claude Code internals — only memory/ and skills/ are project-relevant
 *
 !.gitignore
 !memory/
 !memory/**
+!skills/
+!skills/**
