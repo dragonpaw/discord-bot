@@ -65,21 +65,22 @@ class AdultierAdultCommand(
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        if not ctx.guild_id:
+        if not ctx.guild_id or not ctx.member:
             return
 
-        bot: DragonpawBot = ctx.client.app  # type: ignore[assignment]
         st = tickets_state.load(int(ctx.guild_id))
 
-        # Role gate
-        if st.required_role_id:
-            member = await bot.rest.fetch_member(ctx.guild_id, ctx.user)
-            if hikari.Snowflake(st.required_role_id) not in member.role_ids:
-                await ctx.respond(
-                    "*snorts smoke* Hmm, I don't think you're allowed to open a ticket just yet! 🐉",
-                    flags=hikari.MessageFlag.EPHEMERAL,
-                )
-                return
+        # Role gate — use the interaction's member payload (no REST). This
+        # command is in _AUTO_DEFER_EXCLUSIONS (see bot.py) so it can show
+        # a modal as its initial response; that means we must stay under
+        # Discord's 3-second deadline, which precludes any REST round-trips
+        # here.
+        if st.required_role_id and hikari.Snowflake(st.required_role_id) not in ctx.member.role_ids:
+            await ctx.respond(
+                "*snorts smoke* Hmm, I don't think you're allowed to open a ticket just yet! 🐉",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
 
         # Duplicate ticket guard
         existing = next((t for t in st.open_tickets if t.user_id == ctx.user.id), None)

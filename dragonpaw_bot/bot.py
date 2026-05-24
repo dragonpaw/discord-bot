@@ -142,8 +142,37 @@ class DragonpawBot(hikari.GatewayBot):
         state_save_yaml(state=state)
 
 
+# Slash commands that respond with a modal (and therefore must NOT be
+# pre-deferred — Discord rejects a modal as a follow-up to a deferred
+# interaction). Such commands must keep their own pre-respond work to
+# the cached/sync path so they meet Discord's 3s deadline without help.
+_AUTO_DEFER_EXCLUSIONS: set[str] = {"adultier-adult"}
+
+
+@lightbulb.hook(lightbulb.ExecutionSteps.PRE_INVOKE, skip_when_failed=True)
+async def auto_defer(
+    pl: lightbulb.ExecutionPipeline, ctx: lightbulb.Context
+) -> None:
+    """Defer every command interaction so handlers get Discord's 15-minute
+    follow-up window instead of the default 3-second initial-response deadline.
+
+    Most handlers do REST lookups or state loads before responding and
+    would otherwise hit "application did not respond" silently.
+    Ephemeral defer matches every existing handler's response style.
+    Modal-responding commands opt out via ``_AUTO_DEFER_EXCLUSIONS``.
+    """
+    if ctx.command_data.qualified_name in _AUTO_DEFER_EXCLUSIONS:
+        return
+    with contextlib.suppress(Exception):
+        await ctx.defer(ephemeral=True)
+
+
 bot = DragonpawBot()
-client = lightbulb.client_from_app(bot, default_enabled_guilds=TEST_GUILDS)
+client = lightbulb.client_from_app(
+    bot,
+    default_enabled_guilds=TEST_GUILDS,
+    hooks=[auto_defer],
+)
 
 
 @client.error_handler
