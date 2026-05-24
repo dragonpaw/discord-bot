@@ -10,6 +10,7 @@ from dragonpaw_bot.context import (
     CHANNEL_CLEANUP_PERMS,
     GuildContext,
     check_channel_perms,
+    check_role_manageable,
     guild_owner_only,
 )
 from dragonpaw_bot.plugins.intros import state as intros_state
@@ -34,6 +35,11 @@ class IntrosSet(
         "Only members with this role appear in /intros missing (optional)",
         default=None,
     )
+    missing_role = lightbulb.role(
+        "missing_role",
+        "Role I'll add to members who haven't posted an intro / remove once they have (optional)",
+        default=None,
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
@@ -53,37 +59,61 @@ class IntrosSet(
             st.required_role_id = None
             st.required_role_name = ""
 
+        if self.missing_role is not None:
+            st.missing_role_id = int(self.missing_role.id)
+            st.missing_role_name = self.missing_role.name
+        else:
+            st.missing_role_id = None
+            st.missing_role_name = ""
+
         intros_state.save(st)
 
         gc.logger.info(
             "Configured intros channel",
             channel=self.channel.name,
             required_role=self.role.name if self.role else None,
+            missing_role=self.missing_role.name if self.missing_role else None,
         )
 
         missing = await check_channel_perms(
             gc.bot, ctx.guild_id, self.channel.id, CHANNEL_CLEANUP_PERMS
         )
-        warning = ""
+        warnings: list[str] = []
         if missing:
-            warning = (
-                f"\n⚠️ I'm missing permissions in that channel: "
+            warnings.append(
+                f"⚠️ I'm missing permissions in that channel: "
                 f"**{', '.join(missing)}**. The daily cleanup won't work until that's fixed."
             )
 
+        if self.missing_role is not None:
+            reason = await check_role_manageable(gc.bot, ctx.guild_id, self.missing_role)
+            if reason:
+                warnings.append(f"⚠️ I can't manage **{self.missing_role.name}**: {reason}")
+
+        warning_block = ("\n" + "\n".join(warnings)) if warnings else ""
+
         role_line = f" Required role: **{self.role.name}**." if self.role else ""
+        missing_line = (
+            f" Missing-intro role: **{self.missing_role.name}**."
+            if self.missing_role
+            else ""
+        )
         await ctx.respond(
-            f"Introductions channel set to <#{self.channel.id}>.{role_line}{warning}",
+            f"Introductions channel set to <#{self.channel.id}>.{role_line}{missing_line}{warning_block}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        await gc.log(
+        bits = [
             f"📋 {ctx.user.mention} pointed me at <#{self.channel.id}> as the intros channel!"
-            + (
-                f" I'll only watch for members with the **{self.role.name}** role. 🐾"
-                if self.role
-                else " 🐾"
-            ),
-        )
+        ]
+        if self.role:
+            bits.append(f"I'll only watch for members with the **{self.role.name}** role.")
+        if self.missing_role:
+            bits.append(
+                f"I'll tag missing-intro folks with **{self.missing_role.name}** and "
+                "snatch it back once they post."
+            )
+        bits.append("🐾")
+        await gc.log(" ".join(bits))
 
 
 class IntrosClear(
@@ -111,6 +141,8 @@ class IntrosClear(
         st.channel_name = ""
         st.required_role_id = None
         st.required_role_name = ""
+        st.missing_role_id = None
+        st.missing_role_name = ""
         intros_state.save(st)
 
         gc.logger.info("Cleared intros config")

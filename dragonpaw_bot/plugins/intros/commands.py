@@ -8,6 +8,7 @@ import structlog
 
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.intros import state as intros_state
+from dragonpaw_bot.plugins.intros.cron import scan_intros
 
 logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
@@ -40,53 +41,57 @@ class IntrosMissing(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 
-        # Collect user IDs who have posted in the intros channel (skip bots and pinned)
-        posted_ids: set[int] = set()
-        async for message in gc.bot.rest.fetch_messages(st.channel_id):
-            if not message.author.is_bot and not message.is_pinned:
-                posted_ids.add(int(message.author.id))
-
-        # Collect eligible members (non-bot, with required role if configured)
-        missing_members: list[hikari.Member] = []
-        async for member in gc.bot.rest.fetch_members(ctx.guild_id):
-            if member.is_bot:
-                continue
-            if st.required_role_id is not None and st.required_role_id not in [
-                int(r) for r in member.role_ids
-            ]:
-                continue
-            if int(member.id) not in posted_ids:
-                missing_members.append(member)
+        result = await scan_intros(gc, st)
 
         gc.logger.info(
             "Intros missing check",
             channel=st.channel_name,
-            missing_count=len(missing_members),
+            missing_count=len(result.missing),
+            role_added=len(result.role_added),
+            role_removed=len(result.role_removed),
         )
 
-        if not missing_members:
-            role_note = (
-                f" (with role **{st.required_role_name}**)"
-                if st.required_role_id
-                else ""
-            )
-            await ctx.edit_response(
-                response_id,
-                content=f"Everyone{role_note} has posted an intro! 🐉",
-            )
-            return
-
-        mentions = " ".join(m.mention for m in missing_members)
         role_note = (
             f" with role **{st.required_role_name}**" if st.required_role_id else ""
         )
-        header = f"**{len(missing_members)} member(s){role_note} haven't posted an intro yet:**\n"
+        role_action_lines: list[str] = []
+        if st.missing_role_id and (result.role_added or result.role_removed):
+            if result.role_added:
+                role_action_lines.append(
+                    f"➕ Added **{st.missing_role_name}** to {len(result.role_added)} member(s)."
+                )
+            if result.role_removed:
+                role_action_lines.append(
+                    f"➖ Removed **{st.missing_role_name}** from {len(result.role_removed)} member(s)."
+                )
+        if result.role_failed:
+            role_action_lines.append(
+                f"⚠️ I couldn't manage **{st.missing_role_name}** — check my role hierarchy!"
+            )
 
-        await ctx.edit_response(response_id, content=header + mentions)
-        await gc.log(
+        if not result.missing:
+            head = f"Everyone{role_note} has posted an intro! 🐉"
+            content = "\n".join([head, *role_action_lines]) if role_action_lines else head
+            await ctx.edit_response(response_id, content=content)
+        else:
+            mentions = " ".join(m.mention for m in result.missing)
+            header = (
+                f"**{len(result.missing)} member(s){role_note} haven't posted an intro yet:**"
+            )
+            content = "\n".join([header, mentions, *role_action_lines])
+            await ctx.edit_response(response_id, content=content)
+
+        log_bits = [
             f"👀 {ctx.user.mention} asked who's been shy — "
-            f"**{len(missing_members)}** member(s) still haven't introduced themselves in <#{st.channel_id}>!",
-        )
+            f"**{len(result.missing)}** member(s) still haven't introduced themselves in <#{st.channel_id}>."
+        ]
+        if st.missing_role_id and (result.role_added or result.role_removed):
+            log_bits.append(
+                f"Role **{st.missing_role_name}**: added to {len(result.role_added)}, "
+                f"removed from {len(result.role_removed)}."
+            )
+        log_bits.append("🐉")
+        await gc.log(" ".join(log_bits))
 
 
 _intros_group.register(IntrosMissing)

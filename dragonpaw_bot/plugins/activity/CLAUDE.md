@@ -92,10 +92,11 @@ All require guild owner.
   2. **Lurker sync:** For each non-bot, non-owner member with at least one role, decide whether they should be a lurker. The decision short-circuits in this order:
      - **Immune** (`has_ignored_role`) → never lurker. If they currently have it, remove it with reason `gained immunity`.
      - **Activity** `score < ACTIVITY_FLOOR` → lurker with reason `no longer active`.
-     - **Intros** — if the intros plugin is configured for this guild (`channel_id` set), fetch the posters in that channel (skipping bots & pinned messages). A member subject to the intros check (everyone, or only members holding the configured `required_role_id`) who hasn't posted is marked lurker with reason `no introduction`.
      - Otherwise → not a lurker; if they currently have it, remove it with reason `now active`.
 
-     Role changes are logged to `gc.log()` grouped by reason: `Added (no longer active)`, `Added (no introduction)`, `Removed (gained immunity)`, `Removed (now active)`. Skipped if total guild bucket count < 168 (7 days × 24h — not enough history yet). Guild owner is always skipped. If the bot lacks `READ_MESSAGE_HISTORY` on the intros channel, the no-introduction check is skipped and a warning is posted to the log channel (so staff can fix the permission). Transient HTTP failures fetching intros are logged but not surfaced to staff — the next daily run retries.
+     The activity plugin is concerned with activity only — missing introductions are tracked separately by the intros plugin via its own `missing_intro` role (see `plugins/intros/CLAUDE.md`). The two roles are independent: a member can be flagged by both, neither, or either one.
+
+     Role changes are logged to `gc.log()` grouped by reason: `Added (no longer active)`, `Removed (gained immunity)`, `Removed (now active)`. Skipped if total guild bucket count < 168 (7 days × 24h — not enough history yet). Guild owner is always skipped.
 
 ### State
 

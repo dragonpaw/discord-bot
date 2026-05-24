@@ -21,11 +21,9 @@ from dragonpaw_bot.plugins.activity.models import (
     calculate_score,
     has_ignored_role,
 )
-from dragonpaw_bot.plugins.intros import state as intros_state
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
-    from dragonpaw_bot.plugins.intros.models import IntrosGuildState
 
 logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
@@ -154,69 +152,23 @@ def _prune_state(
     return total_buckets
 
 
-async def _load_intros_data(
-    gc: GuildContext,
-) -> tuple[IntrosGuildState, set[int]] | None:
-    """Return (intros_state, posted_user_ids) if intros is configured & readable, else None.
-
-    None means the no-introduction lurker check is skipped — either intros isn't
-    configured, or the channel can't be read (permissions / HTTP error).
-    """
-    intros_st = intros_state.load(gc.guild_id)
-    if intros_st.channel_id is None:
-        return None
-    posted: set[int] = set()
-    try:
-        async for message in gc.bot.rest.fetch_messages(intros_st.channel_id):
-            if not message.author.is_bot and not message.is_pinned:
-                posted.add(int(message.author.id))
-    except hikari.ForbiddenError:
-        logger.warning(
-            "Cannot read intros channel for lurker sync",
-            guild=gc.name,
-            channel=intros_st.channel_name,
-        )
-        await gc.log(
-            f"⚠️ I couldn't peek inside <#{intros_st.channel_id}> for the "
-            "no-introduction lurker check — I need **Read Message History**! 🐾"
-        )
-        return None
-    except hikari.HTTPError:
-        logger.warning(
-            "HTTP error fetching intros for lurker sync",
-            guild=gc.name,
-            channel=intros_st.channel_name,
-        )
-        return None
-    return intros_st, posted
-
-
 def _evaluate_lurker(
-    member: hikari.Member,
     role_ids: list[int],
     score: float,
     meta: ActivityGuildMeta,
-    intros: tuple[IntrosGuildState, set[int]] | None,
 ) -> tuple[bool, str]:
     """Decide whether the member should hold the lurker role.
 
     The reason is the state-transition label used when the role is actually
     added or removed (members already in the correct state are filtered out
     by the caller, so the label is only surfaced for true transitions):
-      should_be_lurker=True  → 'no longer active' | 'no introduction'
+      should_be_lurker=True  → 'no longer active'
       should_be_lurker=False → 'gained immunity' | 'now active'
     """
     if has_ignored_role(role_ids, meta.config.role_configs):
         return False, "gained immunity"
     if score < ACTIVITY_FLOOR:
         return True, "no longer active"
-    if intros is not None:
-        intros_st, posted_ids = intros
-        applies = (
-            intros_st.required_role_id is None or intros_st.required_role_id in role_ids
-        )
-        if applies and int(member.id) not in posted_ids:
-            return True, "no introduction"
     return False, "now active"
 
 
@@ -229,8 +181,6 @@ async def _sync_lurker_role(  # noqa: PLR0912
 ) -> None:
     lurker_role_id = meta.config.lurker_role_id
     assert lurker_role_id
-
-    intros = await _load_intros_data(gc)
 
     added_by_reason: dict[str, list[str]] = {}
     removed_by_reason: dict[str, list[str]] = {}
@@ -252,9 +202,7 @@ async def _sync_lurker_role(  # noqa: PLR0912
         score = calculate_score(
             buckets, best_role_config(role_ids, meta.config.role_configs), now=now
         )
-        should_be_lurker, reason = _evaluate_lurker(
-            member, role_ids, score, meta, intros
-        )
+        should_be_lurker, reason = _evaluate_lurker(role_ids, score, meta)
         has_lurker = lurker_role_id in role_ids
 
         if should_be_lurker == has_lurker:

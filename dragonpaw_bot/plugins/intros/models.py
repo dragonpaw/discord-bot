@@ -8,3 +8,5 @@ class IntrosGuildState(pydantic.BaseModel):
     channel_name: str = ""
     required_role_id: int | None = None
     required_role_name: str = ""
+    missing_role_id: int | None = None
+    missing_role_name: str = ""

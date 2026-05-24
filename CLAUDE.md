@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Mandatory rules
+
+**Read `code-simplicity.md` at the repo root and treat its rules as mandatory for every change in this repo.** It defines the style and discipline expected for all code written here: no speculative abstractions, no unrequested error handling, no comments that explain *what*, no compatibility shims, etc. When its rules conflict with default behavior, `code-simplicity.md` wins.
+
 ## Tools
 
 - **Context7 MCP** is available for looking up current API docs for any library (hikari, lightbulb, pydantic, etc.). Use it instead of guessing at APIs.

@@ -32,7 +32,6 @@ from dragonpaw_bot.plugins.activity.models import (
     calculate_score,
     has_ignored_role,
 )
-from dragonpaw_bot.plugins.intros.models import IntrosGuildState
 
 # ---------------------------------------------------------------------------- #
 #                            calculate_score                                   #
@@ -796,10 +795,6 @@ async def test_sync_lurker_role_skips_owner(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------- #
 
 
-def _make_member(member_id: int = 42) -> SimpleNamespace:
-    return SimpleNamespace(id=member_id)
-
-
 def _meta_with_ignored_role(role_id: int = 7) -> ActivityGuildMeta:
     return ActivityGuildMeta(
         guild_id=1,
@@ -812,25 +807,7 @@ def _meta_with_ignored_role(role_id: int = 7) -> ActivityGuildMeta:
 def test_evaluate_lurker_immunity_beats_low_score():
     """Immune members must not be lurkered even when their activity is below the floor."""
     meta = _meta_with_ignored_role()
-    member = _make_member()
-    should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[7], score=0.0, meta=meta, intros=None
-    )
-    assert should_lurker is False
-    assert reason == "gained immunity"
-
-
-def test_evaluate_lurker_immunity_beats_missing_intro():
-    """Immune members are also exempt from the intros check."""
-    meta = _meta_with_ignored_role()
-    member = _make_member(member_id=42)
-    intros = (
-        IntrosGuildState(guild_id=1, channel_id=100),
-        set(),  # nobody has posted
-    )
-    should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[7], score=10.0, meta=meta, intros=intros
-    )
+    should_lurker, reason = _evaluate_lurker(role_ids=[7], score=0.0, meta=meta)
     assert should_lurker is False
     assert reason == "gained immunity"
 
@@ -838,81 +815,17 @@ def test_evaluate_lurker_immunity_beats_missing_intro():
 def test_evaluate_lurker_low_score_no_longer_active():
     """A non-immune member below the activity floor is lurkered."""
     meta = ActivityGuildMeta(guild_id=1)
-    member = _make_member()
     should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[1], score=ACTIVITY_FLOOR - 0.01, meta=meta, intros=None
+        role_ids=[1], score=ACTIVITY_FLOOR - 0.01, meta=meta
     )
     assert should_lurker is True
     assert reason == "no longer active"
 
 
 def test_evaluate_lurker_active_default():
-    """Active member with no intros configured is not a lurker."""
+    """Active member is not a lurker."""
     meta = ActivityGuildMeta(guild_id=1)
-    member = _make_member()
-    should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[1], score=1.0, meta=meta, intros=None
-    )
-    assert should_lurker is False
-    assert reason == "now active"
-
-
-def test_evaluate_lurker_required_role_none_applies_to_everyone():
-    """When intros.required_role_id is None, every member is checked for a posted intro."""
-    meta = ActivityGuildMeta(guild_id=1)
-    member = _make_member(member_id=42)
-    intros = (
-        IntrosGuildState(guild_id=1, channel_id=100, required_role_id=None),
-        {99},  # someone else posted; this member did not
-    )
-    should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[1], score=1.0, meta=meta, intros=intros
-    )
-    assert should_lurker is True
-    assert reason == "no introduction"
-
-
-def test_evaluate_lurker_required_role_missing_skips_intro_check():
-    """When required_role_id is set and member lacks it, the intros check doesn't apply."""
-    meta = ActivityGuildMeta(guild_id=1)
-    member = _make_member(member_id=42)
-    intros = (
-        IntrosGuildState(guild_id=1, channel_id=100, required_role_id=50),
-        set(),
-    )
-    should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[1], score=1.0, meta=meta, intros=intros
-    )
-    assert should_lurker is False
-    assert reason == "now active"
-
-
-def test_evaluate_lurker_required_role_present_applies_intro_check():
-    """When required_role_id is set and member has it, missing-intro flags them as lurker."""
-    meta = ActivityGuildMeta(guild_id=1)
-    member = _make_member(member_id=42)
-    intros = (
-        IntrosGuildState(guild_id=1, channel_id=100, required_role_id=50),
-        set(),
-    )
-    should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[1, 50], score=1.0, meta=meta, intros=intros
-    )
-    assert should_lurker is True
-    assert reason == "no introduction"
-
-
-def test_evaluate_lurker_member_in_posted_ids_is_safe():
-    """A member who has posted in intros is not a lurker, even if required-role matches."""
-    meta = ActivityGuildMeta(guild_id=1)
-    member = _make_member(member_id=42)
-    intros = (
-        IntrosGuildState(guild_id=1, channel_id=100, required_role_id=50),
-        {42},
-    )
-    should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[1, 50], score=1.0, meta=meta, intros=intros
-    )
+    should_lurker, reason = _evaluate_lurker(role_ids=[1], score=1.0, meta=meta)
     assert should_lurker is False
     assert reason == "now active"
 
@@ -920,20 +833,8 @@ def test_evaluate_lurker_member_in_posted_ids_is_safe():
 def test_evaluate_lurker_score_at_floor_is_not_lurker():
     """Boundary: score == ACTIVITY_FLOOR is not a lurker (the check uses `<`, not `<=`)."""
     meta = ActivityGuildMeta(guild_id=1)
-    member = _make_member()
     should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[1], score=ACTIVITY_FLOOR, meta=meta, intros=None
-    )
-    assert should_lurker is False
-    assert reason == "now active"
-
-
-def test_evaluate_lurker_intros_none_falls_through_to_active():
-    """When _load_intros_data returns None (no config / permission failure), the intro check is skipped."""
-    meta = ActivityGuildMeta(guild_id=1)
-    member = _make_member(member_id=42)
-    should_lurker, reason = _evaluate_lurker(
-        member, role_ids=[1], score=1.0, meta=meta, intros=None
+        role_ids=[1], score=ACTIVITY_FLOOR, meta=meta
     )
     assert should_lurker is False
     assert reason == "now active"

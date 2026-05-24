@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
 import hikari
@@ -15,9 +16,100 @@ from dragonpaw_bot.plugins.intros import state as intros_state
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
+    from dragonpaw_bot.plugins.intros.models import IntrosGuildState
 
 logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
+
+
+@dataclass
+class IntrosScanResult:
+    missing: list[hikari.Member] = field(default_factory=list)
+    role_added: list[hikari.Member] = field(default_factory=list)
+    role_removed: list[hikari.Member] = field(default_factory=list)
+    role_failed: bool = False
+
+
+async def scan_intros(  # noqa: PLR0912
+    gc: GuildContext, st: IntrosGuildState
+) -> IntrosScanResult:
+    """Find members missing intros and, if configured, sync the missing-intro role.
+
+    Caller must ensure `st.channel_id` is set.
+    """
+    assert st.channel_id is not None
+    result = IntrosScanResult()
+
+    posted_ids: set[int] = set()
+    async for message in gc.bot.rest.fetch_messages(st.channel_id):
+        if not message.author.is_bot and not message.is_pinned:
+            posted_ids.add(int(message.author.id))
+
+    eligible: list[hikari.Member] = []
+    async for member in gc.bot.rest.fetch_members(gc.guild_id):
+        if member.is_bot:
+            continue
+        if st.required_role_id is not None and st.required_role_id not in [
+            int(r) for r in member.role_ids
+        ]:
+            continue
+        eligible.append(member)
+
+    for member in eligible:
+        if int(member.id) not in posted_ids:
+            result.missing.append(member)
+
+    if st.missing_role_id is None:
+        return result
+
+    role_id = st.missing_role_id
+    missing_ids = {int(m.id) for m in result.missing}
+
+    for member in eligible:
+        has_role = role_id in [int(r) for r in member.role_ids]
+        should_have = int(member.id) in missing_ids
+        if has_role == should_have:
+            continue
+        try:
+            if should_have:
+                await gc.bot.rest.add_role_to_member(gc.guild_id, member.id, role_id)
+                result.role_added.append(member)
+                logger.info(
+                    "Added missing-intro role",
+                    guild=gc.name,
+                    user=member.display_name,
+                    role=st.missing_role_name,
+                )
+            else:
+                await gc.bot.rest.remove_role_from_member(
+                    gc.guild_id, member.id, role_id
+                )
+                result.role_removed.append(member)
+                logger.info(
+                    "Removed missing-intro role",
+                    guild=gc.name,
+                    user=member.display_name,
+                    role=st.missing_role_name,
+                )
+        except hikari.NotFoundError:
+            continue
+        except hikari.ForbiddenError:
+            logger.warning(
+                "Cannot manage missing-intro role",
+                guild=gc.name,
+                user=member.display_name,
+                role=st.missing_role_name,
+            )
+            result.role_failed = True
+            return result
+        except hikari.HTTPError:
+            logger.warning(
+                "HTTP error managing missing-intro role",
+                guild=gc.name,
+                user=member.display_name,
+            )
+
+    return result
 
 
 async def _try_delete(message: hikari.Message, reason: str, guild_name: str) -> bool:
@@ -150,38 +242,33 @@ async def _naughty_list_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     if not bot_st or not bot_st.general_channel_id:
         return
 
-    # Collect user IDs who have posted in the intros channel (skip bots and pinned)
-    posted_ids: set[int] = set()
-    async for message in bot.rest.fetch_messages(st.channel_id):
-        if not message.author.is_bot and not message.is_pinned:
-            posted_ids.add(int(message.author.id))
-
-    # Collect eligible members (non-bot, with required role if configured)
-    missing_members: list[hikari.Member] = []
-    async for member in bot.rest.fetch_members(guild.id):
-        if member.is_bot:
-            continue
-        if st.required_role_id is not None and st.required_role_id not in [
-            int(r) for r in member.role_ids
-        ]:
-            continue
-        if int(member.id) not in posted_ids:
-            missing_members.append(member)
+    result = await scan_intros(gc, st)
+    missing_members = result.missing
 
     logger.info(
         "Intros naughty list",
         guild=guild.name,
         missing_count=len(missing_members),
+        role_added=len(result.role_added),
+        role_removed=len(result.role_removed),
     )
 
+    role_note = f" with role **{st.required_role_name}**" if st.required_role_id else ""
+
     if not missing_members:
+        public_lines = [
+            "*does a happy wiggle* 🐉 Everyone in the hoard has posted an introduction — "
+            "I'm so proud of you all! Such good mammals! 🐾"
+        ]
+        if result.role_removed:
+            public_lines.append(
+                f"I plucked the **{st.missing_role_name}** role off "
+                f"{len(result.role_removed)} folks who finally introduced themselves. 🐾"
+            )
         try:
             await bot.rest.create_message(
                 channel=bot_st.general_channel_id,
-                content=(
-                    "*does a happy wiggle* 🐉 Everyone in the hoard has posted an introduction — "
-                    "I'm so proud of you all! Such good mammals! 🐾"
-                ),
+                content="\n".join(public_lines),
             )
         except hikari.HTTPError:
             logger.warning(
@@ -189,18 +276,37 @@ async def _naughty_list_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
                 guild=guild.name,
                 channel_id=int(bot_st.general_channel_id),
             )
-        await gc.log("📋 *happy tail wag* Weekly intros check — everyone's posted! 🐉")
+        log_bits = ["📋 *happy tail wag* Weekly intros check — everyone's posted!"]
+        if result.role_removed:
+            log_bits.append(
+                f"Removed **{st.missing_role_name}** from {len(result.role_removed)} member(s)."
+            )
+        log_bits.append("🐉")
+        await gc.log(" ".join(log_bits))
         return
 
-    role_note = f" with role **{st.required_role_name}**" if st.required_role_id else ""
     mentions = " ".join(m.mention for m in missing_members)
+    public_lines = [
+        f"*squints with clipboard* 🐉 Psst! These lovely folks{role_note} haven't introduced "
+        f"themselves in <#{st.channel_id}> yet — give 'em a little nudge! 🐾",
+        mentions,
+    ]
+    if st.missing_role_id and (result.role_added or result.role_removed):
+        change_bits: list[str] = []
+        if result.role_added:
+            change_bits.append(
+                f"slapped **{st.missing_role_name}** on {len(result.role_added)}"
+            )
+        if result.role_removed:
+            change_bits.append(
+                f"plucked it off {len(result.role_removed)} who posted"
+            )
+        public_lines.append(f"(*nom* — I {', and '.join(change_bits)}. 🐾)")
+
     try:
         await bot.rest.create_message(
             channel=bot_st.general_channel_id,
-            content=(
-                f"*squints with clipboard* 🐉 Psst! These lovely folks{role_note} haven't introduced "
-                f"themselves in <#{st.channel_id}> yet — give 'em a little nudge! 🐾\n{mentions}"
-            ),
+            content="\n".join(public_lines),
         )
     except hikari.HTTPError:
         logger.warning(
@@ -213,7 +319,18 @@ async def _naughty_list_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
         )
         return
 
-    await gc.log(
+    log_bits = [
         f"📋 Weekly intros check — **{len(missing_members)}** member(s){role_note} "
-        f"still haven't posted in <#{st.channel_id}> 🐉"
-    )
+        f"still haven't posted in <#{st.channel_id}>."
+    ]
+    if st.missing_role_id:
+        log_bits.append(
+            f"Role **{st.missing_role_name}**: added to {len(result.role_added)}, "
+            f"removed from {len(result.role_removed)}."
+        )
+    if result.role_failed:
+        log_bits.append(
+            f"⚠️ I couldn't manage **{st.missing_role_name}** — please check my role hierarchy!"
+        )
+    log_bits.append("🐉")
+    await gc.log(" ".join(log_bits))
