@@ -100,9 +100,8 @@ async def send_week_ahead_dm(
 ) -> None:
     """Send a week-ahead DM reminder to a member, removing them if they left."""
     log = gc.logger.bind(user_id=uid)
-    try:
-        member = await gc.bot.rest.fetch_member(gc.guild_id, hikari.Snowflake(uid))
-    except hikari.NotFoundError:
+    member = await utils.guild_member(gc.bot, gc.guild_id, uid)
+    if member is None:
         log.warning("Member left guild, removing birthday entry")
         del guild_state.birthdays[uid]
         state.save(guild_state)
@@ -167,11 +166,8 @@ async def process_guild_birthdays(gc: GuildContext) -> None:
             if entry.last_announced == local_today:
                 log.debug("Already announced today, skipping", user_id=uid)
                 continue
-            try:
-                member = await gc.bot.rest.fetch_member(
-                    gc.guild_id, hikari.Snowflake(uid)
-                )
-            except hikari.NotFoundError:
+            member = await utils.guild_member(gc.bot, gc.guild_id, uid)
+            if member is None:
                 log.warning("Member left guild, removing birthday entry", user_id=uid)
                 del guild_state.birthdays[uid]
                 state.save(guild_state)
@@ -183,11 +179,8 @@ async def process_guild_birthdays(gc: GuildContext) -> None:
 
         # Role cleanup for yesterday's birthdays
         elif cfg.birthday_role and commands.is_birthday_on_date(entry, local_yesterday):
-            try:
-                member = await gc.bot.rest.fetch_member(
-                    gc.guild_id, hikari.Snowflake(uid)
-                )
-            except hikari.NotFoundError:
+            member = await utils.guild_member(gc.bot, gc.guild_id, uid)
+            if member is None:
                 log.warning(
                     "Member left guild during role cleanup, removing entry",
                     user_id=uid,

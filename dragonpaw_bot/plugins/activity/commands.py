@@ -20,6 +20,7 @@ from dragonpaw_bot.plugins.activity.models import (
     calculate_score,
     has_ignored_role,
 )
+from dragonpaw_bot.utils import guild_member, guild_members
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -184,16 +185,13 @@ class ActivityScore(
             )
             return
 
-        member = bot.cache.get_member(ctx.guild_id, target_user.id)
+        member = await guild_member(bot, ctx.guild_id, target_user.id)
         if member is None:
-            try:
-                member = await bot.rest.fetch_member(ctx.guild_id, target_user.id)
-            except hikari.NotFoundError:
-                await ctx.edit_response(
-                    response_id,
-                    content=f"🐉 Couldn't find {target_user.mention} in this server!",
-                )
-                return
+            await ctx.edit_response(
+                response_id,
+                content=f"🐉 Couldn't find {target_user.mention} in this server!",
+            )
+            return
 
         meta = activity_state.load_config(int(ctx.guild_id))
         role_ids = [int(r) for r in member.role_ids]
@@ -277,10 +275,8 @@ class ActivityReport(
 
         meta = activity_state.load_config(int(ctx.guild_id))
 
-        member_map: dict[int, hikari.Member] = {}
         try:
-            async for member in bot.rest.fetch_members(ctx.guild_id):
-                member_map[int(member.id)] = member
+            member_map = {int(m.id): m for m in await guild_members(bot, ctx.guild_id)}
         except hikari.HTTPError:
             logger.warning("Failed to fetch members for report", guild=meta.guild_name)
             await ctx.edit_response(

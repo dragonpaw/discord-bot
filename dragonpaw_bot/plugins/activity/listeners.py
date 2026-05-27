@@ -16,6 +16,7 @@ from dragonpaw_bot.plugins.activity.models import (
     ContributionKind,
     UserActivity,
 )
+from dragonpaw_bot.utils import guild_member
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -97,19 +98,17 @@ async def _handle_message(event: hikari.GuildMessageCreateEvent) -> None:
     meta = activity_state.load_config(guild_id)
     _ensure_guild_name(meta, bot, guild_id)
 
-    member = bot.cache.get_member(event.guild_id, event.author_id)
+    try:
+        member = await guild_member(bot, event.guild_id, event.author_id)
+    except hikari.HTTPError:
+        logger.warning(
+            "Failed to fetch member for activity tracking",
+            guild=meta.guild_name,
+            user_id=int(event.author_id),
+        )
+        return
     if member is None:
-        try:
-            member = await bot.rest.fetch_member(event.guild_id, event.author_id)
-        except hikari.NotFoundError:
-            return
-        except hikari.HTTPError:
-            logger.warning(
-                "Failed to fetch member for activity tracking",
-                guild=meta.guild_name,
-                user_id=int(event.author_id),
-            )
-            return
+        return
 
     role_ids = [int(r) for r in member.role_ids]
     if not role_ids:
@@ -150,19 +149,17 @@ async def _handle_reaction(event: hikari.GuildReactionAddEvent) -> None:
     meta = activity_state.load_config(guild_id)
     _ensure_guild_name(meta, bot, guild_id)
 
-    member = bot.cache.get_member(event.guild_id, event.user_id)
+    try:
+        member = await guild_member(bot, event.guild_id, event.user_id)
+    except hikari.HTTPError:
+        logger.warning(
+            "Failed to fetch member for activity tracking",
+            guild=meta.guild_name,
+            user_id=int(event.user_id),
+        )
+        return
     if member is None:
-        try:
-            member = await bot.rest.fetch_member(event.guild_id, event.user_id)
-        except hikari.NotFoundError:
-            return
-        except hikari.HTTPError:
-            logger.warning(
-                "Failed to fetch member for activity tracking",
-                guild=meta.guild_name,
-                user_id=int(event.user_id),
-            )
-            return
+        return
 
     if member.is_bot:
         return
@@ -214,21 +211,17 @@ async def _handle_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> Non
         if join_time is not None:
             minutes = (time.time() - join_time) / 60.0
             if minutes >= 1.0:
-                member = bot.cache.get_member(event.guild_id, event.state.user_id)
-                if member is None:
-                    try:
-                        member = await bot.rest.fetch_member(
-                            event.guild_id, event.state.user_id
-                        )
-                    except hikari.NotFoundError:
-                        member = None
-                    except hikari.HTTPError:
-                        logger.warning(
-                            "Failed to fetch member for VC activity",
-                            guild_id=guild_id,
-                            user_id=user_id,
-                        )
-                        member = None
+                try:
+                    member = await guild_member(
+                        bot, event.guild_id, event.state.user_id
+                    )
+                except hikari.HTTPError:
+                    logger.warning(
+                        "Failed to fetch member for VC activity",
+                        guild_id=guild_id,
+                        user_id=user_id,
+                    )
+                    member = None
 
                 if member and not member.is_bot:
                     meta = activity_state.load_config(guild_id)

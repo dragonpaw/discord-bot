@@ -5,6 +5,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import hikari
 import pydantic
 import pytest
 import yaml
@@ -289,6 +290,21 @@ def _fake_member(user_id: int, role_ids: list[int] | None = None):
     return SimpleNamespace(role_ids=role_ids or [])
 
 
+def _fake_bot():
+    """Mock bot whose member lookups always miss (cache None, REST 404).
+
+    Used by prune tests: present members are taken from the passed `members`
+    dict, so the bot is only consulted for users absent from it — which must
+    resolve as departed (None).
+    """
+    bot = MagicMock()
+    bot.cache.get_member.return_value = None
+    bot.rest.fetch_member = AsyncMock(
+        side_effect=hikari.NotFoundError(url="", headers={}, raw_body=b"")
+    )
+    return bot
+
+
 def _setup_prune(
     tmp_path,
     monkeypatch,
@@ -313,30 +329,45 @@ def _setup_prune(
     return meta, now
 
 
-def test_prune_removes_negligible_buckets(tmp_path, monkeypatch):
+async def test_prune_removes_negligible_buckets(tmp_path, monkeypatch):
     # Bucket 110 days old is well past the negligibility threshold (~100d for default config)
     meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1, 110])
-    _prune_state(meta, {1: _fake_member(1)}, now)
+    await _prune_state(_fake_bot(), meta, {1: _fake_member(1)}, now)
     ua = activity_state.load_user(1, 1)
     assert ua is not None
     assert len(ua.buckets) == 1  # only the 1-day-old bucket survives
 
 
-def test_prune_removes_user_with_no_buckets_left(tmp_path, monkeypatch):
+async def test_prune_removes_user_with_no_buckets_left(tmp_path, monkeypatch):
     meta, now = _setup_prune(tmp_path, monkeypatch, 1, [110])  # only negligible bucket
-    _prune_state(meta, {1: _fake_member(1)}, now)
+    await _prune_state(_fake_bot(), meta, {1: _fake_member(1)}, now)
     assert activity_state.load_user(1, 1) is None
 
 
-def test_prune_removes_departed_member(tmp_path, monkeypatch):
+async def test_prune_removes_departed_member(tmp_path, monkeypatch):
     meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1])  # recent bucket, user left
-    _prune_state(meta, {}, now)  # empty members = departed
+    await _prune_state(_fake_bot(), meta, {}, now)  # empty members = departed
     assert activity_state.load_user(1, 1) is None
 
 
-def test_prune_keeps_active_present_member(tmp_path, monkeypatch):
+async def test_prune_keeps_active_present_member(tmp_path, monkeypatch):
     meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1])
-    _prune_state(meta, {1: _fake_member(1)}, now)
+    await _prune_state(_fake_bot(), meta, {1: _fake_member(1)}, now)
+    ua = activity_state.load_user(1, 1)
+    assert ua is not None
+    assert len(ua.buckets) == 1
+
+
+async def test_prune_keeps_member_present_via_rest_when_cache_misses(
+    tmp_path, monkeypatch
+):
+    # A partial cache can omit a present member; REST must confirm departure
+    # before we delete their activity. Here the cache misses but REST says present.
+    meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1])
+    bot = MagicMock()
+    bot.cache.get_member.return_value = None
+    bot.rest.fetch_member = AsyncMock(return_value=_fake_member(1))
+    await _prune_state(bot, meta, {}, now)
     ua = activity_state.load_user(1, 1)
     assert ua is not None
     assert len(ua.buckets) == 1
@@ -577,25 +608,25 @@ def test_bucket_is_negligible_uses_prune_threshold():
 # ---------------------------------------------------------------------------- #
 
 
-def test_prune_returns_surviving_bucket_count(tmp_path, monkeypatch):
+async def test_prune_returns_surviving_bucket_count(tmp_path, monkeypatch):
     meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1, 2])
-    count = _prune_state(meta, {1: _fake_member(1)}, now)
+    count = await _prune_state(_fake_bot(), meta, {1: _fake_member(1)}, now)
     assert count == 2
 
 
-def test_prune_returns_zero_when_all_pruned(tmp_path, monkeypatch):
+async def test_prune_returns_zero_when_all_pruned(tmp_path, monkeypatch):
     meta, now = _setup_prune(tmp_path, monkeypatch, 1, [110])
-    count = _prune_state(meta, {1: _fake_member(1)}, now)
+    count = await _prune_state(_fake_bot(), meta, {1: _fake_member(1)}, now)
     assert count == 0
 
 
-def test_prune_departed_user_not_counted(tmp_path, monkeypatch):
+async def test_prune_departed_user_not_counted(tmp_path, monkeypatch):
     meta, now = _setup_prune(tmp_path, monkeypatch, 1, [1])
-    count = _prune_state(meta, {}, now)
+    count = await _prune_state(_fake_bot(), meta, {}, now)
     assert count == 0
 
 
-def test_prune_cleans_up_empty_user_file(tmp_path, monkeypatch):
+async def test_prune_cleans_up_empty_user_file(tmp_path, monkeypatch):
     monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
     activity_state._user_cache.clear()
     activity_state._config_cache.clear()
@@ -603,7 +634,7 @@ def test_prune_cleans_up_empty_user_file(tmp_path, monkeypatch):
     (tmp_path / "activity_user_1_77.yaml").write_text("")
 
     meta = ActivityGuildMeta(guild_id=1)
-    _prune_state(meta, {77: _fake_member(77)}, 1_000_000_000.0)
+    await _prune_state(_fake_bot(), meta, {77: _fake_member(77)}, 1_000_000_000.0)
 
     activity_state._user_cache.clear()
     assert activity_state.load_user(1, 77) is None

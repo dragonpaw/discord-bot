@@ -21,6 +21,7 @@ from dragonpaw_bot.plugins.activity.models import (
     calculate_score,
     has_ignored_role,
 )
+from dragonpaw_bot.utils import guild_member, guild_members
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -64,11 +65,9 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     meta = activity_state.load_config(int(guild.id))
     now = time.time()
 
-    # Fetch members once for both prune and lurker sync
-    members: dict[int, hikari.Member] = {}
+    # Fetch members once (from cache when populated) for both prune and lurker sync
     try:
-        async for member in bot.rest.fetch_members(guild.id):
-            members[int(member.id)] = member
+        members = {int(m.id): m for m in await guild_members(bot, guild.id)}
     except hikari.HTTPError:
         logger.warning("Failed to fetch members for activity cron", guild=guild.name)
         await gc.log(
@@ -76,7 +75,7 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
         )
         return
 
-    bucket_count = _prune_state(meta, members, now)
+    bucket_count = await _prune_state(bot, meta, members, now)
 
     if meta.config.lurker_role_id:
         if bucket_count < 7 * 24:
@@ -89,7 +88,8 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
             await _sync_lurker_role(gc, meta, members, now, int(guild.owner_id))
 
 
-def _prune_state(
+async def _prune_state(
+    bot: DragonpawBot,
     meta: ActivityGuildMeta,
     members: dict[int, hikari.Member],
     now: float,
@@ -102,13 +102,17 @@ def _prune_state(
 
     for user_id in activity_state.list_user_ids(meta.guild_id):
         try:
-            if user_id not in members:
+            # `members` can be incomplete mid-chunk; confirm a presumed departure
+            # via REST before deleting a member's accumulated activity.
+            member = members.get(user_id)
+            if member is None:
+                member = await guild_member(bot, meta.guild_id, user_id)
+            if member is None:
                 activity_state.delete_user(meta.guild_id, user_id)
                 removed_users += 1
                 changed = True
                 continue
 
-            member = members[user_id]
             role_ids = [int(r) for r in member.role_ids]
             rc = best_role_config(role_ids, meta.config.role_configs)
             half_life = BASE_HALF_LIFE * (rc.decay_multiplier if rc else 1.0)

@@ -55,15 +55,14 @@ class IntrosMissing(
             f" with role **{st.required_role_name}**" if st.required_role_id else ""
         )
         role_action_lines: list[str] = []
-        if st.missing_role_id and (result.role_added or result.role_removed):
-            if result.role_added:
-                role_action_lines.append(
-                    f"➕ Added **{st.missing_role_name}** to {len(result.role_added)} member(s)."
-                )
-            if result.role_removed:
-                role_action_lines.append(
-                    f"➖ Removed **{st.missing_role_name}** from {len(result.role_removed)} member(s)."
-                )
+        if st.missing_role_id and result.role_added:
+            role_action_lines.append(
+                f"➕ Added **{st.missing_role_name}** to {len(result.role_added)} member(s)."
+            )
+        if st.missing_role_id and result.role_removed:
+            role_action_lines.append(
+                f"➖ Removed **{st.missing_role_name}** from {len(result.role_removed)} member(s) who'd posted."
+            )
         if result.role_failed:
             role_action_lines.append(
                 f"⚠️ I couldn't manage **{st.missing_role_name}** — check my role hierarchy!"
@@ -71,13 +70,13 @@ class IntrosMissing(
 
         if not result.missing:
             head = f"Everyone{role_note} has posted an intro! 🐉"
-            content = "\n".join([head, *role_action_lines]) if role_action_lines else head
+            content = (
+                "\n".join([head, *role_action_lines]) if role_action_lines else head
+            )
             await ctx.edit_response(response_id, content=content)
         else:
             mentions = " ".join(m.mention for m in result.missing)
-            header = (
-                f"**{len(result.missing)} member(s){role_note} haven't posted an intro yet:**"
-            )
+            header = f"**{len(result.missing)} member(s){role_note} haven't posted an intro yet:**"
             content = "\n".join([header, mentions, *role_action_lines])
             await ctx.edit_response(response_id, content=content)
 

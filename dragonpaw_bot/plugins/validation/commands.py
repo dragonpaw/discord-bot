@@ -12,6 +12,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.context import GuildContext
+from dragonpaw_bot.plugins.intros import state as intros_state
 from dragonpaw_bot.plugins.validation import state as validation_state
 from dragonpaw_bot.plugins.validation.models import ValidationMember, ValidationStage
 
@@ -662,6 +663,32 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
             gc.logger.exception("Failed to assign member role", user_id=user_id)
             await gc.log(
                 f"⚠️ Something went wrong assigning the member role to <@{user_id}> — check the logs! 🐉"
+            )
+
+    intros_st = intros_state.load(int(interaction.guild_id))
+    if intros_st.channel_id is not None and intros_st.missing_role_id is not None:
+        try:
+            await bot.rest.add_role_to_member(
+                interaction.guild_id,
+                user_id,
+                hikari.Snowflake(intros_st.missing_role_id),
+            )
+        except hikari.ForbiddenError:
+            gc.logger.warning(
+                "Cannot assign missing-intro role — missing permissions",
+                user_id=user_id,
+            )
+            await gc.log(
+                f"⚠️ I couldn't pin the **{intros_st.missing_role_name}** role on <@{user_id}> — "
+                f"please check my **Manage Roles** permission and role hierarchy! 🐉"
+            )
+        except hikari.HTTPError:
+            gc.logger.exception("Failed to assign missing-intro role", user_id=user_id)
+        else:
+            gc.logger.info(
+                "Assigned missing-intro role on approval",
+                user_id=user_id,
+                role=intros_st.missing_role_name,
             )
 
     bot_st = bot.state(interaction.guild_id)

@@ -12,6 +12,7 @@ from dragonpaw_bot.plugins.subday import prompts, state
 from dragonpaw_bot.plugins.subday.constants import (
     TOTAL_WEEKS,
 )
+from dragonpaw_bot.utils import guild_member
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -37,9 +38,7 @@ async def _forward_owner_prompts(
     owner_changed = False
     for owner_id, sub_prompt_list in owner_prompts.items():
         # Verify owner is still in the guild
-        try:
-            await bot.rest.fetch_member(guild.id, hikari.Snowflake(owner_id))
-        except hikari.NotFoundError:
+        if await guild_member(bot, guild.id, owner_id) is None:
             log.info(
                 "Owner left the server, clearing owner references",
                 owner_id=owner_id,
@@ -108,9 +107,8 @@ async def _advance_participant(
         return False
 
     # Check guild membership before mutating state
-    try:
-        member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
-    except hikari.NotFoundError:
+    member = await guild_member(bot, guild.id, uid)
+    if member is None:
         log.info("Left the server, removing from SubDay")
         return None  # sentinel: remove
 
@@ -246,9 +244,8 @@ async def _process_guild_friday_reminders(
             continue
 
         # Fetch member, skip if they left
-        try:
-            member = await bot.rest.fetch_member(guild.id, hikari.Snowflake(uid))
-        except hikari.NotFoundError:
+        member = await guild_member(bot, guild.id, uid)
+        if member is None:
             log.info("Participant left server, skipping reminder", user_id=uid)
             continue
 
