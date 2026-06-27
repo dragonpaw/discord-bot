@@ -49,6 +49,19 @@ def test_build_prompt_embed():
     assert len(embed.fields) == 4
 
 
+def test_build_resend_dm_embeds():
+    p = prompts.load_week(7)
+    embeds = prompts.build_resend_dm_embeds(p)
+    assert len(embeds) == 2
+    greeting, prompt_embed = embeds
+    # Greeting names the week and does not pretend it's the Sunday drop
+    assert "Week 7" in greeting.description
+    assert "Sunday" not in greeting.description
+    # Second embed is the standard prompt embed
+    assert "Week 7" in prompt_embed.title
+    assert len(prompt_embed.fields) == 4
+
+
 def test_caching():
     # Clear cache
     prompts._cache.clear()

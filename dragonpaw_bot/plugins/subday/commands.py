@@ -49,6 +49,7 @@ async def help_handler(ctx: lightbulb.Context) -> None:
     lines = [
         "`/subday about` — Learn about the program",
         "`/subday status` — Check your progress (and your subs')",
+        "`/subday resend` — Resend your current prompt to your DMs",
         "`/subday owner` — Set or clear your owner",
     ]
     if gc.member:
@@ -1441,6 +1442,82 @@ class SubDayRemove(
         )
 
 
+class SubDayResend(
+    lightbulb.SlashCommand,
+    name="resend",
+    description="Resend your current week's prompt to your DMs",
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        assert ctx.guild_id and ctx.member
+        gc = GuildContext.from_ctx(ctx)
+
+        guild_state = state.load(int(ctx.guild_id))
+        participant = guild_state.participants.get(int(ctx.user.id))
+
+        if participant is None:
+            await ctx.respond(
+                "🐉 You're not signed up for **Where I am Led** yet! "
+                "Use `/subday signup` to start your journey~ 🐾",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        if participant.current_week > TOTAL_WEEKS:
+            await ctx.respond(
+                "🎓 You've already graduated — there's no prompt left to resend! 🐉✨",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        prompt = prompts.load_week(participant.current_week)
+        embeds = prompts.build_resend_dm_embeds(prompt)
+        try:
+            dm = await ctx.user.fetch_dm_channel()
+            await dm.send(embeds=embeds)
+        except hikari.ForbiddenError:
+            logger.warning(
+                "Cannot DM user for SubDay resend (DMs disabled)",
+                guild=gc.name,
+                user=ctx.member.display_name,
+            )
+            await ctx.respond(
+                "*sad dragon noises* 🐉 I couldn't slip into your DMs! "
+                "Please enable direct messages from server members and try again~ 🐾",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+        except hikari.HTTPError as exc:
+            logger.warning(
+                "Failed to DM SubDay resend",
+                guild=gc.name,
+                user=ctx.member.display_name,
+                error=str(exc),
+            )
+            await ctx.respond(
+                "*sad dragon noises* 🐉 Something went wrong sending your prompt. "
+                "Please try again in a moment~ 🐾",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        if not participant.week_sent:
+            participant.week_sent = True
+            state.save(guild_state)
+
+        await ctx.respond(
+            f"📬 Sent your **Week {participant.current_week}** prompt again — "
+            "check your DMs! 🐉💜",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        logger.info(
+            "Resent SubDay prompt",
+            guild=gc.name,
+            user=ctx.member.display_name,
+            week=participant.current_week,
+        )
+
+
 @subday_group.register
 class SubDayHelp(
     lightbulb.SlashCommand,
@@ -1459,4 +1536,5 @@ subday_group.register(SubDaySignup)
 subday_group.register(SubDayComplete)
 subday_group.register(SubDayList)
 subday_group.register(SubDayRemove)
+subday_group.register(SubDayResend)
 loader.command(subday_group)

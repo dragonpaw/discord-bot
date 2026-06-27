@@ -162,6 +162,22 @@ def build_weekly_dm_embeds(prompt: WeekPrompt) -> list[hikari.Embed]:
     return [greeting, build_prompt_embed(prompt)]
 
 
+def build_resend_dm_embeds(prompt: WeekPrompt) -> list[hikari.Embed]:
+    """Build embeds for a participant re-requesting their current prompt.
+
+    Returns a short greeting embed followed by the prompt embed.
+    """
+    greeting = hikari.Embed(
+        title="📬 Here's Your Prompt Again!",
+        description=(
+            f"By request — here's your **Week {prompt.week}** prompt. "
+            "Happy journaling! 🐉💜"
+        ),
+        color=SOLARIZED_CYAN,
+    )
+    return [greeting, build_prompt_embed(prompt)]
+
+
 def build_owner_dm_embeds(prompt: WeekPrompt, sub_user_id: int) -> list[hikari.Embed]:
     """Build embeds sent to an owner when their sub receives a new prompt.
 
