@@ -1,8 +1,12 @@
 services:
   bot:
     image: ghcr.io/dragonpaw/discord-bot:latest
+    container_name: discord-bot
     restart: unless-stopped
     network_mode: host
+    # High CPU weight so the event loop wins the CPU the instant an interaction
+    # lands (modals can't be deferred; 3s Discord deadline). Idle otherwise.
+    cpu_shares: 4096
     environment:
       - BOT_TOKEN
       - CLIENT_ID
