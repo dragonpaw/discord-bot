@@ -525,8 +525,24 @@ def _make_cron_bot(*, guild_id: int = 1, guild_name: str = "TestGuild"):
     return bot
 
 
-async def test_cron_skips_awaiting_staff(tmp_path, monkeypatch):
-    """AWAITING_STAFF members are not pinged or kicked, even past the 48-hour deadline."""
+# (elapsed_hours, stage, channel_id, expected_channel) — expected_channel None = no reminder.
+@pytest.mark.parametrize(
+    "case",
+    [
+        # Below the 10h REMINDER_INTERVAL_HOURS threshold — no reminder.
+        (5, ValidationStage.AWAITING_RULES, None, None),
+        (9, ValidationStage.AWAITING_RULES, None, None),
+        # At/after the threshold — reminder lands in the lobby for AWAITING_RULES
+        # and in the validate channel for AWAITING_PHOTOS.
+        (12, ValidationStage.AWAITING_RULES, None, 10),
+        (25, ValidationStage.AWAITING_RULES, None, 10),
+        (12, ValidationStage.AWAITING_PHOTOS, 55, 55),
+    ],
+)
+async def test_cron_reminder_timing(tmp_path, monkeypatch, case):
+    """First reminder fires only once REMINDER_INTERVAL_HOURS have elapsed, targeting
+    the lobby for AWAITING_RULES and the validate channel for AWAITING_PHOTOS."""
+    elapsed_hours, stage, channel_id, expected_channel = case
     monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
     validation_state._cache.clear()
 
@@ -538,9 +554,9 @@ async def test_cron_skips_awaiting_staff(tmp_path, monkeypatch):
         members=[
             ValidationMember(
                 user_id=42,
-                joined_at=now - timedelta(days=8),
-                stage=ValidationStage.AWAITING_STAFF,
-                channel_id=55,
+                joined_at=now - timedelta(hours=elapsed_hours),
+                stage=stage,
+                channel_id=channel_id,
             )
         ],
     )
@@ -551,11 +567,36 @@ async def test_cron_skips_awaiting_staff(tmp_path, monkeypatch):
     await validation_reminder_cron(bot)
 
     bot.rest.kick_user.assert_not_called()
-    bot.rest.create_message.assert_not_called()
+    validation_state._cache.clear()
+    reminder_count = validation_state.load(1).members[0].reminder_count
+
+    if expected_channel is None:
+        bot.rest.create_message.assert_not_called()
+        assert reminder_count == 0
+    else:
+        bot.rest.create_message.assert_called_once()
+        assert bot.rest.create_message.call_args.kwargs["channel"] == expected_channel
+        assert reminder_count == 1
 
 
-async def test_cron_no_reminder_before_10h(tmp_path, monkeypatch):
-    """Member joined 5h ago — too soon for first reminder; nothing happens."""
+# (stage, channel_id, expect_kick, expected_close_calls)
+@pytest.mark.parametrize(
+    "case",
+    [
+        # AWAITING_STAFF is excluded from the deadline — staff handle it manually.
+        (ValidationStage.AWAITING_STAFF, 55, False, []),
+        # AWAITING_RULES has no validate channel yet — kicked, nothing to close.
+        (ValidationStage.AWAITING_RULES, None, True, []),
+        # AWAITING_PHOTOS with a channel — kicked and the channel is closed.
+        (ValidationStage.AWAITING_PHOTOS, 55, True, [55]),
+        # AWAITING_PHOTOS without a channel — still kicked, no close attempted.
+        (ValidationStage.AWAITING_PHOTOS, None, True, []),
+    ],
+)
+async def test_cron_deadline(tmp_path, monkeypatch, case):
+    """Past the 48h deadline, members are kicked and dropped from state (closing their
+    validate channel if any) — except AWAITING_STAFF, which is left for manual review."""
+    stage, channel_id, expect_kick, expected_close_calls = case
     monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
     validation_state._cache.clear()
 
@@ -567,99 +608,9 @@ async def test_cron_no_reminder_before_10h(tmp_path, monkeypatch):
         members=[
             ValidationMember(
                 user_id=42,
-                joined_at=now - timedelta(hours=5),
-                stage=ValidationStage.AWAITING_RULES,
-            )
-        ],
-    )
-    validation_state.save(st)
-
-    bot = _make_cron_bot()
-
-    await validation_reminder_cron(bot)
-
-    bot.rest.create_message.assert_not_called()
-    bot.rest.kick_user.assert_not_called()
-
-
-async def test_cron_10h_reminder_awaiting_rules(tmp_path, monkeypatch):
-    """AWAITING_RULES member 12h after join gets a reminder in the lobby channel."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
-
-    now = datetime.now(UTC)
-    st = ValidationGuildState(
-        guild_id=1,
-        guild_name="TestGuild",
-        lobby_channel_id=10,
-        members=[
-            ValidationMember(
-                user_id=42,
-                joined_at=now - timedelta(hours=12),
-                stage=ValidationStage.AWAITING_RULES,
-            )
-        ],
-    )
-    validation_state.save(st)
-
-    bot = _make_cron_bot()
-
-    await validation_reminder_cron(bot)
-
-    bot.rest.create_message.assert_called_once()
-    assert bot.rest.create_message.call_args.kwargs["channel"] == 10
-
-    validation_state._cache.clear()
-    assert validation_state.load(1).members[0].reminder_count == 1
-
-
-async def test_cron_10h_reminder_awaiting_photos(tmp_path, monkeypatch):
-    """AWAITING_PHOTOS member 12h after join gets a reminder in their validate channel."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
-
-    now = datetime.now(UTC)
-    st = ValidationGuildState(
-        guild_id=1,
-        guild_name="TestGuild",
-        lobby_channel_id=10,
-        members=[
-            ValidationMember(
-                user_id=42,
-                joined_at=now - timedelta(hours=12),
-                stage=ValidationStage.AWAITING_PHOTOS,
-                channel_id=55,
-            )
-        ],
-    )
-    validation_state.save(st)
-
-    bot = _make_cron_bot()
-
-    await validation_reminder_cron(bot)
-
-    bot.rest.create_message.assert_called_once()
-    assert bot.rest.create_message.call_args.kwargs["channel"] == 55
-
-    validation_state._cache.clear()
-    assert validation_state.load(1).members[0].reminder_count == 1
-
-
-async def test_cron_deadline_kicks_awaiting_rules(tmp_path, monkeypatch):
-    """AWAITING_RULES member past 48 hours is kicked and removed from state. No channel close."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
-
-    now = datetime.now(UTC)
-    st = ValidationGuildState(
-        guild_id=1,
-        guild_name="TestGuild",
-        lobby_channel_id=10,
-        members=[
-            ValidationMember(
-                user_id=42,
-                joined_at=now - timedelta(days=8),
-                stage=ValidationStage.AWAITING_RULES,
+                joined_at=now - timedelta(hours=49),  # just past the 48h deadline
+                stage=stage,
+                channel_id=channel_id,
             )
         ],
     )
@@ -678,90 +629,14 @@ async def test_cron_deadline_kicks_awaiting_rules(tmp_path, monkeypatch):
 
     await validation_reminder_cron(bot)
 
-    bot.rest.kick_user.assert_called_once()
-    assert close_calls == []
-
+    assert close_calls == expected_close_calls
     validation_state._cache.clear()
-    assert validation_state.load(1).members == []
+    remaining = validation_state.load(1).members
 
-
-async def test_cron_deadline_kicks_and_closes_awaiting_photos(tmp_path, monkeypatch):
-    """AWAITING_PHOTOS member past 48 hours is kicked and validate channel is closed."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
-
-    now = datetime.now(UTC)
-    st = ValidationGuildState(
-        guild_id=1,
-        guild_name="TestGuild",
-        lobby_channel_id=10,
-        members=[
-            ValidationMember(
-                user_id=42,
-                joined_at=now - timedelta(days=8),
-                stage=ValidationStage.AWAITING_PHOTOS,
-                channel_id=55,
-            )
-        ],
-    )
-    validation_state.save(st)
-
-    bot = _make_cron_bot()
-    close_calls: list[int] = []
-
-    async def _fake_close(_gc, channel_id, _notice):
-        close_calls.append(channel_id)
-
-    monkeypatch.setattr(
-        "dragonpaw_bot.plugins.validation.cron._close_validate_channel",
-        _fake_close,
-    )
-
-    await validation_reminder_cron(bot)
-
-    bot.rest.kick_user.assert_called_once()
-    assert close_calls == [55]
-
-    validation_state._cache.clear()
-    assert validation_state.load(1).members == []
-
-
-async def test_cron_deadline_missing_channel_still_kicks(tmp_path, monkeypatch):
-    """AWAITING_PHOTOS past deadline with no channel_id is still kicked; no close attempted."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
-
-    now = datetime.now(UTC)
-    st = ValidationGuildState(
-        guild_id=1,
-        guild_name="TestGuild",
-        lobby_channel_id=10,
-        members=[
-            ValidationMember(
-                user_id=42,
-                joined_at=now - timedelta(days=8),
-                stage=ValidationStage.AWAITING_PHOTOS,
-                channel_id=None,
-            )
-        ],
-    )
-    validation_state.save(st)
-
-    bot = _make_cron_bot()
-    close_calls: list[int] = []
-
-    async def _fake_close(_gc, channel_id, _notice):
-        close_calls.append(channel_id)
-
-    monkeypatch.setattr(
-        "dragonpaw_bot.plugins.validation.cron._close_validate_channel",
-        _fake_close,
-    )
-
-    await validation_reminder_cron(bot)
-
-    bot.rest.kick_user.assert_called_once()
-    assert close_calls == []
-
-    validation_state._cache.clear()
-    assert validation_state.load(1).members == []
+    if expect_kick:
+        bot.rest.kick_user.assert_called_once()
+        assert remaining == []
+    else:
+        bot.rest.kick_user.assert_not_called()
+        bot.rest.create_message.assert_not_called()
+        assert len(remaining) == 1
