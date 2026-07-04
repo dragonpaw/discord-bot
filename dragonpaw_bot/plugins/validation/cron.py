@@ -10,8 +10,10 @@ import structlog
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.validation import state as validation_state
 from dragonpaw_bot.plugins.validation.commands import (
+    MAX_VALIDATION_HOURS,
     RULES_AGREED_PREFIX,
     _close_validate_channel,
+    _deadline_timestamp,
 )
 from dragonpaw_bot.plugins.validation.models import ValidationStage
 
@@ -21,8 +23,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
 
-REMINDER_INTERVAL_HOURS = 18
-MAX_VALIDATION_DAYS = 7
+REMINDER_INTERVAL_HOURS = 10
 
 
 def _build_rules_button_row(
@@ -39,7 +40,7 @@ def _build_rules_button_row(
 
 
 async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR0912
-    """Ping unvalidated members every 18h; kick and close channel after 7 days."""
+    """Ping unvalidated members every 10h; kick and close channel after 48 hours."""
     bot = cast("DragonpawBot", bot)
     now = datetime.now(UTC)
     guilds = list(bot.cache.get_guilds_view().values())
@@ -52,7 +53,7 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
 
             gc = GuildContext.from_guild(bot, guild)
             to_remove: list[int] = []
-            deadline = timedelta(days=MAX_VALIDATION_DAYS)
+            deadline = timedelta(hours=MAX_VALIDATION_HOURS)
 
             for member in st.members:
                 if member.stage == ValidationStage.AWAITING_STAFF:
@@ -61,14 +62,14 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                 if now >= member.joined_at + deadline:
                     await gc.kick_member(
                         member.user_id,
-                        reason=f"Did not complete validation within {MAX_VALIDATION_DAYS} days",
+                        reason=f"Did not complete validation within {MAX_VALIDATION_HOURS} hours",
                     )
                     if member.channel_id:
                         await _close_validate_channel(
                             gc,
                             member.channel_id,
                             f"*puffs a small smoke ring* ⏰ Hey <@{member.user_id}> — "
-                            f"your {MAX_VALIDATION_DAYS}-day validation window has closed. "
+                            f"your {MAX_VALIDATION_HOURS}-hour validation window has closed. "
                             f"This channel will disappear shortly. "
                             f"You're welcome to rejoin the server and try again! 🐉",
                         )
@@ -88,7 +89,9 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                             content=(
                                 f"*gentle nudge* Hey <@{member.user_id}>! 🐉 Just a little reminder — "
                                 f"you haven't finished reading the rules yet! Give 'em a read and "
-                                f"smack the button below when you're ready~ 🐾"
+                                f"smack the button below when you're ready~ 🐾\n\n"
+                                f"⏳ You've got until {_deadline_timestamp(member.joined_at)} before "
+                                f"I have to boop you back out of the nest!"
                             ),
                             components=[_build_rules_button_row(bot, member.user_id)],
                         )
@@ -116,7 +119,9 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                             content=(
                                 f"*peers in curiously* Hey <@{member.user_id}>! 🐉 Don't forget — "
                                 f"I'm still waiting for your verification photos! Drop at least 2 "
-                                f"photos in here when you're ready~ 🐾"
+                                f"photos in here when you're ready~ 🐾\n\n"
+                                f"⏳ You've got until {_deadline_timestamp(member.joined_at)} before "
+                                f"I have to boop you back out of the nest!"
                             ),
                         )
                     except hikari.HTTPError:

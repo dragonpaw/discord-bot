@@ -526,7 +526,7 @@ def _make_cron_bot(*, guild_id: int = 1, guild_name: str = "TestGuild"):
 
 
 async def test_cron_skips_awaiting_staff(tmp_path, monkeypatch):
-    """AWAITING_STAFF members are not pinged or kicked, even past the 7-day deadline."""
+    """AWAITING_STAFF members are not pinged or kicked, even past the 48-hour deadline."""
     monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
     validation_state._cache.clear()
 
@@ -554,8 +554,8 @@ async def test_cron_skips_awaiting_staff(tmp_path, monkeypatch):
     bot.rest.create_message.assert_not_called()
 
 
-async def test_cron_no_reminder_before_18h(tmp_path, monkeypatch):
-    """Member joined 10h ago — too soon for first reminder; nothing happens."""
+async def test_cron_no_reminder_before_10h(tmp_path, monkeypatch):
+    """Member joined 5h ago — too soon for first reminder; nothing happens."""
     monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
     validation_state._cache.clear()
 
@@ -567,7 +567,7 @@ async def test_cron_no_reminder_before_18h(tmp_path, monkeypatch):
         members=[
             ValidationMember(
                 user_id=42,
-                joined_at=now - timedelta(hours=10),
+                joined_at=now - timedelta(hours=5),
                 stage=ValidationStage.AWAITING_RULES,
             )
         ],
@@ -582,8 +582,8 @@ async def test_cron_no_reminder_before_18h(tmp_path, monkeypatch):
     bot.rest.kick_user.assert_not_called()
 
 
-async def test_cron_18h_reminder_awaiting_rules(tmp_path, monkeypatch):
-    """AWAITING_RULES member 20h after join gets a reminder in the lobby channel."""
+async def test_cron_10h_reminder_awaiting_rules(tmp_path, monkeypatch):
+    """AWAITING_RULES member 12h after join gets a reminder in the lobby channel."""
     monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
     validation_state._cache.clear()
 
@@ -595,7 +595,7 @@ async def test_cron_18h_reminder_awaiting_rules(tmp_path, monkeypatch):
         members=[
             ValidationMember(
                 user_id=42,
-                joined_at=now - timedelta(hours=20),
+                joined_at=now - timedelta(hours=12),
                 stage=ValidationStage.AWAITING_RULES,
             )
         ],
@@ -613,8 +613,8 @@ async def test_cron_18h_reminder_awaiting_rules(tmp_path, monkeypatch):
     assert validation_state.load(1).members[0].reminder_count == 1
 
 
-async def test_cron_18h_reminder_awaiting_photos(tmp_path, monkeypatch):
-    """AWAITING_PHOTOS member 20h after join gets a reminder in their validate channel."""
+async def test_cron_10h_reminder_awaiting_photos(tmp_path, monkeypatch):
+    """AWAITING_PHOTOS member 12h after join gets a reminder in their validate channel."""
     monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
     validation_state._cache.clear()
 
@@ -626,7 +626,7 @@ async def test_cron_18h_reminder_awaiting_photos(tmp_path, monkeypatch):
         members=[
             ValidationMember(
                 user_id=42,
-                joined_at=now - timedelta(hours=20),
+                joined_at=now - timedelta(hours=12),
                 stage=ValidationStage.AWAITING_PHOTOS,
                 channel_id=55,
             )
@@ -646,7 +646,7 @@ async def test_cron_18h_reminder_awaiting_photos(tmp_path, monkeypatch):
 
 
 async def test_cron_deadline_kicks_awaiting_rules(tmp_path, monkeypatch):
-    """AWAITING_RULES member past 7 days is kicked and removed from state. No channel close."""
+    """AWAITING_RULES member past 48 hours is kicked and removed from state. No channel close."""
     monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
     validation_state._cache.clear()
 
@@ -686,7 +686,7 @@ async def test_cron_deadline_kicks_awaiting_rules(tmp_path, monkeypatch):
 
 
 async def test_cron_deadline_kicks_and_closes_awaiting_photos(tmp_path, monkeypatch):
-    """AWAITING_PHOTOS member past 7 days is kicked and validate channel is closed."""
+    """AWAITING_PHOTOS member past 48 hours is kicked and validate channel is closed."""
     monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
     validation_state._cache.clear()
 

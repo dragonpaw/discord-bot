@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,6 +32,13 @@ MIN_PHOTOS = 2
 SAMPLE_ID_PATH = ASSETS_DIR / "validation-id.jpg"
 SAMPLE_SELFIE_PATH = ASSETS_DIR / "validation-selfie.jpg"
 CHANNEL_CLOSE_DELAY = 30
+MAX_VALIDATION_HOURS = 48
+
+
+def _deadline_timestamp(joined_at: datetime) -> str:
+    """Discord relative timestamp for when this member's validation window closes."""
+    deadline = joined_at + timedelta(hours=MAX_VALIDATION_HOURS)
+    return f"<t:{int(deadline.timestamp())}:R>"
 
 
 async def _close_validate_channel(
@@ -99,10 +106,11 @@ async def on_member_join(event: hikari.MemberCreateEvent) -> None:
         )
         return
 
+    joined_at = datetime.now(UTC)
     st.members.append(
         ValidationMember(
             user_id=int(event.member.id),
-            joined_at=datetime.now(UTC),
+            joined_at=joined_at,
         )
     )
     validation_state.save(st)
@@ -125,7 +133,10 @@ async def on_member_join(event: hikari.MemberCreateEvent) -> None:
                     if st.about_channel_id
                     else "!"
                 )
-                + " Give 'em a good read and then smack that button below! *happy tail wag* 🐾"
+                + " Give 'em a good read and then smack that button below! *happy tail wag* 🐾\n\n"
+                + "*peeks at a tiny hourglass* ⏳ Just so you know — you've got until "
+                + f"{_deadline_timestamp(joined_at)} to finish up, or I'll have to gently boop you "
+                + "back out of the nest. Plenty of time though! 🐉"
             ),
             components=[row],
         )
@@ -494,7 +505,9 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
                 f'**"{gc.name}"** and today\'s date (**{interaction.created_at.strftime("%B %d, %Y")}**) '
                 f"so we know it's a fresh photo just for us!\n\n"
                 f"*I've attached some examples below so you know what I'm looking for!* "
-                f"Once you post both, I'll ping staff to take a look. 🐾"
+                f"Once you post both, I'll ping staff to take a look. 🐾\n\n"
+                f"⏳ *glances at the hourglass* You've got until {_deadline_timestamp(member_entry.joined_at)} "
+                f"to get these in — after that I'll have to gently boop you back out of the nest. No rush though! 🐉"
             ),
             attachments=attachments if attachments else hikari.UNDEFINED,
         )
