@@ -5,7 +5,7 @@ description: Use when the user says "ship it", "deploy", "ship-it", or wants pen
 
 # /ship-it — Commit, build, deploy, verify
 
-End-to-end shipping for the **dragonpaw discord-bot**. The repo's push-to-main triggers a CI build that pushes a Docker image to `ghcr.io/dragonpaw/discord-bot:latest`; the bot runs on the NAS as the Portainer stack `discord-bot`. CI does NOT auto-deploy — this skill closes the loop.
+End-to-end shipping for the **dragonpaw discord-bot**. The repo's push-to-main triggers a CI build that pushes a Docker image to `ghcr.io/dragonpaw/discord-bot:latest`; the bot runs on the NAS as the Portainer stack `discord-bot` (id `28`, endpoint `6`) on the Portainer hub on plugger, container name `discord-bot`. CI does NOT auto-deploy — this skill closes the loop.
 
 ## When to use
 
@@ -63,30 +63,55 @@ gh run watch "$RUN_ID" --exit-status
 
 If the build fails: pull the failing job's logs with `gh run view "$RUN_ID" --log-failed`, surface the error, stop. Don't try to deploy a failed build.
 
-### 4. Deploy on the NAS
+### 4. Deploy on the NAS (Portainer hub API)
 
-The bot runs as Portainer stack id `5`, name `discord-bot`, single service `bot`. Compose lives at `/share/Docker/PortainerCE/data/compose/5/docker-compose.yml`. Env vars (`BOT_TOKEN`, `CLIENT_ID`) live in a sibling `stack.env` — Portainer manages them; the compose file declares the names without values.
+The bot runs as the standalone (non-git) compose stack **`discord-bot`** (id `28`) on **endpoint 6** (`nas`) of the Portainer hub on **plugger** (`http://10.0.2.203:19900`). The single service `bot` runs as container **`discord-bot`** (host network). See `~/.claude/skills/asustor-nas/SKILL.md` for the hub/endpoint model. (History: re-adopted onto ep6 on 2026-07-04 from the retired ep3 stack id 5; the old on-box `docker compose --env-file stack.env` path is dead — ep3's endpoint no longer exists.)
 
-**Critical gotcha**: `docker compose up -d` from the CLI does NOT pick up `stack.env` automatically. If you omit `--env-file stack.env`, the bot crash-loops with `KeyError: 'CLIENT_ID'`. Always pass `--env-file stack.env`.
+Credentials come from `~/.config/fish/conf.d/nas.fish`: `$PORTAINER_URL`, `$PORTAINER_TOKEN` (`ptr_…`), `$PORTAINER_ENDPOINT` (`6` = nas). **The token is a secret — never print it.** The hub is LAN-direct from the workstation (no ssh); off-LAN, tunnel with `ssh -L 19900:10.0.2.203:19900 …`.
+
+Redeploy = re-pull `:latest` and recreate the container, round-tripping the stack's stored env (`BOT_TOKEN`/`CLIENT_ID`) so you never handle the token. A single `PUT …?endpointId=6` with `pullImage:true` does it. Write this to scratchpad and run it:
+
+```python
+# scratchpad/redeploy.py — needs PORTAINER_URL / PORTAINER_TOKEN in env
+import json, os, urllib.request
+URL, TOK = os.environ["PORTAINER_URL"], os.environ["PORTAINER_TOKEN"]
+H = {"X-API-Key": TOK, "Content-Type": "application/json"}
+def call(method, path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    return urllib.request.urlopen(urllib.request.Request(URL + path, data=data, headers=H, method=method))
+st = next(s for s in json.load(call("GET", "/api/stacks"))
+          if s["Name"] == "discord-bot" and s["EndpointId"] == 6)   # look up by name, not hardcoded id
+sid = st["Id"]
+compose = json.load(call("GET", f"/api/stacks/{sid}/file"))["StackFileContent"]
+env = [{"name": e["name"], "value": e["value"]} for e in st["Env"]]  # round-trips BOT_TOKEN/CLIENT_ID
+body = {"stackFileContent": compose, "env": env, "prune": False, "pullImage": True}
+print("redeploy status:", call("PUT", f"/api/stacks/{sid}?endpointId=6", body).status, "stack", sid)
+```
 
 ```
-ssh nas 'cd /share/Docker/PortainerCE/data/compose/5 && \
-  sudo docker compose --env-file stack.env -p discord-bot pull && \
-  sudo docker compose --env-file stack.env -p discord-bot up -d'
+source ~/.config/fish/conf.d/nas.fish   # or export PORTAINER_URL / PORTAINER_TOKEN
+python3 scratchpad/redeploy.py
 ```
 
-Note `-p discord-bot` so compose uses the same project name Portainer originally created the container with (`discord-bot-bot-1`) rather than `5_bot_1`.
+`pullImage: true` re-pulls `ghcr.io/dragonpaw/discord-bot:latest` before recreating `discord-bot` in place; the named volume `discord-bot_bot-state` (guild/config state) is preserved.
 
-This will show as drift in the Portainer UI but won't actually desync state — Portainer's own "redeploy" does the same `pull + up -d`. If you want zero drift, use the Portainer API instead (see `~/src/divoom-dashboard/Makefile` `deploy` target for the pattern with an API token).
+**If the stack is missing** (someone deleted it): recreate with `POST /api/stacks/create/standalone/string?endpointId=6`, name `discord-bot`, `stackFileContent` from `~/src/discord-bot/docker-compose.yml`, and env `BOT_TOKEN`/`CLIENT_ID`. The values are recoverable from the stale ep3 file: `ssh nas 'cat /share/Docker/PortainerCE/data/compose/5/stack.env'` — pipe it into the create, **never print it**. Keep `TEST_GUILDS` unset in prod (global command registration only).
 
-**Don't read or print `stack.env` contents** — it holds the bot token. Pass it through with `--env-file`, never `cat` it.
+**Note:** these Portainer-API writes are production deploys — the auto-mode classifier may prompt for approval even though `ssh nas` itself is pre-authorized via the asustor-nas standing grant.
 
-### 5. Tail startup logs and triage
+### 5. Tail startup logs and triage (Portainer API)
+
+Fetch the container's logs from the hub (no ssh). Container name is **`discord-bot`**:
 
 ```
-ssh nas 'timeout 60 sudo docker logs -f --since 70s discord-bot-bot-1 2>&1' > /tmp/ship-it-logs.txt
+source ~/.config/fish/conf.d/nas.fish
+curl -s -H "X-API-Key: $PORTAINER_TOKEN" \
+  "$PORTAINER_URL/api/endpoints/6/docker/containers/discord-bot/logs?stdout=true&stderr=true&timestamps=true&tail=200" \
+  | LC_ALL=C sed -E 's/^.{8}//' | sed 's/\x1b\[[0-9;]*m//g' > /tmp/ship-it-logs.txt
 grep -iE 'warn|error|exception|traceback|critical|fail' /tmp/ship-it-logs.txt
 ```
+
+Docker's log stream is multiplexed — `sed 's/^.{8}//'` strips the 8-byte frame header; bot logs are ANSI-colorized — the second `sed` strips color (both per the asustor-nas skill). For byte-exact logs, use on-box `ssh nas 'sudo docker logs -t --since 70s discord-bot'`.
 
 Success signals to look for in the tail:
 - `hikari.bot started successfully in approx N seconds`
@@ -98,9 +123,13 @@ Success signals to look for in the tail:
 
 **Real problems to surface**:
 - Any `Traceback`.
-- `KeyError`/`ValueError` at import time (usually env-var related — re-check you passed `--env-file stack.env`).
+- `KeyError`/`ValueError` at import time (usually env-var related — check the stack's stored env still carries `BOT_TOKEN` and `CLIENT_ID`; the `PUT` round-trips them, but a bad recreate can drop them).
 - Hikari `IDENTIFY` failures, gateway disconnects, or `unauthorized` (bad/expired token).
-- The container restarting more than once in the 60s window (look for repeated `Bot starting up...` lines).
+- The container restart-looping. Confirm it's stable via the container's state (want `running`, `RestartCount` 0):
+  ```
+  curl -s -H "X-API-Key: $PORTAINER_TOKEN" "$PORTAINER_URL/api/endpoints/6/docker/containers/discord-bot/json" \
+    | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d["State"]; print("status:",s["Status"],"restarts:",d["RestartCount"],"started:",s["StartedAt"])'
+  ```
 
 If the build TAG in the "Connected to Discord" line matches roughly the timestamp of the commit you just pushed, the new image is actually running.
 
@@ -117,9 +146,12 @@ One-paragraph summary: commit SHA, build status, deploy result, startup time, an
 | Image | `ghcr.io/dragonpaw/discord-bot:latest` |
 | CI workflow | `.github/workflows/build.yaml` |
 | NAS host | `nas` (ssh config) — see `~/.claude/skills/asustor-nas/SKILL.md` |
-| Portainer stack | id `5`, name `discord-bot` |
-| Container name | `discord-bot-bot-1` |
-| Compose path | `/share/Docker/PortainerCE/data/compose/5/docker-compose.yml` |
-| Env file | `/share/Docker/PortainerCE/data/compose/5/stack.env` (do not print) |
+| Portainer hub | plugger `http://10.0.2.203:19900`, endpoint `6` = nas |
+| Portainer creds | `~/.config/fish/conf.d/nas.fish` → `$PORTAINER_URL`, `$PORTAINER_TOKEN` (secret) |
+| Portainer stack | name `discord-bot`, id `28` (look up by name + `EndpointId==6`) |
+| Container name | `discord-bot` |
+| Deploy | `PUT /api/stacks/{id}?endpointId=6` with `pullImage:true` (see step 4) |
+| Compose (source of truth) | `~/src/discord-bot/docker-compose.yml` |
+| Env (`BOT_TOKEN`/`CLIENT_ID`) | stored in the Portainer stack; stale ep3 copy at `/share/Docker/PortainerCE/data/compose/5/stack.env` (recovery only, do not print) |
 | Service | `bot` |
-| State volume | `bot-state` → `/app/state` in container |
+| State volume | `discord-bot_bot-state` → `/app/state` in container |
