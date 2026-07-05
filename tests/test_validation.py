@@ -594,7 +594,7 @@ async def test_cron_reminder_timing(tmp_path, monkeypatch, case):
     ],
 )
 async def test_cron_deadline(tmp_path, monkeypatch, case):
-    """Past the 48h deadline, members are kicked and dropped from state (closing their
+    """Past the 4-day deadline, members are kicked and dropped from state (closing their
     validate channel if any) — except AWAITING_STAFF, which is left for manual review."""
     stage, channel_id, expect_kick, expected_close_calls = case
     monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
@@ -608,7 +608,7 @@ async def test_cron_deadline(tmp_path, monkeypatch, case):
         members=[
             ValidationMember(
                 user_id=42,
-                joined_at=now - timedelta(hours=49),  # just past the 48h deadline
+                joined_at=now - timedelta(days=5),  # just past the 4-day deadline
                 stage=stage,
                 channel_id=channel_id,
             )
@@ -640,3 +640,38 @@ async def test_cron_deadline(tmp_path, monkeypatch, case):
         bot.rest.kick_user.assert_not_called()
         bot.rest.create_message.assert_not_called()
         assert len(remaining) == 1
+
+
+async def test_cron_deadline_removes_state_before_kick(tmp_path, monkeypatch):
+    """The member is dropped from state and saved *before* the kick REST call, so the
+    resulting MemberDeleteEvent finds no entry and on_member_leave stays silent (no
+    false "flew away" log, no redundant channel close)."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(days=5),
+                stage=ValidationStage.AWAITING_RULES,
+            )
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+    members_at_kick: list[list[int]] = []
+
+    async def _capture(*_args, **_kwargs):
+        members_at_kick.append([m.user_id for m in validation_state.load(1).members])
+
+    bot.rest.kick_user.side_effect = _capture
+
+    await validation_reminder_cron(bot)
+
+    assert members_at_kick == [[]]  # state already emptied by the time the kick fired

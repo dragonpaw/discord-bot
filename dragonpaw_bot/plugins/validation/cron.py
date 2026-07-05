@@ -10,7 +10,7 @@ import structlog
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.validation import state as validation_state
 from dragonpaw_bot.plugins.validation.commands import (
-    MAX_VALIDATION_HOURS,
+    MAX_VALIDATION_DAYS,
     RULES_AGREED_PREFIX,
     _close_validate_channel,
     _deadline_timestamp,
@@ -40,7 +40,7 @@ def _build_rules_button_row(
 
 
 async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR0912
-    """Ping unvalidated members every 10h; kick and close channel after 48 hours."""
+    """Ping unvalidated members every 10h; kick and close channel after 4 days."""
     bot = cast("DragonpawBot", bot)
     now = datetime.now(UTC)
     guilds = list(bot.cache.get_guilds_view().values())
@@ -52,28 +52,32 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                 continue
 
             gc = GuildContext.from_guild(bot, guild)
-            to_remove: list[int] = []
-            deadline = timedelta(hours=MAX_VALIDATION_HOURS)
+            deadline = timedelta(days=MAX_VALIDATION_DAYS)
 
             for member in st.members:
                 if member.stage == ValidationStage.AWAITING_STAFF:
                     continue
 
                 if now >= member.joined_at + deadline:
+                    # Drop from state and persist *before* kicking. The kick fires a
+                    # MemberDeleteEvent; without this, on_member_leave treats our own
+                    # kick as a voluntary departure — a confusing "flew away" staff
+                    # log and a redundant channel close. kick_member logs the kick.
+                    st.members = [m for m in st.members if m.user_id != member.user_id]
+                    validation_state.save(st)
                     await gc.kick_member(
                         member.user_id,
-                        reason=f"Did not complete validation within {MAX_VALIDATION_HOURS} hours",
+                        reason=f"Did not complete validation within {MAX_VALIDATION_DAYS} days",
                     )
                     if member.channel_id:
                         await _close_validate_channel(
                             gc,
                             member.channel_id,
                             f"*puffs a small smoke ring* ⏰ Hey <@{member.user_id}> — "
-                            f"your {MAX_VALIDATION_HOURS}-hour validation window has closed. "
+                            f"your {MAX_VALIDATION_DAYS}-day validation window has closed. "
                             f"This channel will disappear shortly. "
                             f"You're welcome to rejoin the server and try again! 🐉",
                         )
-                    to_remove.append(member.user_id)
                     continue
 
                 next_reminder = member.joined_at + timedelta(
@@ -138,9 +142,6 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                             reminder_count=member.reminder_count,
                             guild=guild.name,
                         )
-
-            if to_remove:
-                st.members = [m for m in st.members if m.user_id not in to_remove]
 
             validation_state.save(st)
         except Exception:

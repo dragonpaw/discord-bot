@@ -30,12 +30,14 @@ a private verify channel where they submit age-verification photos for staff rev
    Every 10 hours a reminder is posted: lobby channel for `AWAITING_RULES`, validate channel for
    `AWAITING_PHOTOS`. The `AWAITING_RULES` reminder re-attaches a fresh "I've read the rules! ✅"
    button (same `validation_rules_agreed:{user_id}` custom ID) so the flow still works even if the
-   original welcome message has been purged. After 48 hours from `joined_at` the member is kicked and
-   their validate channel (if any) is closed with a timeout notice. `AWAITING_STAFF` members are
-   excluded — staff handles those manually. Constants: `REMINDER_INTERVAL_HOURS = 10` in `cron.py`,
-   `MAX_VALIDATION_HOURS = 48` in `commands.py`. The welcome message, validate-channel intro, and
-   both reminders embed a live Discord relative timestamp (`_deadline_timestamp` in `commands.py`)
-   showing how long remains before the kick.
+   original welcome message has been purged. After 4 days from `joined_at` the member is kicked and
+   their validate channel (if any) is closed with a timeout notice. The cron drops the member from
+   state and saves *before* kicking, so the resulting `MemberDeleteEvent` doesn't make
+   `on_member_leave` log a false "flew away" notice or re-close the channel — `gc.kick_member`
+   already logs the kick. `AWAITING_STAFF` members are excluded — staff handles those manually.
+   Constants: `REMINDER_INTERVAL_HOURS = 10` in `cron.py`, `MAX_VALIDATION_DAYS = 4` in `commands.py`.
+   The welcome message, validate-channel intro, and both reminders embed a live Discord relative
+   timestamp (`_deadline_timestamp` in `commands.py`) showing how long remains before the kick.
 
 ### Member Leave Cleanup
 

@@ -225,7 +225,7 @@ class ValidationStatus(
         lines.append(
             f"• Staff role: {f'<@&{st.staff_role_id}>' if st.staff_role_id else 'not set'}"
         )
-        lines.append("• Validation timeout: 48 hours from join, reminders every 10 hours")
+        lines.append("• Validation timeout: 4 days from join, reminders every 10 hours")
         lines.append(
             f"• About channel: {f'<#{st.about_channel_id}>' if st.about_channel_id else 'not set'}"
         )

@@ -32,12 +32,12 @@ MIN_PHOTOS = 2
 SAMPLE_ID_PATH = ASSETS_DIR / "validation-id.jpg"
 SAMPLE_SELFIE_PATH = ASSETS_DIR / "validation-selfie.jpg"
 CHANNEL_CLOSE_DELAY = 30
-MAX_VALIDATION_HOURS = 48
+MAX_VALIDATION_DAYS = 4
 
 
 def _deadline_timestamp(joined_at: datetime) -> str:
     """Discord relative timestamp for when this member's validation window closes."""
-    deadline = joined_at + timedelta(hours=MAX_VALIDATION_HOURS)
+    deadline = joined_at + timedelta(days=MAX_VALIDATION_DAYS)
     return f"<t:{int(deadline.timestamp())}:R>"
 
 
