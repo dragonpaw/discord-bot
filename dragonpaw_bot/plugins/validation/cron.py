@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
 
-REMINDER_INTERVAL_HOURS = 10
+REMINDER_INTERVAL_HOURS = 16
 
 
 def _build_rules_button_row(
@@ -40,7 +40,7 @@ def _build_rules_button_row(
 
 
 async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR0912
-    """Ping unvalidated members every 10h; kick and close channel after 4 days."""
+    """Ping unvalidated members every 16h; kick and close channel after 4 days."""
     bot = cast("DragonpawBot", bot)
     now = datetime.now(UTC)
     guilds = list(bot.cache.get_guilds_view().values())

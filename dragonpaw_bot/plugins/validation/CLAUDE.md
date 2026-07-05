@@ -27,7 +27,7 @@ a private verify channel where they submit age-verification photos for staff rev
    `plugins/intros/CLAUDE.md`).
 
 5. **Reminders / timeout** — hourly cron checks members at `AWAITING_RULES` and `AWAITING_PHOTOS`.
-   Every 10 hours a reminder is posted: lobby channel for `AWAITING_RULES`, validate channel for
+   Every 16 hours a reminder is posted: lobby channel for `AWAITING_RULES`, validate channel for
    `AWAITING_PHOTOS`. The `AWAITING_RULES` reminder re-attaches a fresh "I've read the rules! ✅"
    button (same `validation_rules_agreed:{user_id}` custom ID) so the flow still works even if the
    original welcome message has been purged. After 4 days from `joined_at` the member is kicked and
@@ -35,7 +35,7 @@ a private verify channel where they submit age-verification photos for staff rev
    state and saves *before* kicking, so the resulting `MemberDeleteEvent` doesn't make
    `on_member_leave` log a false "flew away" notice or re-close the channel — `gc.kick_member`
    already logs the kick. `AWAITING_STAFF` members are excluded — staff handles those manually.
-   Constants: `REMINDER_INTERVAL_HOURS = 10` in `cron.py`, `MAX_VALIDATION_DAYS = 4` in `commands.py`.
+   Constants: `REMINDER_INTERVAL_HOURS = 16` in `cron.py`, `MAX_VALIDATION_DAYS = 4` in `commands.py`.
    The welcome message, validate-channel intro, and both reminders embed a live Discord relative
    timestamp (`_deadline_timestamp` in `commands.py`) showing how long remains before the kick.
 
@@ -70,7 +70,7 @@ removes the member from Discord's view; bot state is cleaned up on the next
 Managed via `/config validation` (owner only):
 
 - **`setup [lobby_channel] [validate_category] [member_role] [staff_role]`**
-  — Set any combination. Omitted params keep current values. The welcome announcement channel is configured globally via `/config channels general`. Timeout (48h, `MAX_VALIDATION_HOURS` in `commands.py`) and reminder interval (10h, `REMINDER_INTERVAL_HOURS` in `cron.py`) are hardcoded constants.
+  — Set any combination. Omitted params keep current values. The welcome announcement channel is configured globally via `/config channels general`. Timeout (4d, `MAX_VALIDATION_DAYS` in `commands.py`) and reminder interval (16h, `REMINDER_INTERVAL_HOURS` in `cron.py`) are hardcoded constants.
 - **`status`** — Shows config + member counts at each stage.
 
 State persisted to `state/validation_{guild_id}.yaml`.
@@ -78,7 +78,7 @@ State persisted to `state/validation_{guild_id}.yaml`.
 ### State
 
 `ValidationGuildState` holds both config fields and the runtime `members` list.
-Each `ValidationMember` tracks: `user_id`, `joined_at`, `reminder_count` (10h pings sent so far),
+Each `ValidationMember` tracks: `user_id`, `joined_at`, `reminder_count` (16h pings sent so far),
 `stage` (`ValidationStage` enum), `channel_id`, `photo_count`.
 
 ### Assets

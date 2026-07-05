@@ -529,14 +529,14 @@ def _make_cron_bot(*, guild_id: int = 1, guild_name: str = "TestGuild"):
 @pytest.mark.parametrize(
     "case",
     [
-        # Below the 10h REMINDER_INTERVAL_HOURS threshold — no reminder.
+        # Below the 16h REMINDER_INTERVAL_HOURS threshold — no reminder.
         (5, ValidationStage.AWAITING_RULES, None, None),
-        (9, ValidationStage.AWAITING_RULES, None, None),
+        (15, ValidationStage.AWAITING_RULES, None, None),
         # At/after the threshold — reminder lands in the lobby for AWAITING_RULES
         # and in the validate channel for AWAITING_PHOTOS.
-        (12, ValidationStage.AWAITING_RULES, None, 10),
-        (25, ValidationStage.AWAITING_RULES, None, 10),
-        (12, ValidationStage.AWAITING_PHOTOS, 55, 55),
+        (18, ValidationStage.AWAITING_RULES, None, 10),
+        (40, ValidationStage.AWAITING_RULES, None, 10),
+        (18, ValidationStage.AWAITING_PHOTOS, 55, 55),
     ],
 )
 async def test_cron_reminder_timing(tmp_path, monkeypatch, case):
