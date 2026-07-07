@@ -134,8 +134,8 @@ async def on_member_join(event: hikari.MemberCreateEvent) -> None:
                     else "!"
                 )
                 + " Give 'em a good read and then smack that button below! *happy tail wag* 🐾\n\n"
-                + "*peeks at a tiny hourglass* ⏳ Just so you know — you've got until "
-                + f"{_deadline_timestamp(joined_at)} to finish up, or I'll have to gently boop you "
+                + "*peeks at a tiny hourglass* ⏳ Just so you know — if you haven't finished "
+                + f"up {_deadline_timestamp(joined_at)}, I'll have to gently boop you "
                 + "back out of the nest. Plenty of time though! 🐉"
             ),
             components=[row],
@@ -506,8 +506,8 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
                 f"so we know it's a fresh photo just for us!\n\n"
                 f"*I've attached some examples below so you know what I'm looking for!* "
                 f"Once you post both, I'll ping staff to take a look. 🐾\n\n"
-                f"⏳ *glances at the hourglass* You've got until {_deadline_timestamp(member_entry.joined_at)} "
-                f"to get these in — after that I'll have to gently boop you back out of the nest. No rush though! 🐉"
+                f"⏳ *glances at the hourglass* Drop them in soon—I'll have to gently boop you back out of "
+                f"the nest {_deadline_timestamp(member_entry.joined_at)} if I don't see them! No rush though 🐉"
             ),
             attachments=attachments if attachments else hikari.UNDEFINED,
         )

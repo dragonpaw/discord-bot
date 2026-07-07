@@ -94,8 +94,8 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                                 f"*gentle nudge* Hey <@{member.user_id}>! 🐉 Just a little reminder — "
                                 f"you haven't finished reading the rules yet! Give 'em a read and "
                                 f"smack the button below when you're ready~ 🐾\n\n"
-                                f"⏳ You've got until {_deadline_timestamp(member.joined_at)} before "
-                                f"I have to boop you back out of the nest!"
+                                f"⏳ I'll have to boop you back out of the nest {_deadline_timestamp(member.joined_at)} "
+                                f"if you haven't finished up—so don't keep me waiting! 🐾"
                             ),
                             components=[_build_rules_button_row(bot, member.user_id)],
                         )
@@ -124,8 +124,8 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                                 f"*peers in curiously* Hey <@{member.user_id}>! 🐉 Don't forget — "
                                 f"I'm still waiting for your verification photos! Drop at least 2 "
                                 f"photos in here when you're ready~ 🐾\n\n"
-                                f"⏳ You've got until {_deadline_timestamp(member.joined_at)} before "
-                                f"I have to boop you back out of the nest!"
+                                f"⏳ I'll have to boop you back out of the nest {_deadline_timestamp(member.joined_at)} "
+                                f"if you haven't finished up—so don't keep me waiting! 🐾"
                             ),
                         )
                     except hikari.HTTPError:
