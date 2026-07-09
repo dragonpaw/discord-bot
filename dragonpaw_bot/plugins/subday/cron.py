@@ -196,7 +196,11 @@ async def _process_guild_prompts(bot: DragonpawBot, guild: hikari.Guild) -> None
 
     if advanced:
         gc = GuildContext.from_guild(bot, guild)
-        lines = [f"- <@{uid}> → Week {week}" for uid, week in advanced]
+        lines = []
+        for uid, week in advanced:
+            advanced_member = await guild_member(bot, guild.id, uid)
+            who = advanced_member.display_name if advanced_member else str(uid)
+            lines.append(f"- **{who}** → Week {week}")
         await gc.log(
             f"📬 Sunday SubDay run complete! Sent next week's prompt to "
             f"{len(advanced)} participant(s):\n" + "\n".join(lines)
@@ -303,7 +307,7 @@ async def _process_guild_friday_reminders(
         participant.reminder_sent = True
         any_sent = True
         await gc.log(
-            f"🔔 Sent Friday reminder to {member.mention} for Week {participant.current_week}"
+            f"🔔 Sent Friday reminder to **{member.display_name}** for Week {participant.current_week}"
         )
 
     if any_sent:

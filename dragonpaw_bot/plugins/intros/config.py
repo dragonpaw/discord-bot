@@ -102,8 +102,9 @@ class IntrosSet(
             f"Introductions channel set to <#{self.channel.id}>.{role_line}{missing_line}{warning_block}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         bits = [
-            f"📋 {ctx.user.mention} pointed me at <#{self.channel.id}> as the intros channel!"
+            f"📋 **{actor}** pointed me at <#{self.channel.id}> as the intros channel!"
         ]
         if self.role:
             bits.append(f"I'll only watch for members with the **{self.role.name}** role.")
@@ -150,6 +151,7 @@ class IntrosClear(
             "Introductions channel configuration cleared.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"📋 {ctx.user.mention} cleared the intros channel config — I'll stop keeping tabs on hellos! 🐉"
+            f"📋 **{actor}** cleared the intros channel config — I'll stop keeping tabs on hellos! 🐉"
         )

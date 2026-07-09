@@ -80,8 +80,9 @@ class IntrosMissing(
             content = "\n".join([header, mentions, *role_action_lines])
             await ctx.edit_response(response_id, content=content)
 
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         log_bits = [
-            f"👀 {ctx.user.mention} asked who's been shy — "
+            f"👀 **{actor}** asked who's been shy — "
             f"**{len(result.missing)}** member(s) still haven't introduced themselves in <#{st.channel_id}>."
         ]
         if st.missing_role_id and (result.role_added or result.role_removed):

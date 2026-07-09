@@ -255,32 +255,39 @@ class GuildContext:
             raise
 
     async def kick_member(
-        self, user_id: int | hikari.Snowflake, *, reason: str
+        self,
+        user_id: int | hikari.Snowflake,
+        *,
+        reason: str,
+        display_name: str | None = None,
     ) -> None:
         """Kick a member, logging the outcome to the guild log channel.
 
         Handles NotFoundError (already left), ForbiddenError (missing permission),
         and unexpected HTTPError gracefully — all cases are logged and swallowed.
+        Pass ``display_name`` so the log names the member; a kicked member can't be
+        mentioned (they're gone), so we render a bolded alias, falling back to the id.
         """
+        who = display_name or str(user_id)
         try:
             await self.bot.rest.kick_user(
                 self.guild_id, hikari.Snowflake(user_id), reason=reason
             )
-            await self.log(f"👢 *wry tail flick* Kicked <@{user_id}> — {reason} 🐉")
+            await self.log(f"👢 *wry tail flick* Kicked **{who}** — {reason} 🐉")
             self.logger.info("Kicked member", user_id=user_id, reason=reason)
         except hikari.NotFoundError:
-            await self.log(f"👻 Tried to kick <@{user_id}> but they'd already left! 🐉")
+            await self.log(f"👻 Tried to kick **{who}** but they'd already left! 🐉")
             self.logger.info("Member already left before kick", user_id=user_id)
         except hikari.ForbiddenError:
             await self.log(
-                f"⚠️ Couldn't kick <@{user_id}> — please check my **Kick Members** permission! 🐉"
+                f"⚠️ Couldn't kick **{who}** — please check my **Kick Members** permission! 🐉"
             )
             self.logger.warning(
                 "Cannot kick member — missing permission", user_id=user_id
             )
         except hikari.HTTPError:
             await self.log(
-                f"⚠️ Something went wrong trying to kick <@{user_id}> — check the logs! 🐉"
+                f"⚠️ Something went wrong trying to kick **{who}** — check the logs! 🐉"
             )
             self.logger.exception("Failed to kick member", user_id=user_id)
 
@@ -297,7 +304,7 @@ class GuildContext:
                 "Cannot delete channel — missing permissions", channel_id=channel_id
             )
             await self.log(
-                f"🤯 I tried to delete <#{channel_id}> but couldn't — "
+                "🤯 I tried to tidy away a private channel but couldn't — "
                 "please check my **Manage Channels** permission! 🐉"
             )
         except hikari.HTTPError:
@@ -305,7 +312,7 @@ class GuildContext:
                 "Unexpected error deleting channel", channel_id=channel_id
             )
             await self.log(
-                f"🐛 Unexpected error trying to delete <#{channel_id}> — check the bot logs. 🐉"
+                "🐛 Unexpected error trying to tidy away a private channel — check the bot logs. 🐉"
             )
 
     async def check_permission(

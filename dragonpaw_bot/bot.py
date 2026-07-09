@@ -495,8 +495,9 @@ class SetGeneralChannel(
                 f"General chat channel set to <#{self.channel.id}>.",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
+            actor = ctx.member.display_name if ctx.member else ctx.user.display_name
             await gc.log(
-                f"⚙️ {ctx.user.mention} set the general chat channel to <#{self.channel.id}> 🐉"
+                f"⚙️ **{actor}** set the general chat channel to <#{self.channel.id}> 🐉"
             )
         else:
             state.general_channel_id = None
@@ -505,7 +506,8 @@ class SetGeneralChannel(
             await ctx.respond(
                 "General chat channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
             )
-            await gc.log(f"⚙️ {ctx.user.mention} cleared the general chat channel 🐉")
+            actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+            await gc.log(f"⚙️ **{actor}** cleared the general chat channel 🐉")
 
 
 from dragonpaw_bot.plugins.activity import config as activity_config  # noqa: E402

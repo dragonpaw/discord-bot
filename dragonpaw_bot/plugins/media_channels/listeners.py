@@ -138,6 +138,7 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
         bot.cache.get_guild(event.guild_id)
         or await bot.rest.fetch_guild(event.guild_id),
     )
+    poster = event.member.display_name if event.member else msg.author.display_name
     await gc.log(
-        f"🐉 Nommed text-only post by {msg.author.mention} in <#{event.channel_id}>",
+        f"🐉 Nommed text-only post by **{poster}** in <#{event.channel_id}>",
     )

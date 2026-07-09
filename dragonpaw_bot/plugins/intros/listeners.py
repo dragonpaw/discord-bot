@@ -59,7 +59,7 @@ async def _handle_intro_post(event: hikari.GuildMessageCreateEvent) -> None:
     if guild is not None:
         gc = GuildContext.from_guild(bot, guild)
         await gc.log(
-            f"📝 *happy chirp* {member.mention} just posted their intro — I plucked the "
+            f"📝 *happy chirp* **{member.display_name}** just posted their intro — I plucked the "
             f"**{st.missing_role_name}** role right off them! Welcome to the hoard! 🐾"
         )
 

@@ -84,8 +84,9 @@ class CleanupAdd(
             f"{format_duration(expiry_minutes)}.{warning}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"⚙️ {ctx.user.mention} put me on tidy-up duty in <#{self.channel.id}> — "
+            f"⚙️ **{actor}** put me on tidy-up duty in <#{self.channel.id}> — "
             f"I'll nom messages older than {format_duration(expiry_minutes)}! 🧹",
         )
 
@@ -123,8 +124,9 @@ class CleanupRemove(
             f"<#{self.channel.id}> removed from auto-cleanup.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"⚙️ {ctx.user.mention} took <#{self.channel.id}> off my cleanup list — I'll leave those messages alone now~ 🐉",
+            f"⚙️ **{actor}** took <#{self.channel.id}> off my cleanup list — I'll leave those messages alone now~ 🐉",
         )
 
 

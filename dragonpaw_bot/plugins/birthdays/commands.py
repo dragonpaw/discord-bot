@@ -566,14 +566,14 @@ async def _handle_set_timezone(
             )
             return
         log_msg = (
-            f"🎂 {interaction.user.mention} updated their birthday!"
+            f"🎂 **{(interaction.member or interaction.user).display_name}** updated their birthday!"
             f" *scribbles in the records* Changed: {', '.join(changes)} 🐉"
         )
     else:
         action = "registered"
         changes = []
         log_msg = (
-            f"🎂 {interaction.user.mention} registered their birthday"
+            f"🎂 **{(interaction.member or interaction.user).display_name}** registered their birthday"
             f" — {MONTH_NAMES[month]} {day}! 🎉"
         )
 
@@ -688,8 +688,9 @@ class BirthdayRemove(
             guild=gc.name,
             user=ctx.user.username,
         )
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"🎂 {ctx.user.mention} removed their birthday — I'll miss celebrating them! 🐾"
+            f"🎂 **{actor}** removed their birthday — I'll miss celebrating them! 🐾"
         )
 
 
@@ -733,8 +734,9 @@ class BirthdayRemoveFor(
             user=ctx.user.username,
             target=self.user.username,
         )
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"🎂 {ctx.user.mention} removed birthday entry for {self.user.mention} 🐾"
+            f"🎂 **{actor}** removed birthday entry for **{self.user.display_name}** 🐾"
         )
 
 

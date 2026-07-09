@@ -97,7 +97,9 @@ async def on_member_join(event: hikari.MemberCreateEvent) -> None:
             bot.cache.get_guild(event.guild_id)
             or await bot.rest.fetch_guild(event.guild_id),
         )
-        await gc.log(f"🤖 Bot joined: {event.member.mention} — skipping onboarding 🐉")
+        await gc.log(
+            f"🤖 Bot joined: **{event.member.display_name}** — skipping onboarding 🐉"
+        )
         return
 
     if not st.lobby_channel_id:
@@ -196,11 +198,16 @@ async def on_member_update(event: hikari.MemberUpdateEvent) -> None:
         bot.cache.get_guild(event.guild_id)
         or await bot.rest.fetch_guild(event.guild_id),
     )
-    by_whom = f" — role given by <@{actor_id}>" if actor_id else ""
+    if actor_id:
+        actor_member = bot.cache.get_member(event.guild_id, actor_id)
+        actor_name = actor_member.display_name if actor_member else str(actor_id)
+        by_whom = f" — role given by **{actor_name}**"
+    else:
+        by_whom = ""
     st.members = [m for m in st.members if m.user_id != int(event.member.id)]
     validation_state.save(st)
     await gc.log(
-        f"*happy snort* Dropped {event.member.mention} from onboarding — "
+        f"*happy snort* Dropped **{event.member.display_name}** from onboarding — "
         f"they already have the member role{by_whom}! 🐉"
     )
     logger.info(
@@ -277,9 +284,11 @@ async def on_message_create(event: hikari.GuildMessageCreateEvent) -> None:
             )
         except hikari.HTTPError:
             logger.warning("Failed to post staff ping", channel_id=event.channel_id)
+        submitter = (
+            event.member.display_name if event.member else event.author.display_name
+        )
         await gc.log(
-            f"📸 Photos submitted by <@{member_entry.user_id}> in <#{event.channel_id}> — "
-            f"awaiting staff review 👀🐉"
+            f"📸 Photos submitted by **{submitter}** — awaiting staff review 👀🐉"
         )
         logger.info(
             "Photos submitted, awaiting staff review", user_id=member_entry.user_id
@@ -318,7 +327,7 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
     else:
         display = str(event.user_id)
     await gc.log(
-        f"*sad snort* <@{event.user_id}> flew away before finishing onboarding — "
+        f"*sad snort* **{display}** flew away before finishing onboarding — "
         f"cleaning up! 🐉"
     )
     logger.info("Removed member from onboarding on leave", user=display)
@@ -349,11 +358,11 @@ async def _reconcile_guild(bot: DragonpawBot, guild_id: int) -> None:
 
     for member_entry in st.members:
         try:
-            await bot.rest.fetch_member(guild_id, member_entry.user_id)
+            member = await bot.rest.fetch_member(guild_id, member_entry.user_id)
         except hikari.NotFoundError:
             to_remove.append(member_entry.user_id)
             await gc.log(
-                f"*sad snort* <@{member_entry.user_id}> left the server while I was napping — "
+                f"*sad snort* **{member_entry.user_id}** left the server while I was napping — "
                 f"cleaning up their onboarding! 🐉"
             )
             logger.info(
@@ -386,7 +395,7 @@ async def _reconcile_guild(bot: DragonpawBot, guild_id: int) -> None:
         except hikari.NotFoundError:
             to_remove.append(member_entry.user_id)
             await gc.log(
-                f"*confused sniff* Validate channel for <@{member_entry.user_id}> is gone — "
+                f"*confused sniff* Validate channel for **{member.display_name}** is gone — "
                 f"cleaned up their onboarding entry! 🐉"
             )
             logger.info(
@@ -520,8 +529,8 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
 
     gc.logger.info("Opened validate channel", channel=channel_name)
     await gc.log(
-        f"🆕 *happy flap* Opened validate channel for {interaction.user.mention} "
-        f"in <#{channel.id}> 🐉"
+        f"🆕 *happy flap* Opened a validate channel for "
+        f"**{interaction.member.display_name}** 🐉"
     )
 
 
@@ -650,13 +659,13 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
     except hikari.ForbiddenError:
         gc.logger.warning("Cannot set nickname — missing permissions", user_id=user_id)
         await gc.log(
-            f"⚠️ I couldn't set the nickname for <@{user_id}> — "
+            f"⚠️ I couldn't set the nickname for **{name}** — "
             f"please check my **Manage Nicknames** permission! 🐉"
         )
     except hikari.HTTPError:
         gc.logger.exception("Failed to set nickname", user_id=user_id)
         await gc.log(
-            f"⚠️ Something went wrong setting the nickname for <@{user_id}> — check the logs! 🐉"
+            f"⚠️ Something went wrong setting the nickname for **{name}** — check the logs! 🐉"
         )
 
     if st.member_role_id:
@@ -669,13 +678,13 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
                 "Cannot assign member role — missing permissions", user_id=user_id
             )
             await gc.log(
-                f"⚠️ I couldn't assign the member role to <@{user_id}> — "
+                f"⚠️ I couldn't assign the member role to **{name}** — "
                 f"please check my **Manage Roles** permission and role hierarchy! 🐉"
             )
         except hikari.HTTPError:
             gc.logger.exception("Failed to assign member role", user_id=user_id)
             await gc.log(
-                f"⚠️ Something went wrong assigning the member role to <@{user_id}> — check the logs! 🐉"
+                f"⚠️ Something went wrong assigning the member role to **{name}** — check the logs! 🐉"
             )
 
     intros_st = intros_state.load(int(interaction.guild_id))
@@ -692,7 +701,7 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
                 user_id=user_id,
             )
             await gc.log(
-                f"⚠️ I couldn't pin the **{intros_st.missing_role_name}** role on <@{user_id}> — "
+                f"⚠️ I couldn't pin the **{intros_st.missing_role_name}** role on **{name}** — "
                 f"please check my **Manage Roles** permission and role hierarchy! 🐉"
             )
         except hikari.HTTPError:
@@ -753,8 +762,8 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
             )
 
     await gc.log(
-        f"✅ *happy flap* Approved <@{user_id}> as **{name}** — "
-        f"stamped by {interaction.user.mention}! 🎉🐉"
+        f"✅ *happy flap* Approved **{name}** — "
+        f"stamped by **{interaction.member.display_name}**! 🎉🐉"
     )
     gc.logger.info(
         "Member approved",

@@ -92,8 +92,9 @@ class ActivityRoleAdd(
             role=self.role.name,
             preset=label,
         )
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"📊 {ctx.user.mention} set **{self.role.name}** to activity preset **{label}**"
+            f"📊 **{actor}** set **{self.role.name}** to activity preset **{label}**"
             + (
                 " — I'll ignore them! 🙈"
                 if ignored
@@ -136,8 +137,9 @@ class ActivityRoleRemove(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         gc.logger.info("Activity role removed", role=self.role.name)
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"📊 {ctx.user.mention} removed activity config for **{self.role.name}** 🐾"
+            f"📊 **{actor}** removed activity config for **{self.role.name}** 🐾"
         )
 
 
@@ -192,8 +194,9 @@ class ActivityChannelAdd(
             channel=self.channel.name,
             multiplier=mult,
         )
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"📊 {ctx.user.mention} set <#{self.channel.id}> to **{mult}×** activity points 🐉"
+            f"📊 **{actor}** set <#{self.channel.id}> to **{mult}×** activity points 🐉"
         )
 
 
@@ -233,8 +236,9 @@ class ActivityChannelRemove(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         gc.logger.info("Activity channel removed", channel=self.channel.name)
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"📊 {ctx.user.mention} removed the activity multiplier for <#{self.channel.id}> 🐾"
+            f"📊 **{actor}** removed the activity multiplier for <#{self.channel.id}> 🐾"
         )
 
 
@@ -263,8 +267,9 @@ class ActivityLurker(
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             gc.logger.info("Activity lurker role cleared")
+            actor = ctx.member.display_name if ctx.member else ctx.user.display_name
             await gc.log(
-                f"📊 {ctx.user.mention} cleared the lurker role — no more lurker tags! 🐾"
+                f"📊 **{actor}** cleared the lurker role — no more lurker tags! 🐾"
             )
             return
 
@@ -281,8 +286,9 @@ class ActivityLurker(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         gc.logger.info("Activity lurker role set", role=self.role.name)
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"📊 {ctx.user.mention} set the lurker role to **{self.role.name}** 🐉"
+            f"📊 **{actor}** set the lurker role to **{self.role.name}** 🐉"
             + (f" ⚠️ {warning}" if warning else " *happy tail wag* 🐾")
         )
 
@@ -312,8 +318,9 @@ class ActivityViewer(
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             gc.logger.info("Activity viewer role cleared")
+            actor = ctx.member.display_name if ctx.member else ctx.user.display_name
             await gc.log(
-                f"📊 {ctx.user.mention} cleared the activity viewer role — admin-only access now 🐾"
+                f"📊 **{actor}** cleared the activity viewer role — admin-only access now 🐾"
             )
             return
 
@@ -326,8 +333,9 @@ class ActivityViewer(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         gc.logger.info("Activity viewer role set", role=self.role.name)
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
-            f"📊 {ctx.user.mention} set the activity viewer role to **{self.role.name}** 🐉"
+            f"📊 **{actor}** set the activity viewer role to **{self.role.name}** 🐉"
         )
 
 

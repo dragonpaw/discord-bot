@@ -255,7 +255,7 @@ async def _post_achievement(
         )
         embed = _graduation_embed(target, prizes)
         staff_msg = (
-            f"🎓 {completer.mention} — {target.mention} has **graduated** "
+            f"🎓 **{completer.display_name}** — **{target.display_name}** has **graduated** "
             f"from Where I am Led! Please arrange their prize: "
             f"**{prizes.get(TOTAL_WEEKS, 'a prize')}**."
         )
@@ -270,7 +270,7 @@ async def _post_achievement(
         embed = _milestone_embed(target, week, role_name, prizes)
         prize = prizes.get(week, "a prize")
         staff_msg = (
-            f"🎁 {completer.mention} — {target.mention} has reached the "
+            f"🎁 **{completer.display_name}** — **{target.display_name}** has reached the "
             f"**week {week} milestone** of Where I am Led! "
             f"Please arrange their prize: **{prize}**."
         )
@@ -386,7 +386,7 @@ async def _do_signup_async(
         user=user.username,
     )
     await gc.log(
-        f"📝 {user.mention} just signed up for **Where I am Led**! *happy tail wag* 🐉"
+        f"📝 **{user.display_name}** just signed up for **Where I am Led**! *happy tail wag* 🐉"
     )
 
 
@@ -857,10 +857,14 @@ async def _notify_sub_of_owner_decision(  # noqa: PLR0913
         if approved
         else f"🐉 <@{owner_user_id}> has declined your owner request. That's okay! 🐾"
     )
+    owner_member = bot.cache.get_member(hikari.Snowflake(guild_id), owner_user_id)
+    owner_name = owner_member.display_name if owner_member else str(owner_user_id)
+    sub_member = bot.cache.get_member(hikari.Snowflake(guild_id), sub_user_id)
+    sub_name = sub_member.display_name if sub_member else str(sub_user_id)
     log_text = (
-        f"🤝 <@{owner_user_id}> accepted ownership of <@{sub_user_id}> — so sweet! 💜"
+        f"🤝 **{owner_name}** accepted ownership of **{sub_name}** — so sweet! 💜"
         if approved
-        else f"😢 <@{owner_user_id}> declined ownership of <@{sub_user_id}> 🐾"
+        else f"😢 **{owner_name}** declined ownership of **{sub_name}** 🐾"
     )
     try:
         sub_user = await bot.rest.fetch_user(hikari.Snowflake(sub_user_id))
@@ -1263,7 +1267,7 @@ class SubDayComplete(
         if week not in milestone_roles:
             if is_backfill:
                 staff_msg = (
-                    f"⏩ {ctx.member.mention} backfilled {target.mention} "
+                    f"⏩ **{ctx.member.display_name}** backfilled **{target.display_name}** "
                     f"to **Week {week}** (complete)"
                     + (
                         f", advanced to Week {week + 1} (prompt already sent)"
@@ -1274,13 +1278,13 @@ class SubDayComplete(
                 )
             elif sent_next:
                 staff_msg = (
-                    f"✅ {ctx.member.mention} marked {target.mention} "
+                    f"✅ **{ctx.member.display_name}** marked **{target.display_name}** "
                     f"complete for **Week {week}**, "
                     f"and advanced to Week {week + 1} (prompt already sent)."
                 )
             else:
                 staff_msg = (
-                    f"✅ {ctx.member.mention} marked {target.mention} "
+                    f"✅ **{ctx.member.display_name}** marked **{target.display_name}** "
                     f"complete for **Week {week}**."
                 )
             await gc.log(staff_msg)
@@ -1438,7 +1442,7 @@ class SubDayRemove(
             removed_by=ctx.member.display_name,
         )
         await gc.log(
-            f"🗑️ {ctx.member.mention} removed {target.mention} from **Where I am Led** 🐾",
+            f"🗑️ **{ctx.member.display_name}** removed **{target.display_name}** from **Where I am Led** 🐾",
         )
 
 

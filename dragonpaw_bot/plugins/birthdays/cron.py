@@ -62,7 +62,7 @@ async def announce_birthday(
                 log.warning("Failed to assign birthday role", error=str(exc))
                 reason = await check_role_manageable(gc.bot, gc.guild_id, role)
                 await gc.log(
-                    f"⚠️ I can't assign the **{cfg.birthday_role}** role to {member.mention}. "
+                    f"⚠️ I can't assign the **{cfg.birthday_role}** role to **{member.display_name}**. "
                     + (reason or "Please check my permissions.")
                 )
             except hikari.HTTPError as exc:
@@ -70,7 +70,7 @@ async def announce_birthday(
         else:
             log.warning("Birthday role not found", role=cfg.birthday_role)
 
-    await gc.log(f"🎂 Happy Birthday to {member.mention}!")
+    await gc.log(f"🎂 Happy Birthday to **{member.display_name}**!")
 
 
 async def cleanup_birthday_role(

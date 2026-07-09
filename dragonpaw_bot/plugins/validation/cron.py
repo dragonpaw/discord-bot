@@ -65,9 +65,11 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                     # log and a redundant channel close. kick_member logs the kick.
                     st.members = [m for m in st.members if m.user_id != member.user_id]
                     validation_state.save(st)
+                    kicked = bot.cache.get_member(guild.id, member.user_id)
                     await gc.kick_member(
                         member.user_id,
                         reason=f"Did not complete validation within {MAX_VALIDATION_DAYS} days",
+                        display_name=kicked.display_name if kicked else None,
                     )
                     if member.channel_id:
                         await _close_validate_channel(

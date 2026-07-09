@@ -385,8 +385,13 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         old_value=display_old,
     )
     gc = GuildContext.from_interaction(interaction)
+    actor = (
+        interaction.member.display_name
+        if interaction.member
+        else interaction.user.display_name
+    )
     await gc.log(
-        f"⚙️ {interaction.user.mention} updated birthday settings — "
+        f"⚙️ **{actor}** updated birthday settings — "
         f"`{field}` changed from `{display_old}` to `{display_new}`! 🎂",
     )
 

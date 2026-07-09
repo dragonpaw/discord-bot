@@ -85,7 +85,8 @@ class TicketsSet(
             f"*happy tail wag* 🐉 Ticket settings updated — {summary}!{warning}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        await gc.log(f"⚙️ {ctx.user.mention} updated ticket settings — {summary} 🐾")
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        await gc.log(f"⚙️ **{actor}** updated ticket settings — {summary} 🐾")
 
 
 class TicketsStatus(
@@ -151,4 +152,5 @@ class TicketsClear(
             f"Note: {len(st.open_tickets)} open ticket(s) are unaffected 🐉",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        await gc.log(f"⚙️ {ctx.user.mention} cleared ticket configuration 🐾")
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        await gc.log(f"⚙️ **{actor}** cleared ticket configuration 🐾")

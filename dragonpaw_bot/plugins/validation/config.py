@@ -179,7 +179,8 @@ class ValidationSetup(
             f"*happy tail wag* 🐉 Validation settings updated — {summary}!{warning_text}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        await gc.log(f"⚙️ {ctx.user.mention} updated validation settings — {summary} 🐾")
+        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        await gc.log(f"⚙️ **{actor}** updated validation settings — {summary} 🐾")
 
 
 class ValidationStatus(

@@ -157,7 +157,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
             missing=missing,
         )
         await gc.log(
-            f"🤯 *snorts smoke* I tried to open a ticket for {interaction.user.mention} "
+            f"🤯 *snorts smoke* I tried to open a ticket for **{interaction.member.display_name}** "
             f"but I'm missing {missing_str} in {scope}! Please check my permissions there. 🐉"
         )
         await interaction.edit_initial_response(
@@ -217,8 +217,8 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
 
     gc.logger.info("Opened ticket", channel=channel_name, topic=topic)
     await gc.log(
-        f"🎫 *happy flap* I just opened a cozy little ticket for {interaction.user.mention} "
-        f"in <#{channel.id}>! "
+        f"🎫 *happy flap* I just opened a cozy little ticket for "
+        f"**{interaction.member.display_name}**! "
         f'They need help with: "{topic}" 🐾'
     )
 
@@ -263,17 +263,26 @@ async def handle_ticket_close_confirm(interaction: hikari.ComponentInteraction) 
     st = tickets_state.load(int(interaction.guild_id))
 
     ticket = next((t for t in st.open_tickets if t.channel_id == channel_id), None)
-    opener_mention = f"<@{ticket.user_id}>" if ticket else "someone"
+    if ticket:
+        opener = gc.bot.cache.get_member(interaction.guild_id, ticket.user_id)
+        opener_name = opener.display_name if opener else str(ticket.user_id)
+    else:
+        opener_name = "someone"
 
     st.open_tickets = [t for t in st.open_tickets if t.channel_id != channel_id]
     tickets_state.save(st)
 
     await gc.delete_channel(channel_id)
 
+    closer = (
+        interaction.member.display_name
+        if interaction.member
+        else interaction.user.display_name
+    )
     gc.logger.info("Closed ticket", channel_id=channel_id)
     await gc.log(
-        f"🔒 *nom nom* Ticket for {opener_mention} got all wrapped up and closed by "
-        f"{interaction.user.mention} — all tidied away! 🐾"
+        f"🔒 *nom nom* Ticket for **{opener_name}** got all wrapped up and closed by "
+        f"**{closer}** — all tidied away! 🐾"
     )
 
 

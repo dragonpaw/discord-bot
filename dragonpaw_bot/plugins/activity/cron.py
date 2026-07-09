@@ -215,7 +215,7 @@ async def _sync_lurker_role(  # noqa: PLR0912
         if should_be_lurker:
             if not await _set_lurker(gc, member, lurker_role_id, add=True):
                 continue
-            added_by_reason.setdefault(reason, []).append(member.mention)
+            added_by_reason.setdefault(reason, []).append(member.display_name)
             logger.info(
                 "Lurker role added",
                 guild=gc.name,
@@ -226,7 +226,7 @@ async def _sync_lurker_role(  # noqa: PLR0912
         else:
             if not await _set_lurker(gc, member, lurker_role_id, add=False):
                 continue
-            removed_by_reason.setdefault(reason, []).append(member.mention)
+            removed_by_reason.setdefault(reason, []).append(member.display_name)
             logger.info(
                 "Lurker role removed",
                 guild=gc.name,
@@ -240,9 +240,13 @@ async def _sync_lurker_role(  # noqa: PLR0912
 
     lines = ["💤 Lurker role shuffle —"]
     for r, names in added_by_reason.items():
-        lines.append(f"• Added ({r}) **{len(names)}**: {', '.join(names)}")
+        lines.append(
+            f"• Added ({r}) **{len(names)}**: {', '.join(f'**{n}**' for n in names)}"
+        )
     for r, names in removed_by_reason.items():
-        lines.append(f"• Removed ({r}) **{len(names)}**: {', '.join(names)}")
+        lines.append(
+            f"• Removed ({r}) **{len(names)}**: {', '.join(f'**{n}**' for n in names)}"
+        )
     lines.append("🐉")
     await gc.log("\n".join(lines))
 
@@ -271,7 +275,7 @@ async def _set_lurker(
             f"Cannot {action} lurker role", guild=gc.name, user=member.display_name
         )
         await gc.log(
-            f"⚠️ I can't {action} the lurker role {preposition} {member.mention} — please check my role hierarchy! 🐉"
+            f"⚠️ I can't {action} the lurker role {preposition} **{member.display_name}** — please check my role hierarchy! 🐉"
         )
         return False
     except hikari.HTTPError:

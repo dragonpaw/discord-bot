@@ -372,8 +372,13 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     )
 
     gc = GuildContext.from_interaction(interaction)
+    actor = (
+        interaction.member.display_name
+        if interaction.member
+        else interaction.user.display_name
+    )
     await gc.log(
-        f"⚙️ {interaction.user.mention} tweaked SubDay settings — "
+        f"⚙️ **{actor}** tweaked SubDay settings — "
         f"`{field}` changed from `{display_old}` to `{display_new}`! 🐉",
     )
 
