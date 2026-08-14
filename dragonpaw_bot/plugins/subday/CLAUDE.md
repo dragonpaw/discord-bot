@@ -92,6 +92,15 @@ Achievement embeds and `/subday status` include a Pillow-generated star chart PN
 - Colors and rotations are seeded by username for consistency across renders
 - Fonts in `fonts/` directory: DaxCondensed (Bold/Regular/Medium) + Caveat-Bold
 
+### Button Channel Card
+
+Declared as `BUTTON_ENTRY` in `__init__.py` (violet), with two buttons:
+
+- **📖 Join Where I am Led** — reuses the existing `subday_signup` custom_id, so it runs the same `handle_signup_interaction` as the Sign Up button on `/subday about`. No extra handler.
+- **❓ What is this?** — `subday_about` → `handle_about_interaction`, which replies ephemerally with the same three embeds `/subday about` posts. Both call `build_about_embeds(cfg)`.
+
+Shown when `state/subday_{guild_id}.yaml` exists (`state.is_configured`), i.e. an admin has configured the program or a member has signed up.
+
 ### Owner Feature
 
 Submissives can register an owner via `/subday owner @user`. The owner receives copies of the sub's weekly prompts each Sunday, gets a Friday reminder if their sub hasn't finished the current week, and can see their subs' progress via `/subday status`. When an owner accepts, they get an onboarding message explaining these features and who to contact for week completions. **If owner-facing DMs or interactions change, update the acceptance message in `_handle_owner_approve` to match.**
@@ -126,7 +135,7 @@ Submissives can register an owner via `/subday owner @user`. The owner receives 
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Extension entry point (lightbulb Loader), interaction handler dispatch table |
+| `__init__.py` | Extension entry point (lightbulb Loader), interaction handler dispatch table, `BUTTON_ENTRY` |
 | `cron.py` | Sunday prompt cron task, Friday reminder cron task, and their helpers |
 | `chart.py` | Star chart image generation (Pillow) |
 | `commands.py` | Non-config slash commands, achievement embeds, milestone logic, component interaction handlers |

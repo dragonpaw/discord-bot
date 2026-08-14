@@ -83,6 +83,12 @@ All require guild owner.
 - **`score [user]`** — Show activity score for a member (defaults to self). Any member can check their own score without restriction. Checking another member's score requires the viewer role or admin/manage-guild permission. Responds ephemerally with score, status (🐉 Active / 💤 Lurking / 🛡️ Immune), bucket count, role info, and a stacked bar chart image of daily activity over the past 60 days. Guild owner always shows 🛡️ Immune (Guild Owner).
 - **`report`** — Requires viewer permission. Show all non-bot members sorted alphabetically by display name. Each member gets an emoji badge: 🥇🥈🥉 for top 3 by score, 🐉 active, 💤 lurker, 🛡️ immune. Immune members (ignored role or guild owner) show their score. Members with no activity data appear with score 0.00 (lurker).
 
+### Button Channel Card
+
+Declared as `BUTTON_ENTRY` in `__init__.py` (cyan, 📊 "My Activity Score", custom_id `activity_score` → `handle_score_interaction`). Shown only when `state/activity_config_{guild_id}.yaml` exists (`state.is_configured`), i.e. an admin has configured the tracker.
+
+The button always shows the clicker their own score, so it skips the viewer-role check that `/activity score`'s `user` option needs. Both build the embed with `build_score_embed(bot, guild_id, member)`. The handler defers first — chart rendering would otherwise blow Discord's 3-second deadline.
+
 ### Cron Tasks
 
 - **On shutdown (`StoppingEvent`):** `on_stopping` — flushes all remaining dirty in-memory user state to disk before the bot exits.
@@ -111,7 +117,7 @@ Dirty tracking is per-user: only modified user files are written during the hour
 
 ### File Structure
 
-- **`__init__.py`** — Extension entry point, `/activity` command group
+- **`__init__.py`** — `INTERACTION_HANDLERS` and `BUTTON_ENTRY` exports
 - **`listeners.py`** — Event listeners for message, reaction, and voice tracking; module-level `_vc_sessions` state
 - **`models.py`** — Pydantic models, `ContributionKind` enum, `calculate_score()`, `bucket_is_negligible()`, `best_role_config()`, `has_ignored_role()`
 - **`state.py`** — Per-user YAML persistence: `load_config`, `save_config`, `load_user`, `save_user`, `delete_user`, `list_user_ids`, `mark_user_dirty`, `flush_dirty`

@@ -445,6 +445,119 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
 # ---------------------------------------------------------------------------- #
 
 
+def build_about_embeds(cfg: SubDayGuildConfig) -> list[hikari.Embed]:
+    """Build the three explainer embeds for the program.
+
+    Shared by `/subday about` and the button channel's "What is this?" button.
+    """
+    enroll_label = ", ".join(cfg.enroll_role) if cfg.enroll_role else "server owner"
+
+    # -- Embed 1: Introduction (violet) --
+    intro = hikari.Embed(
+        title="Where I am Led — Weekly Journaling",
+        color=SOLARIZED_VIOLET,
+    )
+    intro.add_field(
+        name="📖 What's this all about?",
+        value=(
+            f"For folks with the **{enroll_label}** role "
+            "(with their Owner's permission, if Owned), we invite you to "
+            'participate in our weekly "Subday" (Sunday) journaling.\n\n'
+            "It's based on *Where I am Led* by Christina Parker — a set of "
+            "weekly prompts exploring the psychology and mindset of a service "
+            "submissive. We strongly encourage all subs to give it a try."
+        ),
+        inline=False,
+    )
+    intro.add_field(
+        name="✍️ What does it involve?",
+        value=(
+            "Each week has four short prompts. Write as little or as much "
+            "as you like exploring your feelings on D/s and that week's "
+            "topics. We'll reach out to each new sub as you join and help "
+            "get you started."
+        ),
+        inline=False,
+    )
+    intro.add_field(
+        name="🙈 Do I have to write?",
+        value=(
+            "Nope! Paper, a notes app, a text file, DM your answers to "
+            "your Owner — anything goes. Just jot it on a napkin if you "
+            "want.\n\n"
+            "_(If we could, we'd slap every dom who ever assigned lines "
+            "as a punishment and traumatized submissives to think of "
+            "writing as punishment. —Ash)_"
+        ),
+        inline=False,
+    )
+
+    # -- Embed 2: Details (cyan) --
+    details = hikari.Embed(
+        title="The Details",
+        color=SOLARIZED_CYAN,
+    )
+    details.add_field(
+        name="🔒 Will anyone see my answers?",
+        value=(
+            "Your Owner will, if you have one. No one else does. Your Owner "
+            "will check in with staff so they can track your progress for "
+            "rewards. If you're not Owned, check in with a member of staff "
+            "yourself."
+        ),
+        inline=False,
+    )
+    details.add_field(
+        name="⏰ I hate deadlines!",
+        value=(
+            "You're in luck — there aren't any. Each week takes about "
+            "15–30 minutes, but take as long as you need. You just can't "
+            "get the next week until you've completed the current one."
+        ),
+        inline=False,
+    )
+
+    # -- Embed 3: Rewards & signup (yellow) --
+    prizes = cfg.milestone_prizes()
+    roles = cfg.milestone_roles()
+    reward_lines: list[str] = []
+    for week in MILESTONE_WEEKS:
+        line = f"**{week} weeks:** {prizes[week]}"
+        role = roles.get(week)
+        if role:
+            line += f" + the **{role}** role"
+        reward_lines.append(line)
+
+    signup = hikari.Embed(
+        title="Rewards & Getting Started",
+        color=SOLARIZED_YELLOW,
+    )
+    signup.add_field(
+        name="🎁 Rewards",
+        value="\n".join(reward_lines),
+        inline=False,
+    )
+    signup.add_field(
+        name="🚀 How do I start?",
+        value=(
+            "Use the `/subday signup` command, or press the "
+            "**Sign Up** button below! You'll get your first week's "
+            "prompt sent to your DMs automatically."
+        ),
+        inline=False,
+    )
+
+    return [intro, details, signup]
+
+
+def _signup_row(bot: DragonpawBot) -> hikari.api.MessageActionRowBuilder:
+    row = bot.rest.build_message_action_row()
+    row.add_interactive_button(
+        hikari.ButtonStyle.SUCCESS, SUBDAY_SIGNUP_ID, label="Sign Up"
+    )
+    return row
+
+
 class SubDayAbout(
     lightbulb.SlashCommand,
     name="about",
@@ -456,114 +569,29 @@ class SubDayAbout(
         guild_state = state.load(int(ctx.guild_id))
         log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
         log.info("Viewed SubDay about")
-        cfg = guild_state.config
-        enroll_label = ", ".join(cfg.enroll_role) if cfg.enroll_role else "server owner"
-
-        # -- Embed 1: Introduction (violet) --
-        intro = hikari.Embed(
-            title="Where I am Led — Weekly Journaling",
-            color=SOLARIZED_VIOLET,
-        )
-        intro.add_field(
-            name="📖 What's this all about?",
-            value=(
-                f"For folks with the **{enroll_label}** role "
-                "(with their Owner's permission, if Owned), we invite you to "
-                'participate in our weekly "Subday" (Sunday) journaling.\n\n'
-                "It's based on *Where I am Led* by Christina Parker — a set of "
-                "weekly prompts exploring the psychology and mindset of a service "
-                "submissive. We strongly encourage all subs to give it a try."
-            ),
-            inline=False,
-        )
-        intro.add_field(
-            name="✍️ What does it involve?",
-            value=(
-                "Each week has four short prompts. Write as little or as much "
-                "as you like exploring your feelings on D/s and that week's "
-                "topics. We'll reach out to each new sub as you join and help "
-                "get you started."
-            ),
-            inline=False,
-        )
-        intro.add_field(
-            name="🙈 Do I have to write?",
-            value=(
-                "Nope! Paper, a notes app, a text file, DM your answers to "
-                "your Owner — anything goes. Just jot it on a napkin if you "
-                "want.\n\n"
-                "_(If we could, we'd slap every dom who ever assigned lines "
-                "as a punishment and traumatized submissives to think of "
-                "writing as punishment. —Ash)_"
-            ),
-            inline=False,
-        )
-
-        # -- Embed 2: Details (cyan) --
-        details = hikari.Embed(
-            title="The Details",
-            color=SOLARIZED_CYAN,
-        )
-        details.add_field(
-            name="🔒 Will anyone see my answers?",
-            value=(
-                "Your Owner will, if you have one. No one else does. Your Owner "
-                "will check in with staff so they can track your progress for "
-                "rewards. If you're not Owned, check in with a member of staff "
-                "yourself."
-            ),
-            inline=False,
-        )
-        details.add_field(
-            name="⏰ I hate deadlines!",
-            value=(
-                "You're in luck — there aren't any. Each week takes about "
-                "15–30 minutes, but take as long as you need. You just can't "
-                "get the next week until you've completed the current one."
-            ),
-            inline=False,
-        )
-
-        # -- Embed 3: Rewards & signup (yellow) --
-        prizes = cfg.milestone_prizes()
-        roles = cfg.milestone_roles()
-        reward_lines: list[str] = []
-        for week in MILESTONE_WEEKS:
-            line = f"**{week} weeks:** {prizes[week]}"
-            role = roles.get(week)
-            if role:
-                line += f" + the **{role}** role"
-            reward_lines.append(line)
-
-        signup = hikari.Embed(
-            title="Rewards & Getting Started",
-            color=SOLARIZED_YELLOW,
-        )
-        signup.add_field(
-            name="🎁 Rewards",
-            value="\n".join(reward_lines),
-            inline=False,
-        )
-        signup.add_field(
-            name="🚀 How do I start?",
-            value=(
-                "Use the `/subday signup` command, or press the "
-                "**Sign Up** button below! You'll get your first week's "
-                "prompt sent to your DMs automatically."
-            ),
-            inline=False,
-        )
 
         gc = GuildContext.from_ctx(ctx)
-        row = gc.bot.rest.build_message_action_row()
-        row.add_interactive_button(
-            hikari.ButtonStyle.SUCCESS, SUBDAY_SIGNUP_ID, label="Sign Up"
-        )
         await ctx.respond(
-            embeds=[intro, details, signup],
-            component=row,
+            embeds=build_about_embeds(guild_state.config),
+            component=_signup_row(gc.bot),
             flags=hikari.MessageFlag.EPHEMERAL,
         )
+
+
+async def handle_about_interaction(interaction: hikari.ComponentInteraction) -> None:
+    """Show the program explainer from the button channel card."""
+    if not interaction.guild_id:
+        return
+
+    guild_state = state.load(int(interaction.guild_id))
+    logger.info("Viewed SubDay about")
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        embeds=build_about_embeds(guild_state.config),
+        component=_signup_row(bot),
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
 
 
 def _owned_sub_status_embed(

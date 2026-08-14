@@ -6,6 +6,12 @@ Lets users open private support ticket channels via `/adultier-adult`. Each tick
 
 - **`/adultier-adult`** — Open a new ticket. Shows a modal to enter a topic. One open ticket per user at a time. Runs a pre-flight permission check before showing the modal.
 
+### Button Channel Card
+
+Declared as `BUTTON_ENTRY` in `__init__.py` (orange, 🆘 "Ask an Adultier Adult", custom_id `ticket_open` → `handle_ticket_open_button`). Shown only when `staff_role_id` is set — without a staff role there's nobody to ping.
+
+The button and the slash command share `_ticket_block_reason()` (required-role gate + duplicate-ticket guard) and `_topic_modal_rows()`, then both show the same topic modal. Both read only the cached member payload: a modal can't follow a deferred response, so both are bound by Discord's 3-second deadline.
+
 ### Configuration
 
 Managed via `/config tickets` (guild owner only):
@@ -27,7 +33,7 @@ State is persisted to `state/tickets_{guild_id}.yaml`.
 
 ### File Structure
 
-- **`__init__.py`** — `INTERACTION_HANDLERS` and `MODAL_HANDLERS` exports (no loader here — `load_extensions_from_package` doesn't import `__init__.py`)
+- **`__init__.py`** — `INTERACTION_HANDLERS`, `MODAL_HANDLERS`, and `BUTTON_ENTRY` exports (no loader here — `load_extensions_from_package` doesn't import `__init__.py`)
 - **`commands.py`** — `lightbulb.Loader()`, `/adultier-adult` command (`AdultierAdultCommand`), modal handler, all button/select handlers
 - **`config.py`** — `/config tickets` subcommands
 - **`models.py`** — `OpenTicket`, `TicketGuildState` pydantic models

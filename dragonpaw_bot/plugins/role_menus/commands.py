@@ -118,14 +118,7 @@ async def configure_role_menus(
     emoji_map = await utils.guild_emojis(gc)
 
     log.debug("Trying to delete old role menus...")
-    cc = ChannelContext.from_entry(
-        gc,
-        type(
-            "_Entry",
-            (),
-            {"channel_id": int(channel.id), "channel_name": channel.name or ""},
-        )(),
-    )
+    cc = ChannelContext.from_channel(gc, int(channel.id), channel.name or "")
     await cc.delete_my_messages()
 
     guild_state = RoleMenuGuildState(

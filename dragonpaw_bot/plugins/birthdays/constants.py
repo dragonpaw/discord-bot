@@ -1,6 +1,7 @@
 # Component interaction custom IDs
 BIRTHDAY_CONFIG_PREFIX = "birthday_cfg:"
 BIRTHDAY_PREFIX = "birthday:"
+BIRTHDAY_START_ID = f"{BIRTHDAY_PREFIX}start"
 
 # Region → list of (IANA timezone, display label)
 TIMEZONE_REGIONS: dict[str, list[tuple[str, str]]] = {

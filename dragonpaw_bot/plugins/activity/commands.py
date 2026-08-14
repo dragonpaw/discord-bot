@@ -157,6 +157,66 @@ def _truncate_description(lines: list[str]) -> str:
     return "\n".join(kept) + _TRUNCATION_NOTE
 
 
+async def build_score_embed(
+    bot: DragonpawBot, guild_id: hikari.Snowflake, member: hikari.Member
+) -> hikari.Embed:
+    """Build a member's activity score embed, chart included.
+
+    Shared by `/activity score` and the button channel's score button.
+    """
+    meta = activity_state.load_config(int(guild_id))
+    role_ids = [int(r) for r in member.role_ids]
+    role_cfg = best_role_config(role_ids, meta.config.role_configs)
+
+    ua = activity_state.load_user(meta.guild_id, int(member.id))
+    buckets = ua.buckets if ua is not None else []
+    score = calculate_score(buckets, role_cfg, now=time.time())
+
+    guild = bot.cache.get_guild(guild_id) or await bot.rest.fetch_guild(guild_id)
+    owner_id = int(guild.owner_id)
+
+    immune_role = has_ignored_role(role_ids, meta.config.role_configs)
+    if immune_role is None and int(member.id) == owner_id:
+        immune_role = "Guild Owner"
+    if immune_role is not None:
+        status_emoji = "🛡️"
+        status_line = f"🛡️ Immune ({immune_role})"
+    elif score >= ACTIVITY_FLOOR:
+        status_emoji = "🐉"
+        status_line = "🐉 Active"
+    else:
+        status_emoji = "💤"
+        status_line = "💤 Lurking"
+
+    role_note = f" (role: **{role_cfg.role_name}**)" if role_cfg else ""
+
+    try:
+        chart = render_activity_chart(member.display_name, buckets, score, status_emoji)
+    except Exception:
+        logger.exception("Failed to render activity chart", target=member.display_name)
+        chart = None
+
+    embed = hikari.Embed(
+        title=f"📊 Activity Score — {member.display_name}",
+        description=(
+            f"**Score:** {score:.2f}\n"
+            f"**Status:** {status_line}\n"
+            f"**Contributions:** {len(buckets)} hourly bucket(s){role_note}"
+        ),
+        color=SOLARIZED_CYAN,
+    )
+    if chart is not None:
+        embed.set_image(chart)
+
+    logger.info(
+        "Activity score checked",
+        guild=meta.guild_name,
+        target=member.display_name,
+        score=score,
+    )
+    return embed
+
+
 class ActivityScore(
     lightbulb.SlashCommand,
     name="score",
@@ -193,67 +253,25 @@ class ActivityScore(
             )
             return
 
-        meta = activity_state.load_config(int(ctx.guild_id))
-        role_ids = [int(r) for r in member.role_ids]
-        role_cfg = best_role_config(role_ids, meta.config.role_configs)
+        embed = await build_score_embed(bot, ctx.guild_id, member)
+        await ctx.edit_response(response_id, content="", embed=embed)
 
-        ua = activity_state.load_user(meta.guild_id, int(member.id))
-        buckets = ua.buckets if ua is not None else []
-        score = calculate_score(buckets, role_cfg, now=time.time())
 
-        guild = bot.cache.get_guild(ctx.guild_id) or await bot.rest.fetch_guild(
-            ctx.guild_id
-        )
-        owner_id = int(guild.owner_id)
+async def handle_score_interaction(interaction: hikari.ComponentInteraction) -> None:
+    """Show the clicker their own activity score, from the button channel card."""
+    if not interaction.guild_id or not interaction.member:
+        return
 
-        immune_role = has_ignored_role(role_ids, meta.config.role_configs)
-        if immune_role is None and int(member.id) == owner_id:
-            immune_role = "Guild Owner"
-        if immune_role is not None:
-            status_emoji = "🛡️"
-            status_line = f"🛡️ Immune ({immune_role})"
-        elif score >= ACTIVITY_FLOOR:
-            status_emoji = "🐉"
-            status_line = "🐉 Active"
-        else:
-            status_emoji = "💤"
-            status_line = "💤 Lurking"
+    # Chart rendering is slow enough to blow the 3-second initial-response
+    # deadline, so defer before doing any of it.
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.DEFERRED_MESSAGE_CREATE,
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
 
-        role_note = f" (role: **{role_cfg.role_name}**)" if role_cfg else ""
-
-        try:
-            chart = render_activity_chart(
-                member.display_name, buckets, score, status_emoji
-            )
-        except Exception:
-            logger.exception(
-                "Failed to render activity chart", target=member.display_name
-            )
-            chart = None
-
-        embed = hikari.Embed(
-            title=f"📊 Activity Score — {member.display_name}",
-            description=(
-                f"**Score:** {score:.2f}\n"
-                f"**Status:** {status_line}\n"
-                f"**Contributions:** {len(buckets)} hourly bucket(s){role_note}"
-            ),
-            color=SOLARIZED_CYAN,
-        )
-        if chart is not None:
-            embed.set_image(chart)
-        await ctx.edit_response(
-            response_id,
-            content="",
-            embed=embed,
-        )
-        logger.info(
-            "Activity score checked",
-            guild=meta.guild_name,
-            user=ctx.member.display_name,
-            target=member.display_name,
-            score=score,
-        )
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    embed = await build_score_embed(bot, interaction.guild_id, interaction.member)
+    await interaction.edit_initial_response(embed=embed)
 
 
 class ActivityReport(

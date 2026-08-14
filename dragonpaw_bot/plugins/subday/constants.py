@@ -6,6 +6,7 @@ WEEKS_DIR = Path(__file__).parent / "weeks"
 
 # Component interaction custom IDs
 SUBDAY_SIGNUP_ID = "subday_signup"
+SUBDAY_ABOUT_ID = "subday_about"
 SUBDAY_CONFIG_PREFIX = "subday_cfg:"
 SUBDAY_CFG_ROLE_PREFIX = "subday_cfg_role:"
 SUBDAY_OWNER_REQUEST_PREFIX = "subday_owner_request:"

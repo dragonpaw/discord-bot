@@ -59,9 +59,11 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - **`plugins/media_channels/`** — Enforces media-only policy in configured channels; hourly cleanup cron. See `plugins/media_channels/CLAUDE.md` for details.
 - **`plugins/channel_cleanup/`** — Auto-deletes old messages from configured channels via hourly cron. See `plugins/channel_cleanup/CLAUDE.md` for details.
 
-**`/config` command group** — Defined in `bot.py` (main loader) and extended by each plugin's `config.py`. Each plugin that needs admin configuration exposes a `register(subgroup)` function in `plugin_dir/config.py`; `bot.py` imports these and wires them into the `/config` group. Subgroups: `/config channels` (log + general channel, defined in `bot.py`), `/config media` (media channels), `/config cleanup` (channel cleanup), `/config intros` (introductions channel), `/config subday` (SubDay journal), `/config birthday` (birthday tracking), `/config roles` (role menus), `/config tickets` (support tickets), `/config validation` (member validation), `/config activity` (activity tracker).
+**`/config` command group** — Defined in `bot.py` (main loader) and extended by each plugin's `config.py`. Each plugin that needs admin configuration exposes a `register(subgroup)` function in `plugin_dir/config.py`; `bot.py` imports these and wires them into the `/config` group. Subgroups: `/config channels` (log + general channel, defined in `bot.py`), `/config media` (media channels), `/config cleanup` (channel cleanup), `/config intros` (introductions channel), `/config subday` (SubDay journal), `/config birthday` (birthday tracking), `/config roles` (role menus), `/config tickets` (support tickets), `/config validation` (member validation), `/config activity` (activity tracker), `/config buttons` (button channel, defined in `buttons.py`).
 
 **`duration.py`** — Shared `parse_duration_minutes()` and `format_duration()` helpers used by plugin config commands.
+
+**`buttons.py`** — The button channel. Collects a `BUTTON_ENTRY` from each plugin that declares one, renders them as embed-and-button cards into a configured channel, and owns `/config buttons`. See **Button channel** below.
 
 **`context.py`** — `GuildContext` and `ChannelContext` dataclasses that bundle bot + guild info for convenient access throughout plugins. `GuildContext` provides factory methods (`from_ctx`, `from_interaction`, `from_guild`), permission checks, and `gc.log()` for sending notifications to the guild's configured log channel. `ChannelContext` extends it with channel-level operations like `purge_old_messages()` and `delete_my_messages()`. Also contains standalone permission helpers (`member_has_role`, `has_permission`, `has_any_role_permission`), `check_channel_perms` (accepts optional `required` permission set — defaults to `CHANNEL_POST_PERMS`; use `CHANNEL_CLEANUP_PERMS` for cleanup channels), and `check_role_manageable` (checks bot can manage a role via permissions + hierarchy).
 
@@ -74,6 +76,14 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 **Config flow:** Server admins use the `/config roles setup` slash command with a URL to a role-menu TOML file. The bot fetches and parses it directly into a `RolesConfig`, sets up role menus, then persists `GuildState` to disk as YAML. The `/config bot logging` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/config roles setup` reloads.
 
 **Guild logging:** `gc.log()` (on `GuildContext`) sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji. Use first-person ("I/me/my") in bot-facing staff messages (dragon persona).
+
+**Button channel:** Members can't be expected to remember slash commands, so one channel hosts a card per plugin — an embed with a title, description, fixed Solarized colour, and one or two buttons for that plugin's main public action.
+
+To offer one, a plugin declares a `BUTTON_ENTRY` (a `structs.ButtonEntry`) in its package `__init__.py` and adds it to `_ENTRIES` in `buttons.py`. The entry names the `custom_id`s its buttons use; the plugin must also register handlers for them in its `INTERACTION_HANDLERS`, since clicks route through `bot.py`'s existing prefix dispatcher. `buttons.py` renders — it never knows what a button does. `tests/test_buttons.py` asserts every declared `custom_id` matches a route, which is the check that catches a forgotten handler registration.
+
+`is_available(guild_id)` decides whether a card shows: an unconfigured plugin's card is simply omitted, so members never press a button that can't work. `/config buttons status` lists which cards are showing and which are hidden.
+
+Rendering is wipe-and-repost (same as role menus), so only `GuildState.button_channel_id` is persisted — no message IDs. Colours are fixed per plugin rather than spread with `rainbow()`, so a card keeps its colour as others come and go.
 
 **Permission validation:** Config commands that set up channels or roles should validate permissions at setup time and warn the admin (but still save the config). Runtime permission errors in cron tasks should post actionable fix instructions to the guild log channel via `gc.log()`. Use `check_channel_perms` with the appropriate permission set and `check_role_manageable` for role hierarchy checks.
 
@@ -105,6 +115,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - Tests use `pytest-asyncio` with `asyncio_mode = "auto"` (no `@pytest.mark.asyncio` needed)
 - Ruff lint rules: `I`, `PL`, `UP`, `SIM`, `PERF`, `RUF`, `TRY`, `DTZ`, `TC` enabled; `RUF001`, `RUF002`, `TRY003` ignored
 - New features should be implemented as extensions under `dragonpaw_bot/plugins/`
+- A plugin offering a public action worth surfacing should declare a `BUTTON_ENTRY` (max 1–2 buttons); staff- or cron-driven plugins declare none
 - Plugins should include comprehensive logging at appropriate levels:
   - **Info**: user actions (signups, completions, config changes)
   - **Debug**: internal details (state loads, DM delivery, tick timing)

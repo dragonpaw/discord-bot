@@ -15,7 +15,7 @@ from dragonpaw_bot.context import (
     check_guild_perms,
 )
 from dragonpaw_bot.plugins.tickets import state as tickets_state
-from dragonpaw_bot.plugins.tickets.models import OpenTicket
+from dragonpaw_bot.plugins.tickets.models import OpenTicket, TicketGuildState
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -26,6 +26,8 @@ loader = lightbulb.Loader()
 
 TOPIC_MODAL_ID = "ticket_topic_modal"
 TOPIC_INPUT_ID = "ticket_topic_input"
+TOPIC_MODAL_TITLE = "*flaps wings* What's the snack? 🐉"
+TICKET_OPEN_ID = "ticket_open"
 
 _TICKET_CREATE_PERMS: dict[hikari.Permissions, str] = {
     hikari.Permissions.MANAGE_CHANNELS: "Manage Channels",
@@ -57,6 +59,44 @@ def _sanitize_channel_name(display_name: str) -> str:
     return f"help-{name}"[:100]
 
 
+def _ticket_block_reason(
+    st: TicketGuildState, member: hikari.Member, user_id: hikari.Snowflake
+) -> str | None:
+    """Why this member can't open a ticket right now, phrased for them. None means go ahead.
+
+    Reads only the cached member payload — no REST. Both callers must show a
+    modal as their initial response, and a modal can't follow a deferred
+    response, so they are bound by Discord's 3-second deadline.
+    """
+    if (
+        st.required_role_id
+        and hikari.Snowflake(st.required_role_id) not in member.role_ids
+    ):
+        return "*snorts smoke* Hmm, I don't think you're allowed to open a ticket just yet! 🐉"
+
+    existing = next((t for t in st.open_tickets if t.user_id == user_id), None)
+    if existing:
+        return (
+            f"*happy tail wag* You've already got a ticket open over in "
+            f"<#{existing.channel_id}>! Head over there~ 🐾"
+        )
+
+    return None
+
+
+def _topic_modal_rows() -> list[hikari.impl.ModalActionRowBuilder]:
+    topic_row = hikari.impl.ModalActionRowBuilder()
+    topic_row.add_text_input(
+        TOPIC_INPUT_ID,
+        "What do you need help with today?",
+        placeholder="Tell me what's going on and I'll chomp right on it~ 🐾",
+        required=True,
+        min_length=1,
+        max_length=200,
+    )
+    return [topic_row]
+
+
 @loader.command
 class AdultierAdultCommand(
     lightbulb.SlashCommand,
@@ -70,42 +110,42 @@ class AdultierAdultCommand(
 
         st = tickets_state.load(int(ctx.guild_id))
 
-        # Role gate — use the interaction's member payload (no REST). This
-        # command is in _AUTO_DEFER_EXCLUSIONS (see bot.py) so it can show
-        # a modal as its initial response; that means we must stay under
-        # Discord's 3-second deadline, which precludes any REST round-trips
-        # here.
-        if st.required_role_id and hikari.Snowflake(st.required_role_id) not in ctx.member.role_ids:
-            await ctx.respond(
-                "*snorts smoke* Hmm, I don't think you're allowed to open a ticket just yet! 🐉",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
+        # This command is in _AUTO_DEFER_EXCLUSIONS (see bot.py) so it can show
+        # a modal as its initial response.
+        reason = _ticket_block_reason(st, ctx.member, ctx.user.id)
+        if reason:
+            await ctx.respond(reason, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
-        # Duplicate ticket guard
-        existing = next((t for t in st.open_tickets if t.user_id == ctx.user.id), None)
-        if existing:
-            await ctx.respond(
-                f"*happy tail wag* You've already got a ticket open over in <#{existing.channel_id}>! Head over there~ 🐾",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            return
-
-        # Show modal
-        topic_row = hikari.impl.ModalActionRowBuilder()
-        topic_row.add_text_input(
-            TOPIC_INPUT_ID,
-            "What do you need help with today?",
-            placeholder="Tell me what's going on and I'll chomp right on it~ 🐾",
-            required=True,
-            min_length=1,
-            max_length=200,
-        )
         await ctx.respond_with_modal(
-            title="*flaps wings* What's the snack? 🐉",
+            title=TOPIC_MODAL_TITLE,
             custom_id=TOPIC_MODAL_ID,
-            components=[topic_row],
+            components=_topic_modal_rows(),
         )
+
+
+async def handle_ticket_open_button(interaction: hikari.ComponentInteraction) -> None:
+    """Open the ticket topic modal from the button channel card."""
+    if not interaction.guild_id or not interaction.member:
+        return
+
+    st = tickets_state.load(int(interaction.guild_id))
+
+    reason = _ticket_block_reason(st, interaction.member, interaction.user.id)
+    if reason:
+        logger.info("Ticket open button denied")
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content=reason,
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    await interaction.create_modal_response(
+        title=TOPIC_MODAL_TITLE,
+        custom_id=TOPIC_MODAL_ID,
+        components=_topic_modal_rows(),
+    )
 
 
 async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:

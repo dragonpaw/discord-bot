@@ -85,6 +85,12 @@ def _migrate(guild_id: int) -> ActivityGuildMeta:
     return meta
 
 
+def is_configured(guild_id: int) -> bool:
+    """True if an admin has configured the activity tracker for this guild.
+    Used to decide whether to show the button channel card."""
+    return _config_path(guild_id).exists() or _old_combined_path(guild_id).exists()
+
+
 def load_config(guild_id: int) -> ActivityGuildMeta:
     """Load guild config from cache or disk. Migrates old combined file if needed."""
     if guild_id in _config_cache:

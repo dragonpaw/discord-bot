@@ -327,7 +327,10 @@ def test_build_summary_both():
 
 
 def test_build_summary_no_changes():
-    assert _build_summary([], [], []) == "No changes this time! Your roles are just the way you left them 🐾"
+    assert (
+        _build_summary([], [], [])
+        == "No changes this time! Your roles are just the way you left them 🐾"
+    )
 
 
 def test_build_summary_with_failures():

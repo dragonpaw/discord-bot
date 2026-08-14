@@ -15,13 +15,14 @@ import uvloop
 import yaml
 
 import dragonpaw_bot.plugins as _plugins
-from dragonpaw_bot import structs
+from dragonpaw_bot import buttons, structs
 from dragonpaw_bot.context import (
     GuildContext,
     NotAuthorized,
     guild_owner_only,
 )
 from dragonpaw_bot.logging import configure_logging
+from dragonpaw_bot.plugins.activity import INTERACTION_HANDLERS as activity_handlers
 from dragonpaw_bot.plugins.birthdays import INTERACTION_HANDLERS as birthday_handlers
 from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_handlers
 from dragonpaw_bot.plugins.birthdays import config as birthday_config
@@ -52,6 +53,7 @@ _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
         *((p, h, "role_menus") for p, h in role_menu_handlers.items()),
         *((p, h, "tickets") for p, h in tickets_handlers.items()),
         *((p, h, "validation") for p, h in validation_handlers.items()),
+        *((p, h, "activity") for p, h in activity_handlers.items()),
     ],
     key=lambda r: len(r[0]),
     reverse=True,
@@ -150,9 +152,7 @@ _AUTO_DEFER_EXCLUSIONS: set[str] = {"adultier-adult"}
 
 
 @lightbulb.hook(lightbulb.ExecutionSteps.PRE_INVOKE, skip_when_failed=True)
-async def auto_defer(
-    pl: lightbulb.ExecutionPipeline, ctx: lightbulb.Context
-) -> None:
+async def auto_defer(pl: lightbulb.ExecutionPipeline, ctx: lightbulb.Context) -> None:
     """Defer every command interaction so handlers get Discord's 15-minute
     follow-up window instead of the default 3-second initial-response deadline.
 
@@ -250,6 +250,9 @@ def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
 
     if data.get("general_channel_id") is not None:
         data["general_channel_id"] = hikari.Snowflake(data["general_channel_id"])
+
+    if data.get("button_channel_id") is not None:
+        data["button_channel_id"] = hikari.Snowflake(data["button_channel_id"])
 
     # Strip legacy lobby fields
     for field in (
@@ -414,6 +417,7 @@ _birthday_sub = _config_group.subgroup("birthday", "Birthday tracking settings")
 _roles_sub = _config_group.subgroup("roles", "Role menu settings")
 _tickets_sub = _config_group.subgroup("tickets", "Help ticket settings")
 _validation_sub = _config_group.subgroup("validation", "Member validation settings")
+_buttons_sub = _config_group.subgroup("buttons", "Feature button channel settings")
 
 
 class SetLogChannel(
@@ -525,6 +529,7 @@ roles_config.register(_roles_sub)
 tickets_config.register(_tickets_sub)
 validation_config.register(_validation_sub)
 activity_config.register(_activity_sub)
+buttons.register(_buttons_sub)
 loader.command(_config_group)
 
 

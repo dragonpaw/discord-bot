@@ -86,9 +86,13 @@ class IntrosSet(
             )
 
         if self.missing_role is not None:
-            reason = await check_role_manageable(gc.bot, ctx.guild_id, self.missing_role)
+            reason = await check_role_manageable(
+                gc.bot, ctx.guild_id, self.missing_role
+            )
             if reason:
-                warnings.append(f"⚠️ I can't manage **{self.missing_role.name}**: {reason}")
+                warnings.append(
+                    f"⚠️ I can't manage **{self.missing_role.name}**: {reason}"
+                )
 
         warning_block = ("\n" + "\n".join(warnings)) if warnings else ""
 
@@ -107,7 +111,9 @@ class IntrosSet(
             f"📋 **{actor}** pointed me at <#{self.channel.id}> as the intros channel!"
         ]
         if self.role:
-            bits.append(f"I'll only watch for members with the **{self.role.name}** role.")
+            bits.append(
+                f"I'll only watch for members with the **{self.role.name}** role."
+            )
         if self.missing_role:
             bits.append(
                 f"I'll tag missing-intro folks with **{self.missing_role.name}** and "

@@ -358,19 +358,30 @@ class ChannelContext(GuildContext):
     channel_name: str = ""
 
     @classmethod
-    def from_entry(cls, gc: GuildContext, entry: object) -> ChannelContext:
-        """From a GuildContext + a channel entry (CleanupChannelEntry or MediaChannelEntry).
-
-        Both entry types have channel_id and channel_name fields.
-        """
+    def from_channel(
+        cls, gc: GuildContext, channel_id: int, channel_name: str
+    ) -> ChannelContext:
+        """From a GuildContext + a plain channel id and name."""
         return cls(
             bot=gc.bot,
             guild_id=gc.guild_id,
             name=gc.name,
             log_channel_id=gc.log_channel_id,
             member=gc.member,
-            channel_id=hikari.Snowflake(entry.channel_id),  # type: ignore[attr-defined]
-            channel_name=entry.channel_name,  # type: ignore[attr-defined]
+            channel_id=hikari.Snowflake(channel_id),
+            channel_name=channel_name,
+        )
+
+    @classmethod
+    def from_entry(cls, gc: GuildContext, entry: object) -> ChannelContext:
+        """From a GuildContext + a channel entry (CleanupChannelEntry or MediaChannelEntry).
+
+        Both entry types have channel_id and channel_name fields.
+        """
+        return cls.from_channel(
+            gc,
+            entry.channel_id,  # type: ignore[attr-defined]
+            entry.channel_name,  # type: ignore[attr-defined]
         )
 
     async def purge_old_messages(

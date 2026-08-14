@@ -223,6 +223,9 @@ class BirthdayStatus(
         await ctx.respond(embed=embed, flags=hikari.MessageFlag.EPHEMERAL)
 
 
+_SET_PROMPT = "🎂 **Set Your Birthday**\nStep 1 of 3: Choose your birth month:"
+
+
 def _month_select_row() -> hikari.api.ComponentBuilder:
     """Build a month select menu."""
     row = hikari.impl.MessageActionRowBuilder()
@@ -278,7 +281,7 @@ class BirthdaySet(
             return
 
         await ctx.respond(
-            "🎂 **Set Your Birthday**\nStep 1 of 3: Choose your birth month:",
+            _SET_PROMPT,
             components=[_month_select_row()],
             flags=hikari.MessageFlag.EPHEMERAL,
         )
@@ -359,6 +362,34 @@ def _timezone_select_row(month_day: str, region: str) -> hikari.api.ComponentBui
 
 
 _RETRY_MSG = "Please try `/birthday set` again."
+
+
+async def _handle_set_start(interaction: hikari.ComponentInteraction) -> None:
+    """Step 0: Kick off the set flow from the button channel card."""
+    guild_state = state.load(int(interaction.guild_id))  # type: ignore[arg-type]
+    gc = GuildContext.from_interaction(interaction)
+
+    register_role = guild_state.config.register_role
+    if not gc.has_any_permission(register_role):
+        label = (
+            "one of the **" + "**, **".join(register_role) + "** roles"
+            if register_role
+            else "server owner status"
+        )
+        logger.warning("Birthday registration denied, missing permission")
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content=f"*little puff of smoke* 🐉 You need {label} to add your birthday!",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        content=_SET_PROMPT,
+        components=[_month_select_row()],
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
 
 
 async def _handle_set_month(interaction: hikari.ComponentInteraction) -> None:
@@ -613,7 +644,9 @@ async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> Non
         )
         return
 
-    if field == "month":
+    if field == "start":
+        await _handle_set_start(interaction)
+    elif field == "month":
         await _handle_set_month(interaction)
     elif field.startswith("region:"):
         await _handle_set_region(interaction, field)

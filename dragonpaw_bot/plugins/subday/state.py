@@ -20,6 +20,12 @@ def _state_path(guild_id: int) -> Path:
     return STATE_DIR / f"subday_{guild_id}.yaml"
 
 
+def is_configured(guild_id: int) -> bool:
+    """True if this guild has SubDay state on disk (an admin configured it, or
+    a member signed up). Used to decide whether to show the button channel card."""
+    return _state_path(guild_id).exists()
+
+
 def load(guild_id: int) -> SubDayGuildState:
     """Load guild state from cache or disk. Returns empty state if none exists."""
     if guild_id in _cache:

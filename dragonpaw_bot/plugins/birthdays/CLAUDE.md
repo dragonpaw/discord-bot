@@ -32,6 +32,12 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 - **Announcement channel** (channel select, default: _None/disabled_) — Channel where birthday announcements are posted
 - **Birthday role** (role select, default: _None/disabled_) — Role auto-assigned on the user's birthday and removed the next day
 
+### Button Channel Card
+
+Declared as `BUTTON_ENTRY` in `__init__.py` (magenta, 🎂 "Add My Birthday", custom_id `birthday:start`). Shown only when `announcement_channel` is configured — without one there's nowhere to celebrate anyone.
+
+`birthday:start` routes to the existing `handle_tz_interaction` via the `birthday:` prefix and lands in `_handle_set_start`, which applies the `register_role` gate and then posts the same month select menu `/birthday set` does (shared `_SET_PROMPT` and `_month_select_row()`). From there the flow is identical.
+
 ### Birthday Entry
 
 Each entry stores:
@@ -75,7 +81,7 @@ Persisted as `state/birthdays_{guild_id}.yaml`, separate from the main guild sta
 
 ### File Structure
 
-- **`__init__.py`** — Extension entry point (lightbulb Loader), interaction/modal handler exports
+- **`__init__.py`** — Extension entry point (lightbulb Loader), interaction/modal handler exports, `BUTTON_ENTRY`
 - **`listeners.py`** — Member leave cleanup listener
 - **`cron.py`** — Hourly cron task, birthday announcement/role/reminder helpers
 - **`commands.py`** — Non-config slash commands, announcement embeds
