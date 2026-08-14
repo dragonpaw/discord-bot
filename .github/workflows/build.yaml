@@ -6,6 +6,11 @@ on:
     branches:
       - main
   pull_request:
+  # Manual trigger. A run that fails during "Set up job" (e.g. a transient
+  # codeload failure fetching an action) can wedge on re-run — queued with
+  # zero jobs, and force-cancel refuses it — leaving no way to rebuild
+  # without pushing a throwaway commit. This is that way.
+  workflow_dispatch:
 
 env:
   IMAGE: ghcr.io/dragonpaw/discord-bot
@@ -31,7 +36,7 @@ jobs:
       #   run: docker run ${IMAGE}:latest pytest
 
       - name: Login to GitHub Container Registry
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -39,7 +44,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: |
           export TAG=$(cat BUILD_TAG)
           docker push ${IMAGE}:latest
@@ -49,7 +54,7 @@ jobs:
       # release available upstream as of 2026-05). GitHub forces Node 24 on
       # 2026-06-02; check for a newer release before then.
       - name: Prune old container images
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: actions/delete-package-versions@v5
         with:
           package-name: discord-bot
