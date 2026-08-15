@@ -28,6 +28,17 @@ loader = lightbulb.Loader()
 _vc_sessions: dict[int, dict[int, float]] = {}
 
 
+def _channel_multiplier(
+    meta: activity_state.ActivityGuildMeta, channel_id: int
+) -> float:
+    """The channel's configured point multiplier (1.0 when unconfigured, 0 = ignore)."""
+    channel_cfg = next(
+        (c for c in meta.config.channel_configs if c.channel_id == channel_id),
+        None,
+    )
+    return channel_cfg.point_multiplier if channel_cfg else 1.0
+
+
 def _add_contribution(
     guild_id: int,
     user_id: int,
@@ -109,16 +120,7 @@ async def _handle_message(event: hikari.GuildMessageCreateEvent) -> None:
         else ContributionKind.TEXT
     )
 
-    # Per-channel point multiplier
-    channel_cfg = next(
-        (
-            c
-            for c in meta.config.channel_configs
-            if c.channel_id == int(event.channel_id)
-        ),
-        None,
-    )
-    amount = channel_cfg.point_multiplier if channel_cfg else 1.0
+    amount = _channel_multiplier(meta, int(event.channel_id))
     if amount == 0:
         return
 
@@ -159,15 +161,7 @@ async def _handle_reaction(event: hikari.GuildReactionAddEvent) -> None:
     if not role_ids:
         return
 
-    channel_cfg = next(
-        (
-            c
-            for c in meta.config.channel_configs
-            if c.channel_id == int(event.channel_id)
-        ),
-        None,
-    )
-    amount = channel_cfg.point_multiplier if channel_cfg else 1.0
+    amount = _channel_multiplier(meta, int(event.channel_id))
     if amount == 0:
         return
 
@@ -218,15 +212,7 @@ async def _handle_voice_state_update(event: hikari.VoiceStateUpdateEvent) -> Non
                     meta = activity_state.load_config(guild_id)
                     _ensure_guild_name(meta, bot, guild_id)
                     role_ids = [int(r) for r in member.role_ids]
-                    channel_cfg = next(
-                        (
-                            c
-                            for c in meta.config.channel_configs
-                            if c.channel_id == int(old_channel)
-                        ),
-                        None,
-                    )
-                    channel_mult = channel_cfg.point_multiplier if channel_cfg else 1.0
+                    channel_mult = _channel_multiplier(meta, int(old_channel))
                     if role_ids and channel_mult != 0:
                         _add_contribution(
                             guild_id,

@@ -12,13 +12,19 @@ import yaml
 
 from dragonpaw_bot.plugins.activity import listeners as activity_listeners
 from dragonpaw_bot.plugins.activity import state as activity_state
-from dragonpaw_bot.plugins.activity.commands import _classify_members
+from dragonpaw_bot.plugins.activity.commands import (
+    _can_view_others,
+    _classify_members,
+)
 from dragonpaw_bot.plugins.activity.cron import (
     _evaluate_lurker,
     _prune_state,
     _sync_lurker_role,
 )
-from dragonpaw_bot.plugins.activity.listeners import _add_contribution
+from dragonpaw_bot.plugins.activity.listeners import (
+    _add_contribution,
+    _channel_multiplier,
+)
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
     BASE_HALF_LIFE,
@@ -870,3 +876,53 @@ async def test_forwarded_media_message_scores_as_media(monkeypatch):
     await activity_listeners._handle_message(event)
 
     assert recorded == [(ContributionKind.MEDIA, 1.0)]
+
+
+# ---------------------------------------------------------------------------- #
+#                       viewer permission rule                                 #
+# ---------------------------------------------------------------------------- #
+
+
+def _viewer_ctx(permissions, role_ids=()):
+    ctx = MagicMock()
+    ctx.guild_id = hikari.Snowflake(1)
+    ctx.member.permissions = permissions
+    ctx.member.role_ids = [hikari.Snowflake(r) for r in role_ids]
+    return ctx
+
+
+def _viewer_meta(monkeypatch, viewer_role_id):
+    meta = SimpleNamespace(config=SimpleNamespace(viewer_role_id=viewer_role_id))
+    monkeypatch.setattr(activity_state, "load_config", lambda _g: meta)
+
+
+def test_can_view_others_admin(monkeypatch):
+    _viewer_meta(monkeypatch, viewer_role_id=None)
+    ctx = _viewer_ctx(hikari.Permissions.MANAGE_GUILD)
+    assert _can_view_others(ctx) is True
+
+
+def test_can_view_others_viewer_role(monkeypatch):
+    _viewer_meta(monkeypatch, viewer_role_id=55)
+    ctx = _viewer_ctx(hikari.Permissions.NONE, role_ids=[55])
+    assert _can_view_others(ctx) is True
+
+
+def test_can_view_others_plain_member(monkeypatch):
+    _viewer_meta(monkeypatch, viewer_role_id=55)
+    ctx = _viewer_ctx(hikari.Permissions.NONE, role_ids=[7])
+    assert _can_view_others(ctx) is False
+
+
+def test_channel_multiplier_configured():
+    meta = SimpleNamespace(
+        config=SimpleNamespace(
+            channel_configs=[SimpleNamespace(channel_id=7, point_multiplier=2.5)]
+        )
+    )
+    assert _channel_multiplier(meta, 7) == 2.5
+
+
+def test_channel_multiplier_unconfigured_defaults_to_one():
+    meta = SimpleNamespace(config=SimpleNamespace(channel_configs=[]))
+    assert _channel_multiplier(meta, 7) == 1.0

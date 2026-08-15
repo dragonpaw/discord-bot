@@ -10,7 +10,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.colors import SOLARIZED_CYAN
-from dragonpaw_bot.context import NotAuthorized
+from dragonpaw_bot.context import NotAuthorized, is_guild_admin
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.chart import render_activity_chart
 from dragonpaw_bot.plugins.activity.models import (
@@ -41,16 +41,7 @@ def activity_viewer_only(
     _: lightbulb.ExecutionPipeline, ctx: lightbulb.Context
 ) -> None:
     """Hook: allows guild admins and members with the configured activity viewer role."""
-    if ctx.guild_id is None or ctx.member is None:
-        raise NotAuthorized()
-    if ctx.member.permissions & (
-        hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD
-    ):
-        return
-    meta = activity_state.load_config(int(ctx.guild_id))
-    if meta.config.viewer_role_id is None:
-        raise NotAuthorized()
-    if meta.config.viewer_role_id not in {int(r) for r in ctx.member.role_ids}:
+    if ctx.guild_id is None or ctx.member is None or not _can_view_others(ctx):
         raise NotAuthorized()
 
 
@@ -129,9 +120,7 @@ def _build_report_lines(
 def _can_view_others(ctx: lightbulb.Context) -> bool:
     """Return True if the invoker has admin/manage-guild or the configured viewer role."""
     assert ctx.member and ctx.guild_id
-    if ctx.member.permissions & (
-        hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD
-    ):
+    if is_guild_admin(ctx.member):
         return True
     meta = activity_state.load_config(int(ctx.guild_id))
     viewer_id = meta.config.viewer_role_id
