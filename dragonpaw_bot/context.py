@@ -564,6 +564,21 @@ class ChannelContext(GuildContext):
                 self.logger.debug("Deleting my message", message_id=message.id)
                 await message.delete()
 
+    async def run_cleanup_isolated(self, expiry_minutes: int) -> None:
+        """run_cleanup, but swallowing (and logging) anything it raises.
+
+        `run_cleanup` already catches purge errors internally; this wrapper exists
+        so anything that escapes (e.g., NotFoundError from check_perms when a
+        channel has been deleted) doesn't vanish into asyncio.gather's result list.
+        """
+        try:
+            await self.run_cleanup(expiry_minutes)
+        except Exception:
+            self.logger.exception(
+                "Unhandled cleanup error",
+                channel=self.channel_name,
+            )
+
     async def run_cleanup(self, expiry_minutes: int) -> None:
         """Check permissions then purge old messages and threads, logging any issues to the guild log channel.
 
