@@ -98,7 +98,7 @@ def bucket_is_negligible(
     """True when even at the best log_weight (position 0 = 1/ln(2)), the bucket's
     contribution is below PRUNE_THRESHOLD. Safe to delete without affecting scores."""
     t = now - bucket.hour
-    base = CONTRIBUTION_VALUES.get(bucket.kind, 1.0) * bucket.amount
+    base = CONTRIBUTION_VALUES[bucket.kind] * bucket.amount
     max_contribution = (
         base * (1.0 / math.log(2)) * contrib_mult * math.pow(0.5, t / half_life)
     )
@@ -137,7 +137,7 @@ def calculate_score(
 
     score = 0.0
     for kind, kind_buckets in by_kind.items():
-        base_value = CONTRIBUTION_VALUES.get(kind, 1.0)
+        base_value = CONTRIBUTION_VALUES[kind]
         kind_buckets.sort(
             key=lambda b: b.hour, reverse=True
         )  # newest first → highest log_weight

@@ -6,6 +6,7 @@ import hikari
 import lightbulb
 import structlog
 
+from dragonpaw_bot.colors import SOLARIZED_BLUE
 from dragonpaw_bot.context import GuildContext, check_role_manageable, guild_owner_only
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import ChannelConfig, RoleConfig
@@ -55,8 +56,7 @@ class ActivityRoleAdd(
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
 
-        preset_key = self.preset or "standard"
-        label, contrib_mult, decay_mult, ignored = _ROLE_PRESETS[preset_key]
+        label, contrib_mult, decay_mult, ignored = _ROLE_PRESETS[self.preset]
 
         meta = activity_state.load_config(int(ctx.guild_id))
         meta.guild_name = gc.name
@@ -386,7 +386,7 @@ class ActivityStatus(
 
         embed = hikari.Embed(
             title="📊 Activity Tracker Configuration",
-            color=0x268BD2,
+            color=SOLARIZED_BLUE,
         )
         embed.add_field(name="Roles", value=roles_text, inline=False)
         embed.add_field(name="Channel Multipliers", value=channels_text, inline=False)

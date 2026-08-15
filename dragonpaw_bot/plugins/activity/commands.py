@@ -49,7 +49,7 @@ def _classify_members(
     member_map: dict[int, hikari.Member],
     meta: ActivityGuildMeta,
     now: float,
-    owner_id: int | None = None,
+    owner_id: int | None,
 ) -> tuple[list[tuple[hikari.Member, str, float]], list[tuple[float, hikari.Member]]]:
     """Split non-bot members into immune (with role name and score) and scored lists."""
     immune: list[tuple[hikari.Member, str, float]] = []

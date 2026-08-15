@@ -240,18 +240,14 @@ def _draw_x_labels(
     bar_slot: float,
 ) -> None:
     """Label every day boundary (midnight), skipping if labels would overlap."""
-    num_hours = len(hours)
     day_indices = [i for i, h in enumerate(hours) if h % 86400 == 0]
 
     # Estimate label width to avoid overlap (~28px for "15 Mar" at 11pt)
     min_spacing_px = 30
-    min_step = max(1, int(min_spacing_px / (bar_slot * 24)))
-    step = max(1, min_step)
+    step = max(1, int(min_spacing_px / (bar_slot * 24)))
 
     for j, i in enumerate(day_indices):
         if j % step != 0:
-            continue
-        if i >= num_hours:
             continue
         x = int(CHART_X + i * bar_slot)
         label = datetime.fromtimestamp(hours[i], tz=UTC).strftime("%-d %b")

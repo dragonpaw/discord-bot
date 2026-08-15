@@ -739,7 +739,7 @@ def test_classify_members_immune_member_has_score(tmp_path, monkeypatch):
     )
 
     member = _fake_classify_member(50, role_ids=[5])
-    immune, _ = _classify_members({50: member}, meta, now)
+    immune, _ = _classify_members({50: member}, meta, now, owner_id=None)
 
     assert len(immune) == 1
     _, role_name, score = immune[0]
