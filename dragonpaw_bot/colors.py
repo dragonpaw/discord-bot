@@ -26,4 +26,5 @@ def rainbow(n: int) -> list[tuple[int, int, int]]:
     # end = 2 / 3
     # as_float = [colorsys.hls_to_rgb(end * i / (n - 1), 0.5, 1) for i in range(n)]
     # return [(int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)) for x in as_float]
-    return palettable.mycarta.get_map(COLORS.format(n)).colors
+    # palettable maps start at 2 colors — slice down for a single-item request
+    return palettable.mycarta.get_map(COLORS.format(max(n, 2))).colors[:n]

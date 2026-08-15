@@ -8,6 +8,7 @@ import pytest
 
 from dragonpaw_bot.plugins.media_channels import cron as media_cron
 from dragonpaw_bot.plugins.media_channels import state as media_state
+from dragonpaw_bot.plugins.media_channels.config import _required_perms
 from dragonpaw_bot.plugins.media_channels.listeners import on_message
 from dragonpaw_bot.plugins.media_channels.models import (
     MediaChannelEntry,
@@ -563,3 +564,20 @@ async def test_on_message_notice_failure_still_logs_to_guild_channel(
     log_channel, log_text = posted[0]
     assert log_channel == 888
     assert "Wordy" in log_text
+
+
+def test_required_perms_without_expiry_is_enforcement_only():
+    perms = _required_perms(None)
+    assert hikari.Permissions.MANAGE_MESSAGES in perms
+    assert hikari.Permissions.SEND_MESSAGES in perms
+    assert hikari.Permissions.VIEW_CHANNEL in perms
+    # not needed for a plain-text notice or deletion:
+    assert hikari.Permissions.EMBED_LINKS not in perms
+    assert hikari.Permissions.ATTACH_FILES not in perms
+    assert hikari.Permissions.MANAGE_THREADS not in perms
+
+
+def test_required_perms_with_expiry_adds_cleanup_set():
+    perms = _required_perms(60)
+    assert hikari.Permissions.READ_MESSAGE_HISTORY in perms
+    assert hikari.Permissions.MANAGE_THREADS in perms

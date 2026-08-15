@@ -26,3 +26,9 @@ def test_solarized_constants_are_colors():
     assert isinstance(SOLARIZED_BLUE, hikari.Color)
     assert isinstance(SOLARIZED_RED, hikari.Color)
     assert isinstance(SOLARIZED_GREEN, hikari.Color)
+
+
+def test_rainbow_single_color():
+    # A role-menu config with exactly one menu must not crash setup.
+    colors = rainbow(1)
+    assert len(colors) == 1

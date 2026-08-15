@@ -8,7 +8,6 @@ import structlog
 
 from dragonpaw_bot.context import (
     CHANNEL_CLEANUP_PERMS,
-    CHANNEL_POST_PERMS,
     GuildContext,
     check_channel_perms,
     guild_owner_only,
@@ -18,6 +17,20 @@ from dragonpaw_bot.plugins.media_channels import state as media_state
 from dragonpaw_bot.plugins.media_channels.models import MediaChannelEntry
 
 logger = structlog.get_logger(__name__)
+
+# Enforcement itself only sees, deletes, and posts a plain-text notice.
+MEDIA_ENFORCE_PERMS: dict[hikari.Permissions, str] = {
+    hikari.Permissions.VIEW_CHANNEL: "View Channel",
+    hikari.Permissions.SEND_MESSAGES: "Send Messages",
+    hikari.Permissions.MANAGE_MESSAGES: "Manage Messages",
+}
+
+
+def _required_perms(expiry_minutes: int | None) -> dict[hikari.Permissions, str]:
+    """Perms to validate at setup: the cleanup cron needs more than enforcement."""
+    if expiry_minutes is None:
+        return MEDIA_ENFORCE_PERMS
+    return {**MEDIA_ENFORCE_PERMS, **CHANNEL_CLEANUP_PERMS}
 
 
 def register(media_sub: lightbulb.SubGroup) -> None:
@@ -89,9 +102,8 @@ class MediaAdd(
             expiry_minutes=expiry_minutes,
         )
 
-        media_perms = {**CHANNEL_POST_PERMS, **CHANNEL_CLEANUP_PERMS}
         missing = await check_channel_perms(
-            gc.bot, ctx.guild_id, self.channel.id, media_perms
+            gc.bot, ctx.guild_id, self.channel.id, _required_perms(expiry_minutes)
         )
         if missing:
             parts.append(

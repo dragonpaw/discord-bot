@@ -16,7 +16,9 @@ from dragonpaw_bot.plugins.role_menus.commands import (
     _slugify,
     build_menu_embed,
     build_menu_select,
+    configure_role_menus,
     handle_role_menu_interaction,
+    parse_role_config,
 )
 from dragonpaw_bot.plugins.role_menus.constants import ROLE_MENU_PREFIX
 from dragonpaw_bot.plugins.role_menus.models import (
@@ -809,3 +811,94 @@ async def test_handle_interaction_summary_failure_does_not_raise(role_menus_stat
     await handle_role_menu_interaction(interaction)
 
     interaction.app.rest.add_role_to_member.assert_awaited_once()
+
+
+async def test_configure_warns_on_missing_channel_perms(monkeypatch, role_menus_state_dir):
+    """Setup validates bot permissions in the role channel and reports what's
+    missing, while still posting the menus (warn, don't block)."""
+    channel = MagicMock()
+    channel.id = hikari.Snowflake(77)
+    channel.name = "role-select"
+    channel.send = AsyncMock(return_value=MagicMock(id=hikari.Snowflake(900)))
+    monkeypatch.setattr(
+        "dragonpaw_bot.utils.guild_channel_by_name", AsyncMock(return_value=channel)
+    )
+    monkeypatch.setattr("dragonpaw_bot.utils.guild_emojis", AsyncMock(return_value={}))
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.role_menus.commands.check_channel_perms",
+        AsyncMock(return_value=["Manage Messages"]),
+    )
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.role_menus.commands.check_role_manageable",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "dragonpaw_bot.context.ChannelContext.delete_my_messages", AsyncMock()
+    )
+
+    gc = MagicMock()
+    gc.guild_id = hikari.Snowflake(1)
+    gc.name = "G"
+    gc.logger = MagicMock()
+
+    role = MagicMock()
+    role.id = hikari.Snowflake(5)
+    role.name = "Red"
+    config = parse_role_config(
+        'channel = "role-select"\n'
+        "[[menu]]\n"
+        'name = "Colors"\n'
+        'description = "Pick"\n'
+        "options = [\n"
+        '  { role = "Red", description = "Red role" },\n'
+        "]\n"
+    )
+
+    errors = await configure_role_menus(gc, config, {"Red": role})
+
+    assert any("Manage Messages" in e for e in errors)
+    channel.send.assert_awaited()  # still posted despite the warning
+
+
+async def test_configure_warns_on_unmanageable_role(monkeypatch, role_menus_state_dir):
+    channel = MagicMock()
+    channel.id = hikari.Snowflake(77)
+    channel.name = "role-select"
+    channel.send = AsyncMock(return_value=MagicMock(id=hikari.Snowflake(900)))
+    monkeypatch.setattr(
+        "dragonpaw_bot.utils.guild_channel_by_name", AsyncMock(return_value=channel)
+    )
+    monkeypatch.setattr("dragonpaw_bot.utils.guild_emojis", AsyncMock(return_value={}))
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.role_menus.commands.check_channel_perms",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.role_menus.commands.check_role_manageable",
+        AsyncMock(return_value="My highest role is below it"),
+    )
+    monkeypatch.setattr(
+        "dragonpaw_bot.context.ChannelContext.delete_my_messages", AsyncMock()
+    )
+
+    gc = MagicMock()
+    gc.guild_id = hikari.Snowflake(1)
+    gc.name = "G"
+    gc.logger = MagicMock()
+
+    role = MagicMock()
+    role.id = hikari.Snowflake(5)
+    role.name = "Red"
+    config = parse_role_config(
+        'channel = "role-select"\n'
+        "[[menu]]\n"
+        'name = "Colors"\n'
+        'description = "Pick"\n'
+        "options = [\n"
+        '  { role = "Red", description = "Red role" },\n'
+        "]\n"
+    )
+
+    errors = await configure_role_menus(gc, config, {"Red": role})
+
+    assert any("highest role" in e for e in errors)

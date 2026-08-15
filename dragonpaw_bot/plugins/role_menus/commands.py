@@ -11,7 +11,13 @@ import structlog
 
 from dragonpaw_bot import http, structs, utils
 from dragonpaw_bot.colors import rainbow
-from dragonpaw_bot.context import ChannelContext, GuildContext
+from dragonpaw_bot.context import (
+    CHANNEL_POST_PERMS,
+    ChannelContext,
+    GuildContext,
+    check_channel_perms,
+    check_role_manageable,
+)
 from dragonpaw_bot.plugins.role_menus import state
 from dragonpaw_bot.plugins.role_menus.constants import ROLE_MENU_PREFIX
 from dragonpaw_bot.plugins.role_menus.models import (
@@ -97,6 +103,34 @@ def build_menu_select(
     return select
 
 
+async def _setup_warnings(
+    gc: GuildContext,
+    channel: hikari.GuildTextChannel,
+    role_map: Mapping[str, hikari.Role],
+) -> list[str]:
+    """Permission/hierarchy warnings at setup time — runtime failures would
+    otherwise only surface when a member clicks a dropdown."""
+    warnings: list[str] = []
+    missing = await check_channel_perms(
+        gc.bot,
+        gc.guild_id,
+        channel.id,
+        {
+            **CHANNEL_POST_PERMS,
+            hikari.Permissions.MANAGE_MESSAGES: "Manage Messages",
+        },
+    )
+    if missing:
+        warnings.append(
+            f"I'm missing permissions in #{channel.name}: {', '.join(missing)}."
+        )
+    for role in role_map.values():
+        reason = await check_role_manageable(gc.bot, gc.guild_id, role)
+        if reason:
+            warnings.append(f"I can't manage the role '{role.name}': {reason}")
+    return warnings
+
+
 async def configure_role_menus(
     gc: GuildContext,
     config: RolesConfig,
@@ -117,6 +151,8 @@ async def configure_role_menus(
     if not config.menu:
         errors.append("Role channel is set, but no role menus seem to exist.")
         return errors
+
+    errors.extend(await _setup_warnings(gc, channel, role_map))
 
     emoji_map = await utils.guild_emojis(gc)
 
