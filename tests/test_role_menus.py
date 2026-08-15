@@ -1,5 +1,8 @@
 """Tests for the role_menus plugin package."""
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
 import hikari
 import pydantic
 import pytest
@@ -7,11 +10,15 @@ import yaml
 
 import dragonpaw_bot.plugins.role_menus.state as role_menus_state
 from dragonpaw_bot.plugins.role_menus.commands import (
+    _apply_role_changes,
     _build_summary,
     _find_menu_state,
+    _slugify,
     build_menu_embed,
     build_menu_select,
+    handle_role_menu_interaction,
 )
+from dragonpaw_bot.plugins.role_menus.constants import ROLE_MENU_PREFIX
 from dragonpaw_bot.plugins.role_menus.models import (
     RoleMenuConfig,
     RoleMenuGuildState,
@@ -425,3 +432,380 @@ def test_build_menu_select_with_emoji():
     valid_options = [("Red", "Red role", "red_circle")]
     select = build_menu_select("colors", menu, valid_options, emoji_map)
     assert select.custom_id == "role_menu:colors"
+
+
+# ---------------------------------------------------------------------------- #
+#                                   Slugify                                    #
+# ---------------------------------------------------------------------------- #
+
+
+def test_slugify_spaces_and_case():
+    assert _slugify("DM Permission") == "dm-permission"
+
+
+def test_slugify_all_punctuation_yields_empty_slug():
+    """An all-non-alphanumeric menu name slugifies to nothing."""
+    assert _slugify("!!! ???") == ""
+
+
+def test_slugify_empty_slug_menu_is_unreachable():
+    """A menu named only in punctuation gets a custom_id no lookup can resolve."""
+    custom_id = ROLE_MENU_PREFIX + _slugify("★★★")
+    assert _find_menu_state(_sample_guild_state(), custom_id) is None
+
+
+# ---------------------------------------------------------------------------- #
+#                              Interaction handling                            #
+# ---------------------------------------------------------------------------- #
+
+MEMBER_ID = hikari.Snowflake(777)
+LOG_CHANNEL_ID = hikari.Snowflake(555)
+
+
+def _interaction_state() -> RoleMenuGuildState:
+    return RoleMenuGuildState(
+        guild_id=100,
+        guild_name="Test Guild",
+        role_channel_id=50,
+        role_names={10: "Red Role", 20: "Blue Role"},
+        menus=[
+            RoleMenuState(
+                menu_slug="colors",
+                menu_name="Colors",
+                message_id=200,
+                single=False,
+                option_role_ids={"Red": 10, "Blue": 20},
+            ),
+            RoleMenuState(
+                menu_slug="pronouns",
+                menu_name="Pronouns",
+                message_id=300,
+                single=True,
+                option_role_ids={"They": 30, "She": 40},
+            ),
+        ],
+    )
+
+
+def _menu_interaction(
+    calls: list[str],
+    *,
+    custom_id: str = "role_menu:colors",
+    values: list[str] | None = None,
+    member_role_ids: list[int] | None = None,
+) -> MagicMock:
+    interaction = MagicMock()
+    interaction.guild_id = hikari.Snowflake(100)
+    interaction.custom_id = custom_id
+    interaction.values = values if values is not None else []
+    interaction.user.id = MEMBER_ID
+    interaction.member.role_ids = [hikari.Snowflake(r) for r in (member_role_ids or [])]
+    interaction.create_initial_response = AsyncMock(
+        side_effect=lambda *a, **k: calls.append("initial_response")
+    )
+    interaction.edit_initial_response = AsyncMock(
+        side_effect=lambda *a, **k: calls.append("edit_response")
+    )
+    bot = interaction.app
+    bot.cache.get_guild.return_value = None
+    bot.state.return_value = SimpleNamespace(log_channel_id=LOG_CHANNEL_ID)
+    bot.rest.add_role_to_member = AsyncMock(
+        side_effect=lambda *a, **k: calls.append("add_role")
+    )
+    bot.rest.remove_role_from_member = AsyncMock(
+        side_effect=lambda *a, **k: calls.append("remove_role")
+    )
+    bot.rest.create_message = AsyncMock(
+        side_effect=lambda *a, **k: calls.append("guild_log")
+    )
+    return interaction
+
+
+def _menu(guild_state: RoleMenuGuildState, slug: str) -> RoleMenuState:
+    return next(m for m in guild_state.menus if m.menu_slug == slug)
+
+
+# --- _apply_role_changes ---
+
+
+async def test_apply_role_changes_adds_selected_role():
+    calls: list[str] = []
+    interaction = _menu_interaction(calls)
+    gs = _interaction_state()
+
+    added, removed, failed = await _apply_role_changes(
+        interaction, gs, _menu(gs, "colors"), {"Red"}, set()
+    )
+
+    assert (added, removed, failed) == (["Red"], [], [])
+    interaction.app.rest.add_role_to_member.assert_awaited_once()
+    kwargs = interaction.app.rest.add_role_to_member.await_args.kwargs
+    assert kwargs["guild"] == hikari.Snowflake(100)
+    assert kwargs["user"] == MEMBER_ID
+    assert kwargs["role"] == hikari.Snowflake(10)
+    interaction.app.rest.remove_role_from_member.assert_not_awaited()
+
+
+async def test_apply_role_changes_removes_deselected_role():
+    calls: list[str] = []
+    interaction = _menu_interaction(calls)
+    gs = _interaction_state()
+    held = {hikari.Snowflake(10), hikari.Snowflake(20)}
+
+    added, removed, failed = await _apply_role_changes(
+        interaction, gs, _menu(gs, "colors"), {"Red"}, held
+    )
+
+    assert (added, removed, failed) == ([], ["Blue"], [])
+    interaction.app.rest.add_role_to_member.assert_not_awaited()
+    kwargs = interaction.app.rest.remove_role_from_member.await_args.kwargs
+    assert kwargs["role"] == hikari.Snowflake(20)
+
+
+async def test_apply_role_changes_keeps_role_already_held():
+    calls: list[str] = []
+    interaction = _menu_interaction(calls)
+    gs = _interaction_state()
+
+    added, removed, failed = await _apply_role_changes(
+        interaction, gs, _menu(gs, "colors"), {"Red"}, {hikari.Snowflake(10)}
+    )
+
+    assert (added, removed, failed) == ([], [], [])
+    assert calls == []
+
+
+async def test_apply_role_changes_single_select_replaces_previous_choice():
+    """Picking a new option in a single-select menu drops the old one."""
+    calls: list[str] = []
+    interaction = _menu_interaction(calls)
+    gs = _interaction_state()
+
+    added, removed, failed = await _apply_role_changes(
+        interaction, gs, _menu(gs, "pronouns"), {"She"}, {hikari.Snowflake(30)}
+    )
+
+    assert added == ["She"]
+    assert removed == ["They"]
+    assert failed == []
+    assert interaction.app.rest.add_role_to_member.await_args.kwargs[
+        "role"
+    ] == hikari.Snowflake(40)
+    assert interaction.app.rest.remove_role_from_member.await_args.kwargs[
+        "role"
+    ] == hikari.Snowflake(30)
+
+
+async def test_apply_role_changes_deselect_all_removes_every_held_role():
+    calls: list[str] = []
+    interaction = _menu_interaction(calls)
+    gs = _interaction_state()
+    held = {hikari.Snowflake(10), hikari.Snowflake(20)}
+
+    added, removed, failed = await _apply_role_changes(
+        interaction, gs, _menu(gs, "colors"), set(), held
+    )
+
+    assert added == []
+    assert sorted(removed) == ["Blue", "Red"]
+    assert failed == []
+    assert interaction.app.rest.remove_role_from_member.await_count == 2
+
+
+async def test_apply_role_changes_forbidden_add_is_reported_not_raised():
+    calls: list[str] = []
+    interaction = _menu_interaction(calls)
+    interaction.app.rest.add_role_to_member.side_effect = hikari.ForbiddenError(
+        url="", headers={}, raw_body=b""
+    )
+    gs = _interaction_state()
+
+    added, removed, failed = await _apply_role_changes(
+        interaction, gs, _menu(gs, "colors"), {"Red"}, set()
+    )
+
+    assert added == []
+    assert removed == []
+    # role_names maps the id to the guild's current display name
+    assert failed == ["Red Role"]
+    interaction.app.rest.create_message.assert_awaited_once()
+    kwargs = interaction.app.rest.create_message.await_args.kwargs
+    assert kwargs["channel"] == LOG_CHANNEL_ID
+    assert "Red Role" in kwargs["content"]
+
+
+async def test_apply_role_changes_forbidden_remove_is_reported_not_raised():
+    calls: list[str] = []
+    interaction = _menu_interaction(calls)
+    interaction.app.rest.remove_role_from_member.side_effect = hikari.ForbiddenError(
+        url="", headers={}, raw_body=b""
+    )
+    gs = _interaction_state()
+
+    added, removed, failed = await _apply_role_changes(
+        interaction, gs, _menu(gs, "colors"), set(), {hikari.Snowflake(20)}
+    )
+
+    assert added == []
+    assert removed == []
+    assert failed == ["Blue Role"]
+    content = interaction.app.rest.create_message.await_args.kwargs["content"]
+    assert "Blue Role" in content
+
+
+async def test_apply_role_changes_forbidden_does_not_stop_other_roles():
+    calls: list[str] = []
+    interaction = _menu_interaction(calls)
+
+    async def only_blue_allowed(*, guild, user, role, reason):
+        if role == hikari.Snowflake(10):
+            raise hikari.ForbiddenError(url="", headers={}, raw_body=b"")
+        calls.append("add_role")
+
+    interaction.app.rest.add_role_to_member.side_effect = only_blue_allowed
+    gs = _interaction_state()
+
+    added, removed, failed = await _apply_role_changes(
+        interaction, gs, _menu(gs, "colors"), {"Red", "Blue"}, set()
+    )
+
+    assert added == ["Blue"]
+    assert removed == []
+    assert failed == ["Red Role"]
+
+
+# --- handle_role_menu_interaction ---
+
+
+async def test_handle_interaction_defers_then_applies_then_summarizes(
+    role_menus_state_dir,
+):
+    role_menus_state.save(_interaction_state())
+    calls: list[str] = []
+    interaction = _menu_interaction(calls, values=["Red"])
+
+    await handle_role_menu_interaction(interaction)
+
+    assert calls[0] == "initial_response"
+    assert calls[1] == "add_role"
+    assert calls[-1] == "edit_response"
+    defer_kwargs = interaction.create_initial_response.await_args.kwargs
+    assert defer_kwargs["response_type"] == hikari.ResponseType.DEFERRED_MESSAGE_CREATE
+    assert defer_kwargs["flags"] == hikari.MessageFlag.EPHEMERAL
+    assert (
+        interaction.edit_initial_response.await_args.kwargs["content"]
+        == "Added: **Red**"
+    )
+
+
+async def test_handle_interaction_removes_deselected_role(role_menus_state_dir):
+    role_menus_state.save(_interaction_state())
+    calls: list[str] = []
+    interaction = _menu_interaction(calls, values=["Red"], member_role_ids=[10, 20])
+
+    await handle_role_menu_interaction(interaction)
+
+    interaction.app.rest.remove_role_from_member.assert_awaited_once()
+    assert interaction.app.rest.remove_role_from_member.await_args.kwargs[
+        "role"
+    ] == hikari.Snowflake(20)
+    assert (
+        interaction.edit_initial_response.await_args.kwargs["content"]
+        == "Removed: **Blue**"
+    )
+
+
+async def test_handle_interaction_empty_selection_clears_roles(role_menus_state_dir):
+    role_menus_state.save(_interaction_state())
+    calls: list[str] = []
+    interaction = _menu_interaction(calls, values=[], member_role_ids=[10, 20])
+
+    await handle_role_menu_interaction(interaction)
+
+    assert interaction.app.rest.remove_role_from_member.await_count == 2
+    assert "Removed:" in interaction.edit_initial_response.await_args.kwargs["content"]
+
+
+async def test_handle_interaction_no_changes_reports_no_changes(role_menus_state_dir):
+    role_menus_state.save(_interaction_state())
+    calls: list[str] = []
+    interaction = _menu_interaction(calls, values=["Red"], member_role_ids=[10])
+
+    await handle_role_menu_interaction(interaction)
+
+    assert "add_role" not in calls
+    assert "remove_role" not in calls
+    assert (
+        "No changes" in interaction.edit_initial_response.await_args.kwargs["content"]
+    )
+
+
+async def test_handle_interaction_unknown_slug_responds_without_touching_roles(
+    role_menus_state_dir,
+):
+    role_menus_state.save(_interaction_state())
+    calls: list[str] = []
+    interaction = _menu_interaction(calls, custom_id="role_menu:gone", values=["Red"])
+
+    await handle_role_menu_interaction(interaction)
+
+    kwargs = interaction.create_initial_response.await_args.kwargs
+    assert kwargs["response_type"] == hikari.ResponseType.MESSAGE_CREATE
+    assert kwargs["flags"] == hikari.MessageFlag.EPHEMERAL
+    assert "don't recognize" in kwargs["content"]
+    interaction.edit_initial_response.assert_not_awaited()
+    interaction.app.rest.add_role_to_member.assert_not_awaited()
+
+
+async def test_handle_interaction_no_menus_in_state_responds_gracefully(
+    role_menus_state_dir,
+):
+    calls: list[str] = []
+    interaction = _menu_interaction(calls, values=["Red"])
+
+    await handle_role_menu_interaction(interaction)
+
+    kwargs = interaction.create_initial_response.await_args.kwargs
+    assert kwargs["response_type"] == hikari.ResponseType.MESSAGE_CREATE
+    assert "outdated" in kwargs["content"]
+    interaction.app.rest.add_role_to_member.assert_not_awaited()
+
+
+async def test_handle_interaction_without_member_does_not_respond(
+    role_menus_state_dir,
+):
+    role_menus_state.save(_interaction_state())
+    calls: list[str] = []
+    interaction = _menu_interaction(calls, values=["Red"])
+    interaction.member = None
+
+    await handle_role_menu_interaction(interaction)
+
+    assert calls == []
+
+
+async def test_handle_interaction_expired_defer_skips_role_changes(
+    role_menus_state_dir,
+):
+    role_menus_state.save(_interaction_state())
+    calls: list[str] = []
+    interaction = _menu_interaction(calls, values=["Red"])
+    interaction.create_initial_response.side_effect = hikari.NotFoundError(
+        url="", headers={}, raw_body=b""
+    )
+
+    await handle_role_menu_interaction(interaction)
+
+    interaction.app.rest.add_role_to_member.assert_not_awaited()
+    interaction.edit_initial_response.assert_not_awaited()
+
+
+async def test_handle_interaction_summary_failure_does_not_raise(role_menus_state_dir):
+    role_menus_state.save(_interaction_state())
+    calls: list[str] = []
+    interaction = _menu_interaction(calls, values=["Red"])
+    interaction.edit_initial_response.side_effect = hikari.HTTPError("boom")
+
+    await handle_role_menu_interaction(interaction)
+
+    interaction.app.rest.add_role_to_member.assert_awaited_once()
