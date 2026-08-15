@@ -82,7 +82,7 @@ def _validate_date(month: int, day: int) -> str | None:
     """Validate month/day. Returns error message or None if valid."""
     if month < 1 or month > _MONTHS_IN_YEAR:
         return "🐉 Month must be between 1 and 12!"
-    max_day = _LEAP_DAY if month == _FEB else calendar.monthrange(2000, month)[1]
+    max_day = calendar.monthrange(2000, month)[1]  # leap year: allows Feb 29
     if day < 1 or day > max_day:
         return f"🐉 Day must be between 1 and {max_day} for {MONTH_NAMES[month]}!"
     return None
@@ -243,7 +243,7 @@ def _day_modal_rows(
     month: int, existing_wishlist: str | None = None
 ) -> list[hikari.api.ComponentBuilder]:
     """Build modal action rows for birth day and wishlist URL."""
-    max_day = _LEAP_DAY if month == _FEB else calendar.monthrange(2000, month)[1]
+    max_day = calendar.monthrange(2000, month)[1]  # leap year: allows Feb 29
     day_row = hikari.impl.ModalActionRowBuilder()
     day_row.add_text_input(
         "day",

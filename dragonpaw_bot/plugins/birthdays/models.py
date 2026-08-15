@@ -20,11 +20,8 @@ class BirthdayEntry(pydantic.BaseModel):
 
     @pydantic.model_validator(mode="after")
     def _validate_month_day(self) -> "BirthdayEntry":
-        max_day = (
-            _LEAP_DAY
-            if self.month == _FEB
-            else calendar.monthrange(2000, self.month)[1]
-        )
+        # monthrange in a leap year (2000) already allows Feb 29
+        max_day = calendar.monthrange(2000, self.month)[1]
         if self.day > max_day:
             msg = f"Day {self.day} is not valid for month {self.month}"
             raise ValueError(msg)
@@ -54,8 +51,7 @@ class BirthdayGuildConfig(pydantic.BaseModel):
             return [v]
         return v  # type: ignore[return-value]
 
-    manage_role: str | None = None  # Role for set-for/remove-for
-    list_role: str | None = None  # Role for list command
+    manage_role: str | None = None  # Role for remove-for
     announcement_channel: str | None = None  # Channel name
     birthday_role: str | None = None  # Auto-assigned on birthday
 

@@ -52,11 +52,6 @@ def config_embed(cfg: BirthdayGuildConfig) -> hikari.Embed:
         inline=True,
     )
     embed.add_field(
-        name="List role",
-        value=f"`{cfg.list_role}`" if cfg.list_role else "_Owner-only_",
-        inline=True,
-    )
-    embed.add_field(
         name="Announcement channel",
         value=f"`#{cfg.announcement_channel}`"
         if cfg.announcement_channel
@@ -71,7 +66,7 @@ def config_embed(cfg: BirthdayGuildConfig) -> hikari.Embed:
     return embed
 
 
-ROLE_FIELDS = {"register_role", "manage_role", "list_role", "birthday_role"}
+ROLE_FIELDS = {"register_role", "manage_role", "birthday_role"}
 MULTI_ROLE_FIELDS = {"register_role"}
 
 
@@ -118,22 +113,6 @@ async def config_components(
             ),
             [{"id": str(role_map[cfg.manage_role]), "type": "role"}]
             if cfg.manage_role and cfg.manage_role in role_map
-            else [],
-        )
-    )
-
-    # List role select
-    rows.append(
-        DefaultsActionRow(
-            bot.rest.build_message_action_row().add_select_menu(
-                hikari.ComponentType.ROLE_SELECT_MENU,
-                f"{BIRTHDAY_CONFIG_PREFIX}list_role",
-                placeholder="List role (who can list all birthdays)",
-                min_values=0,
-                max_values=1,
-            ),
-            [{"id": str(role_map[cfg.list_role]), "type": "role"}]
-            if cfg.list_role and cfg.list_role in role_map
             else [],
         )
     )

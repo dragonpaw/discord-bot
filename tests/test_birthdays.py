@@ -2,6 +2,8 @@ import datetime
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import hikari
+import pydantic
+import pytest
 
 from dragonpaw_bot.plugins.birthdays import config as birthdays_config
 from dragonpaw_bot.plugins.birthdays import cron as birthdays_cron
@@ -138,3 +140,23 @@ def test_days_until_birthday_feb29_non_leap_maps_to_mar1():
     # is_birthday_on_date does), never Feb 28.
     today = datetime.date(2026, 2, 28)
     assert _days_until_birthday(2, 29, today) == 1
+
+
+# ---------------------------------------------------------------------------- #
+#                          BirthdayEntry validation                            #
+# ---------------------------------------------------------------------------- #
+
+
+def test_entry_accepts_feb_29():
+    entry = BirthdayEntry(user_id=1, month=2, day=29)
+    assert (entry.month, entry.day) == (2, 29)
+
+
+def test_entry_rejects_feb_30():
+    with pytest.raises(pydantic.ValidationError):
+        BirthdayEntry(user_id=1, month=2, day=30)
+
+
+def test_entry_rejects_april_31():
+    with pytest.raises(pydantic.ValidationError):
+        BirthdayEntry(user_id=1, month=4, day=31)

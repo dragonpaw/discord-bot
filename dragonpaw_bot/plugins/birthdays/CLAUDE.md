@@ -28,7 +28,6 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 
 - **Register role(s)** (role multi-select, default: _None/owner-only_) — Role(s) allowed to self-register, view status, update wishlist, and remove own birthday
 - **Manage role** (role select, default: _None/owner-only_) — Role allowed to set/remove birthdays for others
-- **List role** (role select, default: _None/owner-only_) — Role allowed to list all birthdays
 - **Announcement channel** (channel select, default: _None/disabled_) — Channel where birthday announcements are posted
 - **Birthday role** (role select, default: _None/disabled_) — Role auto-assigned on the user's birthday and removed the next day
 
