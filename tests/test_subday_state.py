@@ -1,10 +1,12 @@
 import datetime
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
+import hikari
 import yaml
 
 from dragonpaw_bot.plugins.subday import state
 from dragonpaw_bot.plugins.subday.commands import (
+    _do_signup_async,
     _owned_sub_status_embed,
     _prepare_backfill,
     _validate_normal_complete,
@@ -182,3 +184,56 @@ def test_validate_normal_complete_rejects_graduated():
     target.mention = "@subby"
     error = _validate_normal_complete(guild_state, target, 123)
     assert error is not None and "graduated" in error.lower()
+
+
+# ---------------------------------------------------------------------------- #
+#                          signup praise post                                  #
+# ---------------------------------------------------------------------------- #
+
+
+def _signup_fixtures(tmp_path, monkeypatch, achievements_channel):
+    monkeypatch.setattr(state.store, "state_dir", tmp_path)
+    state.store.cache.clear()
+    gs = SubDayGuildState(guild_id=1, guild_name="G")
+    gs.config.achievements_channel = achievements_channel
+    gs.participants[42] = _sample_participant(user_id=42)
+    state.save(gs)
+
+    user = MagicMock()
+    user.id = 42
+    user.display_name = "Newbie"
+    user.username = "newbie"
+    user.fetch_dm_channel = AsyncMock()
+
+    bot = MagicMock()
+    guild = MagicMock()
+    guild.id = hikari.Snowflake(1)
+    guild.name = "G"
+    bot.rest.fetch_guild = AsyncMock(return_value=guild)
+    bot.state = Mock(return_value=None)  # no log channel
+
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    lookup = AsyncMock(return_value=channel)
+    monkeypatch.setattr("dragonpaw_bot.utils.guild_channel_by_name", lookup)
+    return bot, user, channel, lookup
+
+
+async def test_signup_praise_posted_to_achievements_channel(tmp_path, monkeypatch):
+    bot, user, channel, _lookup = _signup_fixtures(tmp_path, monkeypatch, "wins")
+
+    await _do_signup_async(bot, hikari.Snowflake(1), user)
+
+    channel.send.assert_awaited_once()
+    praise = channel.send.call_args.args[0]
+    assert "Newbie" in praise
+    assert "Where I am Led" in praise
+
+
+async def test_signup_praise_skipped_when_channel_unconfigured(tmp_path, monkeypatch):
+    bot, user, channel, lookup = _signup_fixtures(tmp_path, monkeypatch, None)
+
+    await _do_signup_async(bot, hikari.Snowflake(1), user)
+
+    lookup.assert_not_awaited()
+    channel.send.assert_not_awaited()

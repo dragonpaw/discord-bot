@@ -389,6 +389,32 @@ async def _do_signup_async(
         f"📝 **{user.display_name}** just signed up for **Where I am Led**! *happy tail wag* 🐉"
     )
 
+    # Public praise in the achievements channel, same surface as completion posts
+    if guild_state.config.achievements_channel:
+        channel = await utils.guild_channel_by_name(
+            gc, guild_state.config.achievements_channel
+        )
+        if channel is None:
+            logger.warning(
+                "Achievements channel not found, skipping signup praise",
+                guild=guild.name,
+                channel=guild_state.config.achievements_channel,
+            )
+        else:
+            try:
+                await channel.send(
+                    f"*happy dragon noises* 🎉 **{user.display_name}** just embarked on "
+                    f"**Where I am Led** — {TOTAL_WEEKS} weeks of guided journaling! "
+                    f"Cheer them on~ 💜🐉"
+                )
+            except hikari.HTTPError as exc:
+                logger.warning(
+                    "Failed to post signup praise",
+                    guild=guild.name,
+                    channel=guild_state.config.achievements_channel,
+                    error=str(exc),
+                )
+
 
 async def handle_signup_interaction(interaction: hikari.ComponentInteraction) -> None:
     """Handle the Sign Up button click from /subday about."""
