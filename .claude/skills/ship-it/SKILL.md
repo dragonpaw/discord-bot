@@ -1,11 +1,14 @@
 ---
 name: ship-it
-description: Use when the user says "ship it", "deploy", "ship-it", or wants pending changes shipped end-to-end — commit pending changes, push to main, watch the GitHub Actions build, redeploy the bot on the NAS, and tail startup logs flagging errors. Project-specific to the discord-bot repo.
+description: Use when the user says "ship it", "deploy", "ship-it", or wants pending changes landed and rolled out end-to-end. Project-specific to the discord-bot repo.
 ---
 
-# /ship-it — Commit, build, deploy, verify
+# /ship-it — Simplify, review, validate, commit, push, build, deploy, verify
 
-End-to-end shipping for the **dragonpaw discord-bot**. The repo's push-to-main triggers a CI build that pushes a Docker image to `ghcr.io/dragonpaw/discord-bot:latest`; the bot runs on the NAS as the Portainer stack `discord-bot` (id `28`, endpoint `6`) on the Portainer hub on plugger, container name `discord-bot`. CI does NOT auto-deploy — this skill closes the loop.
+End-to-end shipping for the **dragonpaw discord-bot**:
+**simplify → review → validate → commit → push → watch CI → redeploy → verify**.
+
+The repo's push-to-main triggers a CI build that pushes a Docker image to `ghcr.io/dragonpaw/discord-bot:latest`; the bot runs on the NAS as the Portainer stack `discord-bot` (id `28`, endpoint `6`) on the Portainer hub on plugger, container name `discord-bot`. CI does NOT auto-deploy — this skill closes the loop.
 
 ## When to use
 
@@ -18,42 +21,132 @@ End-to-end shipping for the **dragonpaw discord-bot**. The repo's push-to-main t
 - Working tree is clean AND `main` is already up to date with `origin/main` — nothing to ship; tell the user.
 - User explicitly wants only one of the steps (e.g. "just commit", "just deploy without committing").
 
-## Preconditions
+## Shared conventions
 
-Verify before kicking off:
+### Secret-pattern skip list
 
-1. **On `main`**: `git rev-parse --abbrev-ref HEAD` returns `main`.
-2. **Tests + lint + types pass locally** (the CI Dockerfile build doesn't run pytest):
-   ```
-   uv run ruff check dragonpaw_bot/ tests/
-   uv run ty check dragonpaw_bot/
-   uv run pytest
-   ```
-   If any fail, stop and report. Don't ship broken code.
-3. **There is something to ship**: either uncommitted changes (`git status --short` non-empty) OR commits on `main` ahead of `origin/main` (`git log origin/main..main`).
+Used by the simplifier (step 2) and the commit step (step 5). Skip files matching any of: `.env*`, `*credentials*`, `*secret*`, `*.key`, `*.pem`, `stack.env`.
+
+### Changed-files helper
+
+Steps 2, 3, and 5 need the deduplicated list of files modified vs `origin/main`. Four slices must be unioned — drop one and a file class is silently missed:
+
+```bash
+changed_files() {
+    {
+        git diff --name-only origin/main...HEAD   # committed ahead of origin
+        git diff --name-only --cached             # staged
+        git diff --name-only                      # unstaged
+        git ls-files --others --exclude-standard  # untracked
+    } | sort -u
+}
+```
+
+Filter the list against the secret-pattern skip list before passing it to subagents.
+
+### Doc-only diffs and instruction docs
+
+A diff with no `.py` changes skips the simplifier (nothing for a code simplifier to act on) — but **not the review** when it touches instruction docs: `CLAUDE.md`, any `plugins/*/CLAUDE.md`, `code-simplicity.md`, or `.claude/skills/`. Those documents are agent-executed logic — a wrong line misroutes every future run — so review them regardless. A plain README/docs typo may skip review only via `--skip-review`.
+
+### Steps 2 and 3 dispatch their own agents
+
+Steps 2 and 3 mean *separate agents*, not a second pass by the agent that wrote the code. The point is independence: an author grading their own diff re-derives their earlier reasoning instead of attacking it, and the checks that matter most (the Three Flaws, untested paths, over-genericism) are exactly the ones an author is blindest to.
+
+**Invoking `/ship-it` is a request for these agents.** Only these conditions justify the inline path: the agent genuinely can't be spawned, the agent fails (see below), the user explicitly said to run it inline, or (step 2 only) the diff is doc-only. Nothing else. "The change is small", "I already know what it'll say", "it'd be faster", and "I reviewed as I wrote it" are not reasons.
+
+**Subagent failure handling:** if a simplifier or reviewer agent is unavailable, errors, or returns nothing, surface the failure and run that step inline with the identical scope and rubric. Whenever a step runs inline, **say so in the final summary** — name the step, the reason, and that the pass was not independent. A reader must never have to guess whether "review passed" meant an independent agent or the author's own re-read.
+
+### Unattended mode
+
+When running without a user to answer (auto mode, scheduled runs): Warn-tier review findings → log and proceed; Block-tier findings always stop. Any other "ask the user" branch takes the documented safe default, or stops at a resumable checkpoint if human judgment is required.
 
 ## Steps
 
-### 1. Commit (if there are uncommitted changes)
+### 1. Pre-flight
 
-- Stage everything: `git add -A` (this project is single-author, no secret files typically lurk; still glance at `git status` first to catch `.env`, dumps, etc.).
-- Write a real Conventional Commits message (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, etc., often scoped — `feat(intros): …`). Body explains *why*, wrapped at ~72 cols.
+```bash
+git fetch origin main --quiet
+```
+
+- **On `main`**: `git rev-parse --abbrev-ref HEAD` returns `main`. If not, stop and ask.
+- **Something to ship**: uncommitted changes (`git status --short` non-empty) OR commits ahead (`git rev-list --count origin/main..main` > 0). Neither → exit cleanly: "Nothing to ship."
+- Commits ahead but clean tree: still run steps 2–4 against the committed diff; step 5 simply won't create a new commit.
+
+### 2. Simplify
+
+Skip if `--skip-simplify`, or if the diff is doc-only (see "Doc-only diffs").
+
+**Dispatch the `code-simplifier:code-simplifier` agent** — see "Steps 2 and 3 dispatch their own agents". Keep the roles straight: the agent is the **engine** that proposes edits; `code-simplicity.md` is the **rubric** that decides what counts as a real simplification and where to stop.
+
+Snapshot first, so there is a copy to compare against and restore from:
+
+```bash
+git diff > <scratchpad>/pre-simplify.patch
+```
+
+Prompt the agent with concrete inputs, not "look at git status":
+
+- **Scope**: only the secret-filtered `changed_files` list; never unrelated files or stable code already shipped.
+- **Standards**: `code-simplicity.md` + repo CLAUDE.md conventions — especially the Three Flaws (speculative code, rigid non-DRY code, over-genericism). No abstraction the diff doesn't need.
+- **Behaviour preservation**: no semantic changes unless fixing an obvious bug; call out and justify any in its summary.
+- **Apply gate** (per `code-simplicity.md` § "What to refuse"): trivial local cleanups (inline a single-use variable, delete dead code, DRY a duplicated literal) apply directly. Structural changes (merging/splitting functions, abstraction or signature changes) are surfaced for confirmation, not silently applied.
+- **Edits go through edit tools, never through git.** `git checkout` / `restore` / `reset` / `stash` / `clean` / `add` are forbidden, as is committing. The change being shipped is usually still uncommitted, so a git-level undo eats the operator's work with no copy to restore from. Reading git (`diff`, `log`, `status`, `show`) is unrestricted.
+
+After it returns: check scope wasn't exceeded, then diff the snapshot against the current `git diff` — only the comparison catches your own work being reverted out from under you (`--stat` alone is not enough; a partial revert leaves plausible-looking counts). Then `uv run ruff check dragonpaw_bot/ tests/` — if lint fails, hand the output back or fix; don't review broken code.
+
+### 3. Review
+
+Skip if `--skip-review` (log: "Skipping code review (not recommended)" and continue).
+
+**Run the `code-review` skill** on the pending diff vs `origin/main`; if unavailable, dispatch a `feature-dev:code-reviewer` agent with the changed-file list and the rubric below. The independence *is* the check.
+
+**Any dispatched reviewer is strictly read-only — say so in its prompt every time.** The working tree is usually the only copy of the change. Forbid explicitly: editing/creating/deleting any file, and `git checkout` / `restore` / `stash` / `reset` / `clean` / `add` / commit — none of those "edit a file", so a prompt that only says "don't edit files" permits every one of them, and each destroys uncommitted work. Reading files and read-only git inspection are unrestricted. If a reviewer reports having touched the tree anyway, treat the verdict as untrusted: re-check `git diff` against what you last saw before committing, and re-run the review if anything moved.
+
+Point the review at `code-simplicity.md` and repo CLAUDE.md, and have it audit:
+
+- **The Three Flaws** (`code-simplicity.md`): speculative code, rigid non-DRY code, over-genericism (e.g. a new abstraction with one caller). Any clear violation is **Block** severity.
+- **The per-change checklist** (`code-simplicity.md` § "A checklist for every change"): failures are **Warn** unless severe (untested new code path → Block).
+- **Repo conventions** ruff/ty can't catch: interaction-respond-before-slow-work, dragon persona in user-facing copy and `gc.log()`, structlog conventions, plugin CLAUDE.md updated to match the change.
+
+Collapse findings into tiers:
+
+- **Block** — critical / must-fix, or any Three-Flaws violation. Show file + line and stop; fix and re-run ship-it.
+- **Warn** — should-fix / checklist gaps. Ask "proceed? (yes/no)"; unattended: log and proceed.
+- **Info** — nits. Final summary only; don't prompt.
+
+### 4. Validate
+
+The CI Dockerfile build doesn't run pytest, so the local gate is the only test gate:
+
+```bash
+uv run ruff check dragonpaw_bot/ tests/
+uv run ty check dragonpaw_bot/
+uv run pytest
+```
+
+Any check fails → stop and report. Don't ship broken code.
+
+### 5. Commit (if there are uncommitted changes)
+
+- Glance at `git status --short` for secret-pattern matches or stray dumps, then stage: `git add -A` is acceptable in this single-author repo once the glance is clean.
+- Write a real Conventional Commits message (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, often scoped — `feat(intros): …`). Body explains *why*, wrapped at ~72 cols.
 - Include the Claude co-author trailer per global commit guidance.
 - Use a HEREDOC so multi-line bodies survive.
+- If the commit fails (hook, etc.), fix and create a *new* commit — never `--amend`: the hook failure means no new commit exists, so amend would rewrite the previous, unrelated one.
 
-### 2. Push
+### 6. Push
 
-```
+```bash
 git push origin main
 ```
 
-If the push is rejected (someone else pushed concurrently), `git pull --rebase` then push again. Never force-push.
+If the push is rejected (someone else pushed concurrently), `git pull --rebase`, re-run step 4 (an upstream change can break this branch without a textual conflict), then push again. Never force-push. Rebase conflicts: stop and resolve with the user; never auto-resolve.
 
-### 3. Watch the build
+### 7. Watch the build
 
-The workflow is `.github/workflows/build.yaml` ("Build and Deploy"). It only builds + pushes; there is no GH-side deploy.
+The workflow is `.github/workflows/build.yaml` ("Build and Deploy"). It only builds + pushes the image; there is no GH-side deploy.
 
-```
+```bash
 sleep 5    # give Actions a moment to register the run
 RUN_ID=$(gh run list --branch main --limit 1 --json databaseId,headSha -q ".[0].databaseId")
 gh run watch "$RUN_ID" --exit-status
@@ -61,9 +154,9 @@ gh run watch "$RUN_ID" --exit-status
 
 `gh run watch --exit-status` blocks until the run finishes and exits non-zero on failure. The Bash timeout should be ≥10 min (`timeout: 600000`). The build usually takes ~50s.
 
-If the build fails: pull the failing job's logs with `gh run view "$RUN_ID" --log-failed`, surface the error, stop. Don't try to deploy a failed build.
+If the build fails: pull the failing job's logs with `gh run view "$RUN_ID" --log-failed`, surface the error, stop. Don't deploy a failed build.
 
-### 4. Deploy on the NAS (Portainer hub API)
+### 8. Deploy on the NAS (Portainer hub API)
 
 The bot runs as the standalone (non-git) compose stack **`discord-bot`** (id `28`) on **endpoint 6** (`nas`) of the Portainer hub on **plugger** (`http://10.0.2.203:19900`). The single service `bot` runs as container **`discord-bot`** (host network). See `~/.claude/skills/asustor-nas/SKILL.md` for the hub/endpoint model. (History: re-adopted onto ep6 on 2026-07-04 from the retired ep3 stack id 5; the old on-box `docker compose --env-file stack.env` path is dead — ep3's endpoint no longer exists.)
 
@@ -99,7 +192,7 @@ python3 scratchpad/redeploy.py
 
 **Note:** these Portainer-API writes are production deploys — the auto-mode classifier may prompt for approval even though `ssh nas` itself is pre-authorized via the asustor-nas standing grant.
 
-### 5. Tail startup logs and triage (Portainer API)
+### 9. Tail startup logs and triage (Portainer API)
 
 Fetch the container's logs from the hub (no ssh). Container name is **`discord-bot`**:
 
@@ -133,9 +226,14 @@ Success signals to look for in the tail:
 
 If the build TAG in the "Connected to Discord" line matches roughly the timestamp of the commit you just pushed, the new image is actually running.
 
-### 6. Report back
+### 10. Report back
 
-One-paragraph summary: commit SHA, build status, deploy result, startup time, and any non-benign warnings (or "clean startup"). Don't include the bot token, raw stack.env contents, or full noisy log dumps.
+One-paragraph summary: commit SHA, simplify/review outcomes (including any step that ran inline instead of via an independent agent, and why), build status, deploy result, startup time, and any non-benign warnings (or "clean startup"). Don't include the bot token, raw stack.env contents, or full noisy log dumps.
+
+## Arguments
+
+- `--skip-simplify` — skip step 2.
+- `--skip-review` — skip step 3. Reserve for genuinely trivial changes (doc-only typo, comment edit) or changes already reviewed by other means.
 
 ## Quick reference
 
@@ -143,6 +241,9 @@ One-paragraph summary: commit SHA, build status, deploy result, startup time, an
 |---|---|
 | Repo | `dragonpaw/discord-bot` |
 | Branch model | push direct to `main` |
+| Simplifier | `code-simplifier:code-simplifier` agent, rubric `code-simplicity.md` |
+| Reviewer | `code-review` skill (fallback: `feature-dev:code-reviewer` agent, read-only) |
+| Local gate | `uv run ruff check` + `uv run ty check dragonpaw_bot/` + `uv run pytest` |
 | Image | `ghcr.io/dragonpaw/discord-bot:latest` |
 | CI workflow | `.github/workflows/build.yaml` |
 | NAS host | `nas` (ssh config) — see `~/.claude/skills/asustor-nas/SKILL.md` |
@@ -150,7 +251,7 @@ One-paragraph summary: commit SHA, build status, deploy result, startup time, an
 | Portainer creds | `~/.config/fish/conf.d/nas.fish` → `$PORTAINER_URL`, `$PORTAINER_TOKEN` (secret) |
 | Portainer stack | name `discord-bot`, id `28` (look up by name + `EndpointId==6`) |
 | Container name | `discord-bot` |
-| Deploy | `PUT /api/stacks/{id}?endpointId=6` with `pullImage:true` (see step 4) |
+| Deploy | `PUT /api/stacks/{id}?endpointId=6` with `pullImage:true` (see step 8) |
 | Compose (source of truth) | `~/src/discord-bot/docker-compose.yml` |
 | Env (`BOT_TOKEN`/`CLIENT_ID`) | stored in the Portainer stack; stale ep3 copy at `/share/Docker/PortainerCE/data/compose/5/stack.env` (recovery only, do not print) |
 | Service | `bot` |
