@@ -67,10 +67,10 @@ removes the member from Discord's view; bot state is cleaned up on the next
 
 ### Configuration
 
-Managed via `/config validation` (owner only):
+Managed via `/config validation` (admins: MANAGE_GUILD or ADMINISTRATOR):
 
-- **`setup [lobby_channel] [validate_category] [member_role] [staff_role]`**
-  — Set any combination. Omitted params keep current values. The welcome announcement channel is configured globally via `/config channels general`. Timeout (4d, `MAX_VALIDATION_DAYS` in `commands.py`) and reminder interval (16h, `REMINDER_INTERVAL_HOURS` in `cron.py`) are hardcoded constants.
+- **`setup [lobby_channel] [validate_category] [member_role] [staff_role] [about_channel] [roles_channel] [events_channel] [chat_channel]`**
+  — Set any combination. Omitted params keep current values. The four `*_channel` options are the channels linked in the welcome announcement; the introductions link comes from the intros plugin's configured channel (`/config intros`), not from validation state. The welcome announcement channel is configured globally via `/config channels general`. Timeout (4d, `MAX_VALIDATION_DAYS` in `commands.py`) and reminder interval (16h, `REMINDER_INTERVAL_HOURS` in `cron.py`) are hardcoded constants.
 - **`status`** — Shows config + member counts at each stage.
 
 State persisted to `state/validation_{guild_id}.yaml`.

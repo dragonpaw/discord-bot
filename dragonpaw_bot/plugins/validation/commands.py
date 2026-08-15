@@ -68,6 +68,11 @@ async def _close_validate_channel(
     await gc.delete_channel(channel_id)
 
 
+def _channel_ref(channel_id: int | None, fallback: str) -> str:
+    """A channel mention when configured, else the literal fallback name."""
+    return f"<#{channel_id}>" if channel_id else fallback
+
+
 def _sanitize_channel_name(display_name: str) -> str:
     """Convert a display name to a valid Discord channel name: validate-{name}."""
     name = re.sub(r"[\[({][^\[({]*[\])}].*$", "", display_name).strip()
@@ -614,10 +619,10 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
         return
 
     st = validation_state.load(int(interaction.guild_id))
-    member_entry_check = next(
+    member_entry = next(
         (m for m in st.members if m.channel_id == channel_id), None
     )
-    if member_entry_check and int(interaction.user.id) == member_entry_check.user_id:
+    if member_entry and int(interaction.user.id) == member_entry.user_id:
         await interaction.edit_initial_response(
             content="*side-eyes you* 🐉 You can't approve your own verification! 🐾"
         )
@@ -642,7 +647,6 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
     gc = GuildContext.from_interaction(interaction)  # type: ignore[arg-type]
 
-    member_entry = member_entry_check
     if not member_entry:
         await interaction.edit_initial_response(
             content="*confused head tilt* I couldn't find that validation entry — it may have already been processed. 🐉"
@@ -716,26 +720,12 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
     bot_st = bot.state(interaction.guild_id)
     general_channel_id = bot_st.general_channel_id if bot_st else None
     if general_channel_id:
-        if st.about_channel_id:
-            about_ref = f"<#{st.about_channel_id}>"
-        else:
-            about_ref = "#about"
-        if st.roles_channel_id:
-            roles_ref = f"<#{st.roles_channel_id}>"
-        else:
-            roles_ref = "#roles"
-        if st.intros_channel_id:
-            intros_ref = f"<#{st.intros_channel_id}>"
-        else:
-            intros_ref = "#introductions"
-        if st.events_channel_id:
-            events_ref = f"<#{st.events_channel_id}>"
-        else:
-            events_ref = "#classes-and-events"
-        if st.chat_channel_id:
-            chat_ref = f"<#{st.chat_channel_id}>"
-        else:
-            chat_ref = "#general-often-lewd"
+        about_ref = _channel_ref(st.about_channel_id, "#about")
+        roles_ref = _channel_ref(st.roles_channel_id, "#roles")
+        # the intros plugin owns the intros channel fact
+        intros_ref = _channel_ref(intros_st.channel_id, "#introductions")
+        events_ref = _channel_ref(st.events_channel_id, "#classes-and-events")
+        chat_ref = _channel_ref(st.chat_channel_id, "#general-often-lewd")
         try:
             await bot.rest.create_message(
                 channel=general_channel_id,

@@ -11,6 +11,7 @@ import pytest
 
 from dragonpaw_bot.plugins.validation import state as validation_state
 from dragonpaw_bot.plugins.validation.commands import (
+    _channel_ref,
     _close_validate_channel,
     _is_staff,
     _reconcile_guild,
@@ -767,3 +768,11 @@ async def test_cron_deadline_does_not_block_on_channel_close(tmp_path, monkeypat
     blocker.set()  # unblock so the background task can finish cleanly
     await asyncio.sleep(0)
     bot.rest.kick_user.assert_called_once()
+
+
+def test_channel_ref_configured():
+    assert _channel_ref(555, "#fallback") == "<#555>"
+
+
+def test_channel_ref_fallback():
+    assert _channel_ref(None, "#fallback") == "#fallback"

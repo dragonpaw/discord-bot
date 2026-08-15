@@ -32,7 +32,6 @@ class ValidationGuildState(GuildStateBase):
     # welcome message channel links
     about_channel_id: int | None = None
     roles_channel_id: int | None = None
-    intros_channel_id: int | None = None
     events_channel_id: int | None = None
     chat_channel_id: int | None = None
     # runtime

@@ -11,6 +11,9 @@ from dragonpaw_bot.context import (
     guild_owner_only,
 )
 from dragonpaw_bot.plugins.validation import state as validation_state
+from dragonpaw_bot.plugins.validation.commands import MAX_VALIDATION_DAYS
+from dragonpaw_bot.plugins.validation.cron import REMINDER_INTERVAL_HOURS
+from dragonpaw_bot.plugins.validation.models import ValidationStage
 
 logger = structlog.get_logger(__name__)
 
@@ -61,12 +64,6 @@ class ValidationSetup(
         default=None,
         channel_types=[hikari.ChannelType.GUILD_TEXT],
     )
-    intros_channel = lightbulb.channel(
-        "intros_channel",
-        "Channel linked in the welcome message for introductions",
-        default=None,
-        channel_types=[hikari.ChannelType.GUILD_TEXT],
-    )
     events_channel = lightbulb.channel(
         "events_channel",
         "Channel linked in the welcome message for classes and events",
@@ -100,8 +97,6 @@ class ValidationSetup(
             st.about_channel_id = int(self.about_channel.id)
         if self.roles_channel is not None:
             st.roles_channel_id = int(self.roles_channel.id)
-        if self.intros_channel is not None:
-            st.intros_channel_id = int(self.intros_channel.id)
         if self.events_channel is not None:
             st.events_channel_id = int(self.events_channel.id)
         if self.chat_channel is not None:
@@ -131,8 +126,6 @@ class ValidationSetup(
             parts.append(f"about: <#{self.about_channel.id}>")
         if self.roles_channel:
             parts.append(f"roles: <#{self.roles_channel.id}>")
-        if self.intros_channel:
-            parts.append(f"intros: <#{self.intros_channel.id}>")
         if self.events_channel:
             parts.append(f"events: <#{self.events_channel.id}>")
         if self.chat_channel:
@@ -195,11 +188,15 @@ class ValidationStatus(
             return
         st = validation_state.load(int(ctx.guild_id))
 
-        awaiting_rules = sum(1 for m in st.members if m.stage.value == "awaiting_rules")
-        awaiting_photos = sum(
-            1 for m in st.members if m.stage.value == "awaiting_photos"
+        awaiting_rules = sum(
+            1 for m in st.members if m.stage == ValidationStage.AWAITING_RULES
         )
-        awaiting_staff = sum(1 for m in st.members if m.stage.value == "awaiting_staff")
+        awaiting_photos = sum(
+            1 for m in st.members if m.stage == ValidationStage.AWAITING_PHOTOS
+        )
+        awaiting_staff = sum(
+            1 for m in st.members if m.stage == ValidationStage.AWAITING_STAFF
+        )
 
         bot: hikari.GatewayBot = ctx.client.app  # type: ignore[assignment]
         category_ch = (
@@ -226,15 +223,15 @@ class ValidationStatus(
         lines.append(
             f"• Staff role: {f'<@&{st.staff_role_id}>' if st.staff_role_id else 'not set'}"
         )
-        lines.append("• Validation timeout: 4 days from join, reminders every 16 hours")
+        lines.append(
+            f"• Validation timeout: {MAX_VALIDATION_DAYS} days from join, "
+            f"reminders every {REMINDER_INTERVAL_HOURS} hours"
+        )
         lines.append(
             f"• About channel: {f'<#{st.about_channel_id}>' if st.about_channel_id else 'not set'}"
         )
         lines.append(
             f"• Roles channel: {f'<#{st.roles_channel_id}>' if st.roles_channel_id else 'not set'}"
-        )
-        lines.append(
-            f"• Intros channel: {f'<#{st.intros_channel_id}>' if st.intros_channel_id else 'not set'}"
         )
         lines.append(
             f"• Events channel: {f'<#{st.events_channel_id}>' if st.events_channel_id else 'not set'}"
