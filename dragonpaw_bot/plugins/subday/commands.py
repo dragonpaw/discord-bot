@@ -306,7 +306,6 @@ async def _post_achievement(
 
 
 def _do_signup(
-    bot: DragonpawBot,
     guild_id: hikari.Snowflake,
     user: hikari.User,
 ) -> str | None:
@@ -374,8 +373,6 @@ async def _do_signup_async(
     try:
         dm = await user.fetch_dm_channel()
         await dm.send(embeds=[welcome_embed, prompt_embed])
-        participant.week_sent = True
-        state.save(guild_state)
     except hikari.HTTPError as exc:
         logger.warning(
             "Cannot DM user for SubDay signup",
@@ -432,7 +429,7 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
         )
         return
 
-    msg = _do_signup(bot, guild_id, interaction.user)
+    msg = _do_signup(guild_id, interaction.user)
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
         content=msg
@@ -598,10 +595,10 @@ async def handle_about_interaction(interaction: hikari.ComponentInteraction) -> 
 
 
 def _owned_sub_status_embed(
-    sub_user_id: int, p: SubDayParticipant, cfg: SubDayGuildConfig, sub_name: str
+    p: SubDayParticipant, cfg: SubDayGuildConfig, sub_name: str
 ) -> hikari.Embed:
     """Build a compact status embed for an owned sub (no star chart)."""
-    if p.current_week > TOTAL_WEEKS:
+    if p.graduated:
         icon = "🎓"
         status = "Graduated!"
     elif p.week_completed:
@@ -628,7 +625,7 @@ def _own_progress_embed(
     p: SubDayParticipant, display_name: str, cfg: SubDayGuildConfig
 ) -> hikari.Embed:
     """Build the caller's own progress embed with star chart."""
-    if p.current_week > TOTAL_WEEKS:
+    if p.graduated:
         chart_bytes = chart.render_star_chart(
             username=display_name,
             current_week=p.current_week,
@@ -730,7 +727,7 @@ class SubDayStatus(
         if own_participant:
             display_name = ctx.member.display_name if ctx.member else ctx.user.username
             embeds.append(_own_progress_embed(own_participant, display_name, cfg))
-            if own_participant.current_week <= TOTAL_WEEKS:
+            if not own_participant.graduated:
                 embeds.append(
                     prompts.build_prompt_embed(
                         prompts.load_week(own_participant.current_week)
@@ -746,7 +743,7 @@ class SubDayStatus(
                 sub_name = member.display_name
             except hikari.NotFoundError:
                 sub_name = f"User {sub_uid}"
-            embeds.append(_owned_sub_status_embed(sub_uid, sub_p, cfg, sub_name))
+            embeds.append(_owned_sub_status_embed(sub_p, cfg, sub_name))
 
         await ctx.respond(
             embeds=embeds,
@@ -1104,7 +1101,7 @@ class SubDaySignup(
         if not await gc.check_permission(ctx, cfg.enroll_role, "signup"):
             return
 
-        msg = _do_signup(gc.bot, ctx.guild_id, ctx.user)
+        msg = _do_signup(ctx.guild_id, ctx.user)
         if msg is None:
             await ctx.respond(
                 "You're already signed up, silly! 🐉 Use `/subday status` to check your progress~",
@@ -1133,7 +1130,6 @@ def _prepare_backfill(
         auto_enrolled = True
 
     participant.current_week = week
-    participant.week_sent = False
     return participant, auto_enrolled
 
 
@@ -1148,15 +1144,15 @@ def _validate_normal_complete(
 
     participant = guild_state.participants[target_id]
 
+    if participant.graduated:
+        return f"🎓 {target.mention} has already graduated! 🐉✨"
+
     if participant.week_completed:
         return (
             f"🐉 {target.mention} already finished week "
             f"{participant.current_week}! "
             "They'll get their next prompt on Sunday~"
         )
-
-    if participant.current_week > TOTAL_WEEKS:
-        return f"🎓 {target.mention} has already graduated! 🐉✨"
 
     return None
 
@@ -1192,8 +1188,7 @@ class SubDayComplete(
         target_id = int(target.id)
 
         requested_week: int | None = self.week
-        has_explicit_week = requested_week is not None
-        is_backfill = has_explicit_week
+        is_backfill = requested_week is not None
 
         required_role = cfg.backfill_role if is_backfill else cfg.complete_role
         action = "backfill" if is_backfill else "complete"
@@ -1265,12 +1260,11 @@ class SubDayComplete(
         participant.last_completed_date = datetime.datetime.now(tz=datetime.UTC)
 
         sent_next = bool(
-            self.sent and has_explicit_week and participant.current_week < TOTAL_WEEKS
+            self.sent and is_backfill and participant.current_week < TOTAL_WEEKS
         )
         if sent_next:
             participant.current_week += 1
             participant.week_completed = False
-            participant.week_sent = True
 
         state.save(guild_state)
 
@@ -1407,7 +1401,7 @@ class SubDayList(
             key=lambda x: (x[1].current_week, display_names.get(x[0], "")),
         ):
             icon = "✅" if p.week_completed else "⏳"
-            if p.current_week > TOTAL_WEEKS:
+            if p.graduated:
                 icon = "🎓"
             line = f"{icon} <@{uid}> — Week {p.current_week}/{TOTAL_WEEKS}"
             if p.owner_id:
@@ -1497,7 +1491,7 @@ class SubDayResend(
             )
             return
 
-        if participant.current_week > TOTAL_WEEKS:
+        if participant.graduated:
             await ctx.respond(
                 "🎓 You've already graduated — there's no prompt left to resend! 🐉✨",
                 flags=hikari.MessageFlag.EPHEMERAL,
@@ -1534,10 +1528,6 @@ class SubDayResend(
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
-
-        if not participant.week_sent:
-            participant.week_sent = True
-            state.save(guild_state)
 
         await ctx.respond(
             f"📬 Sent your **Week {participant.current_week}** prompt again — "

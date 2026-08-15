@@ -17,10 +17,10 @@ Notifications (completions, milestones, signups, removals, owner accept/deny, co
 - **help** — Shows contextual help listing only the commands the user can access based on their roles and permissions.
 - **about** — Displays program info as three color-coded embeds (violet intro, cyan details, yellow rewards). Includes a "Sign Up" button. Ephemeral.
 - **status** — Shows the user's own progress: current week, completion status, next milestone, signup date. If the user is an owner, also shows compact status embeds (cyan) for each of their subs.
-- **resend** — Self-service. Resends the caller's own current-week prompt to their DMs (a short resend greeting + the prompt embed via `prompts.build_resend_dm_embeds`). No role gate; only acts if the caller is signed up. No-ops with a friendly message if not signed up or already graduated. Sets `week_sent = True` on success. Does not copy the owner or post to the staff log.
+- **resend** — Self-service. Resends the caller's own current-week prompt to their DMs (a short resend greeting + the prompt embed via `prompts.build_resend_dm_embeds`). No role gate; only acts if the caller is signed up. No-ops with a friendly message if not signed up or already graduated. Does not copy the owner or post to the staff log.
 - **owner [@user]** — Sets or clears the user's owner. See Owner Feature below.
 - **signup** — Requires `enroll_role`. Registers user, DMs week 1 prompt + rules. Handles DM failures gracefully.
-- **complete @user [week:\<n\>] [sent:\<bool\>]** — Requires `complete_role`. Marks the user's current week done. Cannot complete yourself. DMs a completion embed with star chart. Posts to `achievements_channel` if set. At milestones: assigns role, logs prize info. With optional `week` parameter: requires `backfill_role` (explicit week always = backfill), sets the participant to that week and marks it complete. Auto-enrolls the user if not signed up. With `sent:True` alongside `week`: after marking complete, advances the participant to the next week with `week_sent = True` so the Sunday cron skips the re-send (use when the next prompt was already DM'd manually).
+- **complete @user [week:\<n\>] [sent:\<bool\>]** — Requires `complete_role`. Marks the user's current week done. Cannot complete yourself. DMs a completion embed with star chart. Posts to `achievements_channel` if set. At milestones: assigns role, logs prize info. With optional `week` parameter: requires `backfill_role` (explicit week always = backfill), sets the participant to that week and marks it complete. Auto-enrolls the user if not signed up. With `sent:True` alongside `week`: after marking complete, advances the participant to the next week without DMing (the Sunday cron only sends a prompt at the moment it advances someone itself, so nothing is re-sent — use when the next prompt was already DM'd manually).
 - **list** — Requires `complete_role`. Shows all participants + progress with status icons.
 - **remove @user** — Requires `complete_role`. Removes a participant.
 
@@ -68,7 +68,7 @@ Setting a role to `None` disables role assignment for that milestone (the achiev
 2. User completes the week's writing and shows a reviewer
 3. Reviewer runs `/subday complete @user` → achievement posted, week marked done
 4. On Sunday at 14:00 UTC, the cron task (`cron.py`) advances completed participants to the next week and DMs a greeting embed (with progress bar and milestone countdown) followed by the prompt embed. If the participant has a confirmed owner, the owner also receives a copy. Errors are isolated per-guild. The cron also verifies owners are still in the guild and clears `owner_id` on all their subs if they've left.
-5. Participants who haven't completed their week are paused (skipped until completed)
+5. Participants who haven't completed their week are paused (skipped until completed). A participant with week 52 completed is **graduated** (`SubDayParticipant.graduated`): the cron leaves them alone and status/list/resend show graduation instead of progress.
 6. On Friday at 20:00 UTC (noon PST), the Friday reminder cron (`cron.py`) DMs participants who haven't finished their current week. Each participant gets at most one reminder per week (tracked via `reminder_sent` flag, reset on completion and on Sunday advance). If the participant has a confirmed owner, the owner also gets a heads-up DM.
 
 ### Achievement Embeds
@@ -86,11 +86,10 @@ Achievement embeds and `/subday status` include a Pillow-generated star chart PN
 - **Title bar**: "Subday Journals:" in DaxCondensed-Bold + username in hot pink Caveat handwriting font
 - **Grid layout**: 7 columns × 8 rows, divided into 4 sections of 14 cells (13 weeks + 1 prize cell)
 - **Completed weeks**: Filled 5-point star in a random bright color with slight rotation/position jitter
-- **Current week**: Blue outlined star
-- **Future weeks**: Light gray outlined star
+- **Future weeks** (including the in-progress current week): Light gray outlined star
 - **Prize cells** (cell 14 per section): Gold star when milestone reached, empty outline otherwise
-- Colors and rotations are seeded by username for consistency across renders
-- Fonts in `fonts/` directory: DaxCondensed (Bold/Regular/Medium) + Caveat-Bold
+- Colors and rotations are seeded by username (CRC32, stable across restarts) for consistency across renders
+- Fonts in the repo-root `fonts/` directory: DaxCondensed Bold + Light, Caveat-Bold. Prize-cell icons in `icons/` next to `chart.py`.
 
 ### Button Channel Card
 
@@ -152,10 +151,10 @@ Persisted as `state/subday_{guild_id}.yaml`, separate from the main guild state.
 
 ### Error Handling
 
-- **Interaction listener** (`__init__.py`): Both signup and config interaction handlers are wrapped in try/except. On failure, an ephemeral error message is sent to the user (with a fallback if the interaction already expired).
+- **Interaction listener**: `__init__.py` is just the dispatch table; the central dispatcher in `bot.py` wraps handler calls in try/except and sends an ephemeral error message on failure.
 - **Guild log channel**: All notifications use `gc.log()` (on `GuildContext`), which silently skips if no log channel is configured and handles HTTP errors gracefully.
 - **Achievement posts**: Wrapped in try/except so channel permission issues don't crash the completion flow.
-- **Channel permission checks** (`utils.py`): `check_channel_perms` handles both `ForbiddenError` (can't view channel) and `NotFoundError` (channel deleted) gracefully.
+- **Channel permission checks** (`context.py`): `check_channel_perms` handles both `ForbiddenError` (can't view channel) and `NotFoundError` (channel deleted) gracefully.
 - **Sunday cron task**: Per-guild error isolation — one guild's failure doesn't abort processing for other guilds.
 - **Friday reminder cron**: Per-guild error isolation. Per-DM error isolation for both sub and owner DMs.
 

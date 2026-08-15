@@ -2,6 +2,7 @@ import datetime
 
 import pydantic
 
+from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
 from dragonpaw_bot.state_store import GuildStateBase
 
 
@@ -11,10 +12,14 @@ class SubDayParticipant(pydantic.BaseModel):
     week_completed: bool = False
     signup_date: datetime.datetime
     last_completed_date: datetime.datetime | None = None
-    week_sent: bool = False
     reminder_sent: bool = False
     owner_id: int | None = None
     pending_owner_id: int | None = None
+
+    @property
+    def graduated(self) -> bool:
+        """Finished the program: final week completed."""
+        return self.current_week >= TOTAL_WEEKS and self.week_completed
 
 
 class SubDayGuildConfig(pydantic.BaseModel):

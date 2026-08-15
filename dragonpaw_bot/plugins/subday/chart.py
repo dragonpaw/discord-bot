@@ -17,9 +17,7 @@ from dragonpaw_bot.plugins.subday.constants import MILESTONE_WEEKS, TOTAL_WEEKS
 
 FONTS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "fonts"
 FONT_TITLE = FONTS_DIR / "DaxCondensed-Bold.ttf"
-FONT_NUMBERS = FONTS_DIR / "DaxCondensed-Regular.ttf"
 FONT_NUMBERS_LIGHT = FONTS_DIR / "DaxCondensed_Light.ttf"
-FONT_MILESTONE = FONTS_DIR / "DaxCondensed-Medium.ttf"
 FONT_USERNAME = FONTS_DIR / "Caveat-Bold.ttf"
 
 COLS = 7
@@ -375,12 +373,7 @@ def render_star_chart(
     )
 
     # ---- Determine completion ----
-    if current_week > TOTAL_WEEKS:
-        last_completed = TOTAL_WEEKS
-    elif week_completed:
-        last_completed = current_week
-    else:
-        last_completed = current_week - 1
+    last_completed = current_week if week_completed else current_week - 1
 
     grid_top = PADDING + TITLE_HEIGHT
 
@@ -407,8 +400,6 @@ def render_star_chart(
                         cy,
                         week_num,
                         last_completed,
-                        current_week,
-                        week_completed,
                         week_colors,
                         week_rotations,
                         week_jitter_x,
@@ -420,7 +411,6 @@ def render_star_chart(
                     milestone_week = (section + 1) * WEEKS_PER_SECTION
                     milestone_reached = last_completed >= milestone_week
                     _draw_prize_cell(
-                        draw,
                         img,
                         cx,
                         cy,
@@ -443,8 +433,6 @@ def _draw_week_cell(
     cy: float,
     week: int,
     last_completed: int,
-    current_week: int,
-    week_completed: bool,
     colors: list[tuple[int, int, int]],
     rotations: list[float],
     jitter_x: list[float],
@@ -494,7 +482,6 @@ def _draw_week_cell(
 
 
 def _draw_prize_cell(
-    draw: ImageDraw.ImageDraw,
     img: Image.Image,
     cx: float,
     cy: float,

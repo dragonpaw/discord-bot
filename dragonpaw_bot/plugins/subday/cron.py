@@ -9,9 +9,6 @@ import structlog
 
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.subday import prompts, state
-from dragonpaw_bot.plugins.subday.constants import (
-    TOTAL_WEEKS,
-)
 from dragonpaw_bot.utils import guild_member
 
 if TYPE_CHECKING:
@@ -99,7 +96,7 @@ async def _advance_participant(
         )
         return False
 
-    if participant.current_week >= TOTAL_WEEKS:
+    if participant.graduated:
         log.debug(
             "Already graduated, skipping",
             week=participant.current_week,
@@ -114,27 +111,24 @@ async def _advance_participant(
 
     participant.current_week += 1
     participant.week_completed = False
-    participant.week_sent = False
     participant.reminder_sent = False
     log.info("Advanced to week", week=participant.current_week)
 
-    if participant.current_week <= TOTAL_WEEKS:
-        try:
-            prompt = prompts.load_week(participant.current_week)
-            dm_embeds = prompts.build_weekly_dm_embeds(prompt)
-            dm = await member.user.fetch_dm_channel()
-            await dm.send(embeds=dm_embeds)
-            participant.week_sent = True
-            log.info(
-                "Sent SubDay week prompt",
-                week=participant.current_week,
-            )
-            if participant.owner_id:
-                owner_prompts.setdefault(participant.owner_id, []).append((uid, prompt))
-        except hikari.ForbiddenError:
-            log.warning("Cannot DM user for SubDay prompt (DMs disabled)")
-        except hikari.HTTPError as exc:
-            log.warning("Failed to DM SubDay prompt", error=str(exc))
+    try:
+        prompt = prompts.load_week(participant.current_week)
+        dm_embeds = prompts.build_weekly_dm_embeds(prompt)
+        dm = await member.user.fetch_dm_channel()
+        await dm.send(embeds=dm_embeds)
+        log.info(
+            "Sent SubDay week prompt",
+            week=participant.current_week,
+        )
+        if participant.owner_id:
+            owner_prompts.setdefault(participant.owner_id, []).append((uid, prompt))
+    except hikari.ForbiddenError:
+        log.warning("Cannot DM user for SubDay prompt (DMs disabled)")
+    except hikari.HTTPError as exc:
+        log.warning("Failed to DM SubDay prompt", error=str(exc))
 
     await asyncio.sleep(1)
     return True

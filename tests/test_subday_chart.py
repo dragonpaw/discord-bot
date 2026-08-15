@@ -51,9 +51,9 @@ def test_graduated():
     assert len(result.data) > 0
 
 
-def test_post_graduation():
-    """Week 53 means graduated — all stars should be filled."""
-    result = render_star_chart("TestUser", 53, False)
+def test_graduated_chart():
+    """Week 52 completed means graduated — the full chart still renders."""
+    result = render_star_chart("TestUser", 52, True)
     assert len(result.data) > 0
 
 
