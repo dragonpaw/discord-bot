@@ -278,11 +278,7 @@ class GuildContext:
         guild = await self.fetch_guild()
         if isinstance(role_name, list):
             allowed = has_any_role_permission(guild, self.member, role_name)
-            label = (
-                "one of the **" + "**, **".join(role_name) + "** roles"
-                if role_name
-                else "server owner status"
-            )
+            label = role_list_label(role_name)
         else:
             allowed = has_permission(guild, self.member, role_name)
             label = f"**{role_name}** role" if role_name else "server owner status"
@@ -796,6 +792,13 @@ async def check_role_manageable(
 # ---------------------------------------------------------------------------- #
 #                              Lightbulb hooks                                 #
 # ---------------------------------------------------------------------------- #
+
+
+def role_list_label(role_names: list[str]) -> str:
+    """Human label for a role-gated permission, or the owner-only fallback."""
+    if not role_names:
+        return "server owner status"
+    return "one of the **" + "**, **".join(role_names) + "** roles"
 
 
 class NotAuthorized(Exception):

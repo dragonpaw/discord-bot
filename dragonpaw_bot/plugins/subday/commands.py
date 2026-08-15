@@ -14,7 +14,7 @@ from dragonpaw_bot.colors import (
     SOLARIZED_VIOLET,
     SOLARIZED_YELLOW,
 )
-from dragonpaw_bot.context import GuildContext
+from dragonpaw_bot.context import GuildContext, role_list_label
 from dragonpaw_bot.plugins.subday import chart, prompts, state
 from dragonpaw_bot.plugins.subday.constants import (
     MAX_EMBEDS_PER_MESSAGE,
@@ -166,6 +166,22 @@ async def _dm_completion(
             user=target.display_name,
             error=str(exc),
         )
+
+
+def _progress_footer(p: SubDayParticipant) -> str:
+    """The Progress/Signed-up lines shared by the status embeds."""
+    return (
+        f"\n\n**Progress**: {p.current_week}/{TOTAL_WEEKS} weeks"
+        f"\n**Signed up**: <t:{int(p.signup_date.timestamp())}:R>"
+    )
+
+
+async def _role_mention(gc: GuildContext, role_name: str | None) -> str | None:
+    """The role's live mention when it exists, its bold name otherwise."""
+    if not role_name:
+        return None
+    role_obj = await utils.guild_role_by_name(gc, role_name)
+    return role_obj.mention if role_obj else f"**{role_name}**"
 
 
 def _milestone_prize_teaser(current_week: int, cfg: SubDayGuildConfig) -> str:
@@ -439,11 +455,7 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
 
     gc = GuildContext.from_interaction(interaction)
     if not gc.has_any_permission(cfg.enroll_role):
-        label = (
-            "one of the **" + "**, **".join(cfg.enroll_role) + "** roles"
-            if cfg.enroll_role
-            else "server owner status"
-        )
+        label = role_list_label(cfg.enroll_role)
         logger.warning(
             "SubDay signup denied, missing permission",
             required=label,
@@ -640,10 +652,7 @@ def _owned_sub_status_embed(
         status = f"Week {p.current_week} — in progress"
 
     status += _milestone_prize_teaser(p.current_week, cfg)
-    status += (
-        f"\n\n**Progress**: {p.current_week}/{TOTAL_WEEKS} weeks"
-        f"\n**Signed up**: <t:{int(p.signup_date.timestamp())}:R>"
-    )
+    status += _progress_footer(p)
 
     return hikari.Embed(
         title=f"{icon} @{sub_name}'s Progress",
@@ -708,10 +717,7 @@ def _own_progress_embed(
         week_completed=p.week_completed,
     )
 
-    status_text += (
-        f"\n\n**Progress**: {p.current_week}/{TOTAL_WEEKS} weeks"
-        f"\n**Signed up**: <t:{int(p.signup_date.timestamp())}:R>"
-    )
+    status_text += _progress_footer(p)
     if p.owner_id:
         status_text += f"\n**👤 Owner**: <@{p.owner_id}>"
 
@@ -1230,11 +1236,7 @@ class SubDayComplete(
                 action=action,
                 required=required_role,
             )
-            role_mention = f"**{required_role}**" if required_role else None
-            if required_role:
-                role_obj = await utils.guild_role_by_name(gc, required_role)
-                if role_obj:
-                    role_mention = role_obj.mention
+            role_mention = await _role_mention(gc, required_role)
             if role_mention:
                 await ctx.respond(
                     f"*little puff of smoke* 🐉 You need to ask someone with the {role_mention} role "
@@ -1251,11 +1253,7 @@ class SubDayComplete(
         # Prevent self-completion
         if target.id == ctx.user.id:
             logger.debug("SubDay self-completion blocked", user=ctx.member.display_name)
-            complete_mention = f"**{cfg.complete_role}**" if cfg.complete_role else None
-            if cfg.complete_role:
-                role_obj = await utils.guild_role_by_name(gc, cfg.complete_role)
-                if role_obj:
-                    complete_mention = role_obj.mention
+            complete_mention = await _role_mention(gc, cfg.complete_role)
             if complete_mention:
                 await ctx.respond(
                     f"*boops your snoot* 🐉 Silly, you can't approve your own work! "

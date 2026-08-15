@@ -9,6 +9,7 @@ from dragonpaw_bot.context import (
     GuildContext,
     check_guild_perms,
     is_guild_admin,
+    role_list_label,
 )
 
 GUILD_ID = hikari.Snowflake(50)
@@ -320,3 +321,11 @@ def test_is_guild_admin_plain_member():
     member = Mock()
     member.permissions = hikari.Permissions.SEND_MESSAGES
     assert is_guild_admin(member) is False
+
+
+def test_role_list_label_names_roles():
+    assert role_list_label(["A", "B"]) == "one of the **A**, **B** roles"
+
+
+def test_role_list_label_empty_is_owner_only():
+    assert role_list_label([]) == "server owner status"

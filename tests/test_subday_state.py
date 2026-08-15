@@ -1,4 +1,5 @@
 import datetime
+import unittest.mock
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import hikari
@@ -9,6 +10,8 @@ from dragonpaw_bot.plugins.subday.commands import (
     _do_signup_async,
     _owned_sub_status_embed,
     _prepare_backfill,
+    _progress_footer,
+    _role_mention,
     _validate_normal_complete,
 )
 from dragonpaw_bot.plugins.subday.constants import (
@@ -237,3 +240,31 @@ async def test_signup_praise_skipped_when_channel_unconfigured(tmp_path, monkeyp
 
     lookup.assert_not_awaited()
     channel.send.assert_not_awaited()
+
+
+def test_progress_footer_shows_week_and_signup():
+    p = _sample_participant(current_week=7)
+    footer = _progress_footer(p)
+    assert f"7/{TOTAL_WEEKS} weeks" in footer
+    assert "**Signed up**:" in footer
+
+
+async def test_role_mention_prefers_real_role():
+    gc = MagicMock()
+    role = MagicMock()
+    role.mention = "<@&5>"
+    with_role = AsyncMock(return_value=role)
+    with unittest.mock.patch("dragonpaw_bot.utils.guild_role_by_name", with_role):
+        assert await _role_mention(gc, "Staff") == "<@&5>"
+
+
+async def test_role_mention_falls_back_to_bold_name():
+    gc = MagicMock()
+    with unittest.mock.patch(
+        "dragonpaw_bot.utils.guild_role_by_name", AsyncMock(return_value=None)
+    ):
+        assert await _role_mention(gc, "Staff") == "**Staff**"
+
+
+async def test_role_mention_none_role():
+    assert await _role_mention(MagicMock(), None) is None
