@@ -1,5 +1,7 @@
 import pydantic
 
+from dragonpaw_bot.state_store import GuildStateBase
+
 
 class CleanupChannelEntry(pydantic.BaseModel):
     channel_id: int = pydantic.Field(gt=0)
@@ -7,7 +9,5 @@ class CleanupChannelEntry(pydantic.BaseModel):
     expiry_minutes: int = pydantic.Field(gt=0)
 
 
-class CleanupGuildState(pydantic.BaseModel):
-    guild_id: int = pydantic.Field(gt=0)
-    guild_name: str = ""
-    channels: list[CleanupChannelEntry] = []
+class CleanupGuildState(GuildStateBase):
+    channels: list[CleanupChannelEntry] = pydantic.Field(default_factory=list)

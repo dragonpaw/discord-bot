@@ -198,8 +198,8 @@ def test_validation_guild_state_round_trip():
 
 
 def test_state_round_trip(tmp_path, monkeypatch):
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(
@@ -216,7 +216,7 @@ def test_state_round_trip(tmp_path, monkeypatch):
         ],
     )
     validation_state.save(st)
-    validation_state._cache.clear()
+    validation_state.store.cache.clear()
 
     loaded = validation_state.load(200)
     assert loaded.guild_id == 200
@@ -227,8 +227,8 @@ def test_state_round_trip(tmp_path, monkeypatch):
 
 
 def test_state_load_missing_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     loaded = validation_state.load(999)
     assert loaded.guild_id == 999
@@ -236,8 +236,8 @@ def test_state_load_missing_file(tmp_path, monkeypatch):
 
 
 def test_state_uses_cache(tmp_path, monkeypatch):
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     st = ValidationGuildState(guild_id=300, guild_name="Cached")
     validation_state.save(st)
@@ -350,12 +350,12 @@ async def test_close_validate_channel_http_error_still_deletes(monkeypatch):
 
 
 def test_all_guild_ids_empty(tmp_path, monkeypatch):
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
     assert validation_state.all_guild_ids() == []
 
 
 def test_all_guild_ids_finds_state_files(tmp_path, monkeypatch):
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
     (tmp_path / "validation_111.yaml").touch()
     (tmp_path / "validation_222.yaml").touch()
     (tmp_path / "other_333.yaml").touch()  # not a validation file — must be excluded
@@ -391,8 +391,8 @@ def _make_reconcile_bot(*, fetch_member_raises=None, fetch_channel_raises=None):
 
 async def test_reconcile_guild_no_members(tmp_path, monkeypatch):
     """Skip guilds with no members — no REST calls made."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     st = ValidationGuildState(guild_id=1, guild_name="Test")
     validation_state.save(st)
@@ -406,8 +406,8 @@ async def test_reconcile_guild_no_members(tmp_path, monkeypatch):
 
 async def test_reconcile_guild_member_present_channel_exists(tmp_path, monkeypatch):
     """Member still in guild and channel still exists — no state changes."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(
@@ -421,15 +421,15 @@ async def test_reconcile_guild_member_present_channel_exists(tmp_path, monkeypat
 
     await _reconcile_guild(bot, 1)
 
-    validation_state._cache.clear()
+    validation_state.store.cache.clear()
     loaded = validation_state.load(1)
     assert len(loaded.members) == 1
 
 
 async def test_reconcile_guild_member_left(tmp_path, monkeypatch):
     """Member left while bot was offline — removed from state, channel closed."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(
@@ -453,7 +453,7 @@ async def test_reconcile_guild_member_left(tmp_path, monkeypatch):
     await _reconcile_guild(bot, 1)
     await asyncio.sleep(0)  # let the create_task coroutine run
 
-    validation_state._cache.clear()
+    validation_state.store.cache.clear()
     loaded = validation_state.load(1)
     assert loaded.members == []
     assert close_calls == [99]
@@ -461,8 +461,8 @@ async def test_reconcile_guild_member_left(tmp_path, monkeypatch):
 
 async def test_reconcile_guild_channel_deleted(tmp_path, monkeypatch):
     """Member present but validate channel was deleted — removed from state."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(
@@ -476,15 +476,15 @@ async def test_reconcile_guild_channel_deleted(tmp_path, monkeypatch):
 
     await _reconcile_guild(bot, 1)
 
-    validation_state._cache.clear()
+    validation_state.store.cache.clear()
     loaded = validation_state.load(1)
     assert loaded.members == []
 
 
 async def test_reconcile_guild_no_channel_id_skips_channel_check(tmp_path, monkeypatch):
     """Member still at AWAITING_RULES (no channel yet) and present — no channel fetch."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(
@@ -499,7 +499,7 @@ async def test_reconcile_guild_no_channel_id_skips_channel_check(tmp_path, monke
     await _reconcile_guild(bot, 1)
 
     bot.rest.fetch_channel.assert_not_called()
-    validation_state._cache.clear()
+    validation_state.store.cache.clear()
     loaded = validation_state.load(1)
     assert len(loaded.members) == 1
 
@@ -543,8 +543,8 @@ async def test_cron_reminder_timing(tmp_path, monkeypatch, case):
     """First reminder fires only once REMINDER_INTERVAL_HOURS have elapsed, targeting
     the lobby for AWAITING_RULES and the validate channel for AWAITING_PHOTOS."""
     elapsed_hours, stage, channel_id, expected_channel = case
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(
@@ -567,7 +567,7 @@ async def test_cron_reminder_timing(tmp_path, monkeypatch, case):
     await validation_reminder_cron(bot)
 
     bot.rest.kick_user.assert_not_called()
-    validation_state._cache.clear()
+    validation_state.store.cache.clear()
     reminder_count = validation_state.load(1).members[0].reminder_count
 
     if expected_channel is None:
@@ -597,8 +597,8 @@ async def test_cron_deadline(tmp_path, monkeypatch, case):
     """Past the 4-day deadline, members are kicked and dropped from state (closing their
     validate channel if any) — except AWAITING_STAFF, which is left for manual review."""
     stage, channel_id, expect_kick, expected_close_calls = case
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(
@@ -631,7 +631,7 @@ async def test_cron_deadline(tmp_path, monkeypatch, case):
     await asyncio.sleep(0)  # the close runs as a background task now
 
     assert close_calls == expected_close_calls
-    validation_state._cache.clear()
+    validation_state.store.cache.clear()
     remaining = validation_state.load(1).members
 
     if expect_kick:
@@ -647,8 +647,8 @@ async def test_cron_deadline_removes_state_before_kick(tmp_path, monkeypatch):
     """The member is dropped from state and saved *before* the kick REST call, so the
     resulting MemberDeleteEvent finds no entry and on_member_leave stays silent (no
     false "flew away" log, no redundant channel close)."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(
@@ -683,8 +683,8 @@ async def test_cron_deadline_close_failure_does_not_stop_other_members(
 ):
     """A failing channel close must not abort the guild's sweep: every past-deadline
     member still gets kicked and removed from state."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(
@@ -722,15 +722,15 @@ async def test_cron_deadline_close_failure_does_not_stop_other_members(
     await asyncio.sleep(0)  # let the scheduled close tasks run (and fail)
 
     assert bot.rest.kick_user.call_count == 2
-    validation_state._cache.clear()
+    validation_state.store.cache.clear()
     assert validation_state.load(1).members == []
 
 
 async def test_cron_deadline_does_not_block_on_channel_close(tmp_path, monkeypatch):
     """The close helper sleeps 30s before deleting; the cron must schedule it in the
     background, not await it inline."""
-    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
-    validation_state._cache.clear()
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
 
     now = datetime.now(UTC)
     st = ValidationGuildState(

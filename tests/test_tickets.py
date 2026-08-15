@@ -56,8 +56,8 @@ def test_ticket_guild_state_round_trip():
 
 
 def test_state_round_trip(tmp_path, monkeypatch):
-    monkeypatch.setattr(tickets_state, "STATE_DIR", tmp_path)
-    tickets_state._cache.clear()
+    monkeypatch.setattr(tickets_state.store, "state_dir", tmp_path)
+    tickets_state.store.cache.clear()
 
     st = TicketGuildState(
         guild_id=200,
@@ -66,7 +66,7 @@ def test_state_round_trip(tmp_path, monkeypatch):
         open_tickets=[OpenTicket(user_id=1, channel_id=2, topic="halp")],
     )
     tickets_state.save(st)
-    tickets_state._cache.clear()
+    tickets_state.store.cache.clear()
 
     loaded = tickets_state.load(200)
     assert loaded.guild_id == 200
@@ -77,8 +77,8 @@ def test_state_round_trip(tmp_path, monkeypatch):
 
 
 def test_state_load_missing_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(tickets_state, "STATE_DIR", tmp_path)
-    tickets_state._cache.clear()
+    monkeypatch.setattr(tickets_state.store, "state_dir", tmp_path)
+    tickets_state.store.cache.clear()
 
     loaded = tickets_state.load(999)
     assert loaded.guild_id == 999
@@ -86,8 +86,8 @@ def test_state_load_missing_file(tmp_path, monkeypatch):
 
 
 def test_state_uses_cache(tmp_path, monkeypatch):
-    monkeypatch.setattr(tickets_state, "STATE_DIR", tmp_path)
-    tickets_state._cache.clear()
+    monkeypatch.setattr(tickets_state.store, "state_dir", tmp_path)
+    tickets_state.store.cache.clear()
 
     st = TicketGuildState(guild_id=300, guild_name="Cached")
     tickets_state.save(st)
@@ -98,12 +98,12 @@ def test_state_uses_cache(tmp_path, monkeypatch):
 
 
 def test_state_round_trip_no_tickets(tmp_path, monkeypatch):
-    monkeypatch.setattr(tickets_state, "STATE_DIR", tmp_path)
-    tickets_state._cache.clear()
+    monkeypatch.setattr(tickets_state.store, "state_dir", tmp_path)
+    tickets_state.store.cache.clear()
 
     st = TicketGuildState(guild_id=400)
     tickets_state.save(st)
-    tickets_state._cache.clear()
+    tickets_state.store.cache.clear()
 
     loaded = tickets_state.load(400)
     assert loaded.open_tickets == []

@@ -1,9 +1,8 @@
-import pydantic
+
+from dragonpaw_bot.state_store import GuildStateBase
 
 
-class IntrosGuildState(pydantic.BaseModel):
-    guild_id: int = pydantic.Field(gt=0)
-    guild_name: str = ""
+class IntrosGuildState(GuildStateBase):
     channel_id: int | None = None
     channel_name: str = ""
     required_role_id: int | None = None

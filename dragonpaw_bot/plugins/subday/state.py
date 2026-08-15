@@ -1,80 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-import safer
-import structlog
-import yaml
-
 from dragonpaw_bot.plugins.subday.models import SubDayGuildState
+from dragonpaw_bot.state_store import GuildStateStore
 
-logger = structlog.get_logger(__name__)
-
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
-STATE_DIR = ROOT_DIR / "state"
-
-_cache: dict[int, SubDayGuildState] = {}
-
-
-def _state_path(guild_id: int) -> Path:
-    return STATE_DIR / f"subday_{guild_id}.yaml"
+store = GuildStateStore("subday", SubDayGuildState)
+load = store.load
+save = store.save
 
 
 def is_configured(guild_id: int) -> bool:
-    """True if this guild has SubDay state on disk (an admin configured it, or
-    a member signed up). Used to decide whether to show the button channel card."""
-    return _state_path(guild_id).exists()
-
-
-def load(guild_id: int) -> SubDayGuildState:
-    """Load guild state from cache or disk. Returns empty state if none exists."""
-    if guild_id in _cache:
-        return _cache[guild_id]
-
-    path = _state_path(guild_id)
-    if not path.exists():
-        st = SubDayGuildState(guild_id=guild_id)
-        _cache[guild_id] = st
-        return st
-
-    logger.debug("Loading subday state", guild_id=guild_id, path=str(path))
-
-    try:
-        with open(path) as f:
-            data = yaml.safe_load(f)
-    except (OSError, yaml.YAMLError):
-        logger.exception(
-            "Failed to read subday state file", guild_id=guild_id, path=str(path)
-        )
-        raise
-
-    if not data:
-        st = SubDayGuildState(guild_id=guild_id)
-        _cache[guild_id] = st
-        return st
-
-    try:
-        st = SubDayGuildState.model_validate(data)
-    except Exception:
-        logger.exception(
-            "Subday state validation failed", guild_id=guild_id, path=str(path)
-        )
-        raise
-
-    _cache[guild_id] = st
-    return st
-
-
-def save(state: SubDayGuildState) -> None:
-    """Save guild state to disk and update cache."""
-    _cache[state.guild_id] = state
-    path = _state_path(state.guild_id)
-    logger.info("Saving subday state", guild=state.guild_name, path=str(path))
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    with safer.open(path, "w") as f:
-        yaml.dump(
-            state.model_dump(mode="json"),
-            f,
-            default_flow_style=False,
-            allow_unicode=True,
-        )
+    """Whether this guild has any persisted SubDay state on disk."""
+    return store.path(guild_id).exists()

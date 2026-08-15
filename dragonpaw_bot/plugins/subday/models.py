@@ -2,6 +2,8 @@ import datetime
 
 import pydantic
 
+from dragonpaw_bot.state_store import GuildStateBase
+
 
 class SubDayParticipant(pydantic.BaseModel):
     user_id: int
@@ -51,8 +53,6 @@ class SubDayGuildConfig(pydantic.BaseModel):
         }
 
 
-class SubDayGuildState(pydantic.BaseModel):
-    guild_id: int
-    guild_name: str = ""
+class SubDayGuildState(GuildStateBase):
     config: SubDayGuildConfig = SubDayGuildConfig()
-    participants: dict[int, SubDayParticipant] = {}
+    participants: dict[int, SubDayParticipant] = pydantic.Field(default_factory=dict)

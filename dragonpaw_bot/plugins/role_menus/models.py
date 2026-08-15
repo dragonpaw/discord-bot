@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pydantic
 
+from dragonpaw_bot.state_store import GuildStateBase
+
 
 class RoleMenuOptionConfig(pydantic.BaseModel):
     role: str = pydantic.Field(min_length=1)
@@ -29,9 +31,7 @@ class RoleMenuState(pydantic.BaseModel):
     option_role_ids: dict[str, int]  # role_name -> role_id
 
 
-class RoleMenuGuildState(pydantic.BaseModel):
-    guild_id: int = pydantic.Field(gt=0)
-    guild_name: str = ""
+class RoleMenuGuildState(GuildStateBase):
     role_channel_id: int | None = None
     role_names: dict[int, str] = pydantic.Field(default_factory=dict)
     menus: list[RoleMenuState] = pydantic.Field(default_factory=list)

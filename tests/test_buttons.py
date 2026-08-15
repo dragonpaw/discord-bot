@@ -68,11 +68,10 @@ def test_entries_have_distinct_colors():
 @pytest.fixture()
 def isolated_state(tmp_path, monkeypatch):
     """Point every plugin's state at a temp dir, with caches cleared."""
-    for module in (tickets_state, birthday_state, subday_state, activity_state):
-        monkeypatch.setattr(module, "STATE_DIR", tmp_path)
-    tickets_state._cache.clear()
-    birthday_state._cache.clear()
-    subday_state._cache.clear()
+    for module in (tickets_state, birthday_state, subday_state):
+        monkeypatch.setattr(module.store, "state_dir", tmp_path)
+        module.store.cache.clear()
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
     activity_state._config_cache.clear()
     return tmp_path
 

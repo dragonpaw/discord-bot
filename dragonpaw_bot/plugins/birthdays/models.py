@@ -4,6 +4,8 @@ import zoneinfo
 
 import pydantic
 
+from dragonpaw_bot.state_store import GuildStateBase
+
 _FEB = 2
 _LEAP_DAY = 29
 
@@ -58,11 +60,9 @@ class BirthdayGuildConfig(pydantic.BaseModel):
     birthday_role: str | None = None  # Auto-assigned on birthday
 
 
-class BirthdayGuildState(pydantic.BaseModel):
-    guild_id: int = pydantic.Field(gt=0)
-    guild_name: str = ""
+class BirthdayGuildState(GuildStateBase):
     config: BirthdayGuildConfig = BirthdayGuildConfig()
-    birthdays: dict[int, BirthdayEntry] = {}
+    birthdays: dict[int, BirthdayEntry] = pydantic.Field(default_factory=dict)
 
     @pydantic.model_validator(mode="after")
     def _check_birthday_keys(self) -> "BirthdayGuildState":

@@ -16,8 +16,8 @@ from dragonpaw_bot.plugins.channel_cleanup.models import (
 
 
 def test_state_yaml_round_trip(tmp_path, monkeypatch):
-    monkeypatch.setattr(cleanup_state, "STATE_DIR", tmp_path)
-    cleanup_state._cache.clear()
+    monkeypatch.setattr(cleanup_state.store, "state_dir", tmp_path)
+    cleanup_state.store.cache.clear()
 
     gs = CleanupGuildState(
         guild_id=200,
@@ -31,7 +31,7 @@ def test_state_yaml_round_trip(tmp_path, monkeypatch):
     )
     cleanup_state.save(gs)
 
-    cleanup_state._cache.clear()
+    cleanup_state.store.cache.clear()
     loaded = cleanup_state.load(200)
 
     assert loaded.guild_id == 200
@@ -47,20 +47,20 @@ def test_state_yaml_round_trip(tmp_path, monkeypatch):
 
 
 def test_state_round_trip_empty(tmp_path, monkeypatch):
-    monkeypatch.setattr(cleanup_state, "STATE_DIR", tmp_path)
-    cleanup_state._cache.clear()
+    monkeypatch.setattr(cleanup_state.store, "state_dir", tmp_path)
+    cleanup_state.store.cache.clear()
 
     gs = CleanupGuildState(guild_id=201, guild_name="Empty")
     cleanup_state.save(gs)
 
-    cleanup_state._cache.clear()
+    cleanup_state.store.cache.clear()
     loaded = cleanup_state.load(201)
     assert loaded.channels == []
 
 
 def test_load_empty_when_no_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(cleanup_state, "STATE_DIR", tmp_path)
-    cleanup_state._cache.clear()
+    monkeypatch.setattr(cleanup_state.store, "state_dir", tmp_path)
+    cleanup_state.store.cache.clear()
 
     loaded = cleanup_state.load(999)
     assert loaded.guild_id == 999
@@ -68,8 +68,8 @@ def test_load_empty_when_no_file(tmp_path, monkeypatch):
 
 
 def test_load_uses_cache(tmp_path, monkeypatch):
-    monkeypatch.setattr(cleanup_state, "STATE_DIR", tmp_path)
-    cleanup_state._cache.clear()
+    monkeypatch.setattr(cleanup_state.store, "state_dir", tmp_path)
+    cleanup_state.store.cache.clear()
 
     gs = CleanupGuildState(guild_id=202, guild_name="Cached")
     cleanup_state.save(gs)

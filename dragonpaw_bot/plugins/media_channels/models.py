@@ -1,5 +1,7 @@
 import pydantic
 
+from dragonpaw_bot.state_store import GuildStateBase
+
 
 class MediaChannelEntry(pydantic.BaseModel):
     channel_id: int = pydantic.Field(gt=0)
@@ -9,7 +11,5 @@ class MediaChannelEntry(pydantic.BaseModel):
     expiry_minutes: int | None = pydantic.Field(default=None, gt=0)
 
 
-class MediaGuildState(pydantic.BaseModel):
-    guild_id: int = pydantic.Field(gt=0)
-    guild_name: str = ""
-    channels: list[MediaChannelEntry] = []
+class MediaGuildState(GuildStateBase):
+    channels: list[MediaChannelEntry] = pydantic.Field(default_factory=list)

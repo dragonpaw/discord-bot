@@ -34,8 +34,8 @@ def test_participant_defaults():
 
 
 def test_state_yaml_round_trip(tmp_path, monkeypatch):
-    monkeypatch.setattr(state, "STATE_DIR", tmp_path)
-    state._cache.clear()
+    monkeypatch.setattr(state.store, "state_dir", tmp_path)
+    state.store.cache.clear()
 
     p = _sample_participant()
     gs = SubDayGuildState(
@@ -54,7 +54,7 @@ def test_state_yaml_round_trip(tmp_path, monkeypatch):
     assert "12345" in str(raw["participants"])
 
     # Clear cache and reload
-    state._cache.clear()
+    state.store.cache.clear()
     loaded = state.load(42)
     assert loaded.guild_id == 42
     assert loaded.guild_name == "Test Guild"
@@ -63,8 +63,8 @@ def test_state_yaml_round_trip(tmp_path, monkeypatch):
 
 
 def test_load_creates_empty_state(tmp_path, monkeypatch):
-    monkeypatch.setattr(state, "STATE_DIR", tmp_path)
-    state._cache.clear()
+    monkeypatch.setattr(state.store, "state_dir", tmp_path)
+    state.store.cache.clear()
 
     loaded = state.load(999)
     assert loaded.guild_id == 999

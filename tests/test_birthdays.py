@@ -17,8 +17,8 @@ from dragonpaw_bot.plugins.birthdays.models import BirthdayEntry, BirthdayGuildS
 async def test_cron_processes_entry_without_timezone(tmp_path, monkeypatch):
     """Entries with no timezone default to UTC — they must be announced, not
     silently skipped forever."""
-    monkeypatch.setattr(birthdays_state, "STATE_DIR", tmp_path)
-    birthdays_state._cache.clear()
+    monkeypatch.setattr(birthdays_state.store, "state_dir", tmp_path)
+    birthdays_state.store.cache.clear()
 
     today = datetime.datetime.now(tz=datetime.UTC).date()
     st = BirthdayGuildState(
@@ -55,7 +55,7 @@ async def test_cron_processes_entry_without_timezone(tmp_path, monkeypatch):
     await birthdays_cron.process_guild_birthdays(gc)
 
     assert announced == [42]
-    birthdays_state._cache.clear()
+    birthdays_state.store.cache.clear()
     assert birthdays_state.load(1).birthdays[42].last_announced == today
 
 
@@ -83,8 +83,8 @@ def _config_interaction(permissions: hikari.Permissions) -> MagicMock:
 
 
 async def test_config_gate_rejects_non_admin(tmp_path, monkeypatch):
-    monkeypatch.setattr(birthdays_state, "STATE_DIR", tmp_path)
-    birthdays_state._cache.clear()
+    monkeypatch.setattr(birthdays_state.store, "state_dir", tmp_path)
+    birthdays_state.store.cache.clear()
     interaction = _config_interaction(hikari.Permissions.NONE)
 
     await birthdays_config.handle_config_interaction(interaction)
@@ -96,8 +96,8 @@ async def test_config_gate_rejects_non_admin(tmp_path, monkeypatch):
 async def test_config_gate_admits_manage_guild_member(tmp_path, monkeypatch):
     """The panel must admit the same members as the guild_owner_only command hook
     (MANAGE_GUILD / ADMINISTRATOR), not just the literal guild owner."""
-    monkeypatch.setattr(birthdays_state, "STATE_DIR", tmp_path)
-    birthdays_state._cache.clear()
+    monkeypatch.setattr(birthdays_state.store, "state_dir", tmp_path)
+    birthdays_state.store.cache.clear()
     interaction = _config_interaction(hikari.Permissions.MANAGE_GUILD)
 
     responded: list[str] = []

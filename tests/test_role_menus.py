@@ -168,8 +168,8 @@ def test_guild_state_json_round_trip():
 @pytest.fixture()
 def role_menus_state_dir(monkeypatch, tmp_path):
     """Monkeypatch role_menus state module to use a temp dir and clear cache."""
-    monkeypatch.setattr(role_menus_state, "STATE_DIR", tmp_path)
-    role_menus_state._cache.clear()
+    monkeypatch.setattr(role_menus_state.store, "state_dir", tmp_path)
+    role_menus_state.store.cache.clear()
     return tmp_path
 
 
@@ -198,7 +198,7 @@ def test_state_save_and_load(role_menus_state_dir):
     role_menus_state.save(gs)
 
     # Clear cache to force disk read
-    role_menus_state._cache.clear()
+    role_menus_state.store.cache.clear()
 
     loaded = role_menus_state.load(42)
     assert loaded.guild_id == 42
@@ -242,7 +242,7 @@ def test_state_yaml_is_human_readable(role_menus_state_dir):
 def test_state_load_corrupt_yaml_raises(role_menus_state_dir):
     yaml_file = role_menus_state_dir / "role_menus_42.yaml"
     yaml_file.write_text(": : : invalid yaml [[[")
-    role_menus_state._cache.clear()
+    role_menus_state.store.cache.clear()
 
     with pytest.raises(yaml.YAMLError):
         role_menus_state.load(42)
@@ -253,7 +253,7 @@ def test_state_load_invalid_data_raises(role_menus_state_dir):
     # guild_id=0 should fail validation
     with open(yaml_file, "w") as f:
         yaml.dump({"guild_id": 0}, f)
-    role_menus_state._cache.clear()
+    role_menus_state.store.cache.clear()
 
     with pytest.raises(pydantic.ValidationError):
         role_menus_state.load(42)

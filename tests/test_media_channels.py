@@ -116,8 +116,8 @@ def test_has_media_forwarded_text_only():
 
 
 def test_state_yaml_round_trip(tmp_path, monkeypatch):
-    monkeypatch.setattr(media_state, "STATE_DIR", tmp_path)
-    media_state._cache.clear()
+    monkeypatch.setattr(media_state.store, "state_dir", tmp_path)
+    media_state.store.cache.clear()
 
     gs = MediaGuildState(
         guild_id=100,
@@ -138,7 +138,7 @@ def test_state_yaml_round_trip(tmp_path, monkeypatch):
     )
     media_state.save(gs)
 
-    media_state._cache.clear()
+    media_state.store.cache.clear()
     loaded = media_state.load(100)
 
     assert loaded.guild_id == 100
@@ -158,20 +158,20 @@ def test_state_yaml_round_trip(tmp_path, monkeypatch):
 
 
 def test_state_round_trip_no_optionals(tmp_path, monkeypatch):
-    monkeypatch.setattr(media_state, "STATE_DIR", tmp_path)
-    media_state._cache.clear()
+    monkeypatch.setattr(media_state.store, "state_dir", tmp_path)
+    media_state.store.cache.clear()
 
     gs = MediaGuildState(guild_id=101, guild_name="Empty Guild")
     media_state.save(gs)
 
-    media_state._cache.clear()
+    media_state.store.cache.clear()
     loaded = media_state.load(101)
     assert loaded.channels == []
 
 
 def test_load_empty_when_no_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(media_state, "STATE_DIR", tmp_path)
-    media_state._cache.clear()
+    monkeypatch.setattr(media_state.store, "state_dir", tmp_path)
+    media_state.store.cache.clear()
 
     loaded = media_state.load(999)
     assert loaded.guild_id == 999
@@ -179,8 +179,8 @@ def test_load_empty_when_no_file(tmp_path, monkeypatch):
 
 
 def test_load_uses_cache(tmp_path, monkeypatch):
-    monkeypatch.setattr(media_state, "STATE_DIR", tmp_path)
-    media_state._cache.clear()
+    monkeypatch.setattr(media_state.store, "state_dir", tmp_path)
+    media_state.store.cache.clear()
 
     gs = MediaGuildState(guild_id=102, guild_name="Cached Guild")
     media_state.save(gs)
@@ -305,8 +305,8 @@ async def test_on_message_deletes_text_post_and_schedules_notice_cleanup(
 ):
     """Text-only post in a media channel: message deleted, notice posted, and the
     notice's 15s auto-delete actually scheduled and run."""
-    monkeypatch.setattr(media_state, "STATE_DIR", tmp_path)
-    media_state._cache.clear()
+    monkeypatch.setattr(media_state.store, "state_dir", tmp_path)
+    media_state.store.cache.clear()
     media_state.save(
         MediaGuildState(
             guild_id=1,

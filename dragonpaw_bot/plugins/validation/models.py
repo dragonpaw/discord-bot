@@ -5,6 +5,8 @@ from datetime import datetime  # noqa: TC003
 
 import pydantic
 
+from dragonpaw_bot.state_store import GuildStateBase
+
 
 class ValidationStage(enum.StrEnum):
     AWAITING_RULES = "awaiting_rules"
@@ -21,9 +23,7 @@ class ValidationMember(pydantic.BaseModel):
     photo_count: int = pydantic.Field(default=0, ge=0)
 
 
-class ValidationGuildState(pydantic.BaseModel):
-    guild_id: int
-    guild_name: str
+class ValidationGuildState(GuildStateBase):
     # config
     lobby_channel_id: int | None = None
     validate_category_id: int | None = None
@@ -36,4 +36,4 @@ class ValidationGuildState(pydantic.BaseModel):
     events_channel_id: int | None = None
     chat_channel_id: int | None = None
     # runtime
-    members: list[ValidationMember] = []
+    members: list[ValidationMember] = pydantic.Field(default_factory=list)

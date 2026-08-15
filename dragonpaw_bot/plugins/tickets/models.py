@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pydantic
 
+from dragonpaw_bot.state_store import GuildStateBase
+
 
 class OpenTicket(pydantic.BaseModel):
     user_id: int
@@ -9,10 +11,8 @@ class OpenTicket(pydantic.BaseModel):
     topic: str
 
 
-class TicketGuildState(pydantic.BaseModel):
-    guild_id: int
-    guild_name: str = ""
+class TicketGuildState(GuildStateBase):
     category_id: int | None = None
     staff_role_id: int | None = None
     required_role_id: int | None = None
-    open_tickets: list[OpenTicket] = []
+    open_tickets: list[OpenTicket] = pydantic.Field(default_factory=list)
