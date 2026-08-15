@@ -2,7 +2,6 @@
 import asyncio
 import contextlib
 import datetime
-import pickle
 from os import environ
 from pathlib import Path
 from typing import Any
@@ -208,29 +207,6 @@ def state_path(guild_id: hikari.Snowflake, extension="toml"):
     return Path(STATE_DIR, str(guild_id) + "." + extension)
 
 
-def state_save_pickle(state: structs.GuildState):
-    filename = state_path(state.id, extension="pickle")
-    logger.info("Saving state", guild=state.name, path=str(filename))
-    with safer.open(filename, "wb") as f:
-        pickle.dump(obj=state.model_dump(), file=f)
-
-
-def state_load_pickle(guild_id: hikari.Snowflake) -> structs.GuildState | None:
-    filename = state_path(guild_id=guild_id, extension="pickle")
-
-    if not filename.exists():
-        logger.debug("No state file for guild", guild_id=guild_id)
-        return None
-
-    logger.debug("Loading state", path=str(filename))
-    try:
-        with safer.open(filename, "rb") as f:
-            return structs.GuildState.model_validate(pickle.load(f))
-    except Exception:
-        logger.exception("Error loading file", path=str(filename))
-        return None
-
-
 def _state_to_yaml_dict(state: structs.GuildState) -> dict[str, Any]:
     """Convert a GuildState to a plain dict suitable for YAML serialization."""
     return state.model_dump(mode="json")
@@ -291,16 +267,6 @@ def state_load_yaml(guild_id: hikari.Snowflake) -> structs.GuildState | None:
             logger.warning("Deleting corrupt state file", path=str(yaml_file))
             yaml_file.unlink()
             return None
-
-    # Auto-migrate from pickle if it exists
-    pickle_file = state_path(guild_id=guild_id, extension="pickle")
-    if pickle_file.exists():
-        logger.info("Migrating state from pickle to YAML", path=str(pickle_file))
-        state = state_load_pickle(guild_id=guild_id)
-        if state:
-            state_save_yaml(state)
-            pickle_file.unlink()
-            return state
 
     logger.debug("No state file for guild", guild_id=guild_id)
     return None
