@@ -99,43 +99,6 @@ class GuildContext:
         except hikari.HTTPError as exc:
             self.logger.warning("Failed to send log message", error=str(exc))
 
-    async def send_dm(
-        self,
-        user: hikari.Member | hikari.PartialUser | int,
-        *,
-        content: str | None = None,
-        embeds: list[hikari.Embed] | None = None,
-    ) -> bool:
-        """Send a DM to a user. Returns True on success, False on failure.
-
-        Accepts a Member, PartialUser/User, or integer user ID.
-        Handles ForbiddenError (DMs disabled) and HTTPError gracefully.
-        """
-        if isinstance(user, int):
-            resolved: hikari.PartialUser = await self.bot.rest.fetch_user(
-                hikari.Snowflake(user)
-            )
-        elif isinstance(user, hikari.Member):
-            resolved = user.user
-        else:
-            resolved = user
-        try:
-            dm = await resolved.fetch_dm_channel()
-            await dm.send(
-                content=content if content is not None else hikari.UNDEFINED,
-                embeds=embeds if embeds is not None else hikari.UNDEFINED,
-            )
-        except hikari.ForbiddenError:
-            self.logger.warning("Cannot DM user (DMs disabled)", user_id=resolved.id)
-            return False
-        except hikari.HTTPError as exc:
-            self.logger.warning(
-                "Failed to DM user", user_id=resolved.id, error=str(exc)
-            )
-            return False
-        else:
-            return True
-
     def state(self) -> GuildState | None:
         """Get the guild's core GuildState."""
         return self.bot.state(self.guild_id)
@@ -147,14 +110,6 @@ class GuildContext:
             return guild
         self.logger.debug("Guild not in cache, fetching via REST")
         return await self.bot.rest.fetch_guild(self.guild_id)
-
-    def is_owner(self) -> bool:
-        """Check if member is the guild owner. Requires member to be set."""
-        assert self.member
-        guild = self.bot.cache.get_guild(self.guild_id)
-        if guild:
-            return self.member.id == guild.owner_id
-        return False
 
     def has_permission(self, role_name: str | None) -> bool:
         """Check if member has the named role or is guild owner."""
@@ -384,6 +339,12 @@ class ChannelContext(GuildContext):
             entry.channel_name,  # type: ignore[attr-defined]
         )
 
+    async def _log_missing_manage_messages(self) -> None:
+        await self.log(
+            f"⚠️ *sad smoke puff* I can't nom messages in **#{self.channel_name}** — "
+            f"please grant me **Manage Messages** there and I'll get back to tidying! 🐉"
+        )
+
     async def purge_old_messages(
         self, expiry_minutes: int, single_delete_limit: int = 1000
     ) -> int:
@@ -436,10 +397,7 @@ class ChannelContext(GuildContext):
                     channel=self.channel_name,
                     error=str(exc),
                 )
-                await self.log(
-                    f"⚠️ I can't delete messages in **#{self.channel_name}**. "
-                    f"Please grant me **Manage Messages** permission in that channel."
-                )
+                await self._log_missing_manage_messages()
                 break
 
         to_single = to_single[:single_delete_limit]
@@ -464,10 +422,7 @@ class ChannelContext(GuildContext):
                     channel=self.channel_name,
                     error=str(exc),
                 )
-                await self.log(
-                    f"⚠️ I can't delete messages in **#{self.channel_name}**. "
-                    f"Please grant me **Manage Messages** permission in that channel."
-                )
+                await self._log_missing_manage_messages()
                 break
 
         if to_single:
