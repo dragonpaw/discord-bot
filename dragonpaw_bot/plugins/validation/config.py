@@ -6,6 +6,7 @@ import structlog
 
 from dragonpaw_bot.context import (
     GuildContext,
+    actor_name,
     check_channel_perms,
     check_role_manageable,
     guild_owner_only,
@@ -172,7 +173,7 @@ class ValidationSetup(
             f"*happy tail wag* 🐉 Validation settings updated — {summary}!{warning_text}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(f"⚙️ **{actor}** updated validation settings — {summary} 🐾")
 
 

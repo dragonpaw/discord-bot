@@ -794,6 +794,13 @@ async def check_role_manageable(
 # ---------------------------------------------------------------------------- #
 
 
+def actor_name(ctx: lightbulb.Context) -> str:
+    """The invoker's guild display name, for logs and staff messages."""
+    if ctx.member:
+        return ctx.member.display_name
+    return str(ctx.user.display_name or ctx.user.id)
+
+
 def role_list_label(role_names: list[str]) -> str:
     """Human label for a role-gated permission, or the owner-only fallback."""
     if not role_names:

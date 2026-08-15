@@ -4,7 +4,12 @@ import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot.context import GuildContext, check_channel_perms, guild_owner_only
+from dragonpaw_bot.context import (
+    GuildContext,
+    actor_name,
+    check_channel_perms,
+    guild_owner_only,
+)
 from dragonpaw_bot.plugins.tickets import state as tickets_state
 from dragonpaw_bot.plugins.tickets.commands import TICKET_CREATE_PERMS
 
@@ -83,7 +88,7 @@ class TicketsSet(
             f"*happy tail wag* 🐉 Ticket settings updated — {summary}!{warning}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(f"⚙️ **{actor}** updated ticket settings — {summary} 🐾")
 
 
@@ -150,5 +155,5 @@ class TicketsClear(
             f"Note: {len(st.open_tickets)} open ticket(s) are unaffected 🐉",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(f"⚙️ **{actor}** cleared ticket configuration 🐾")

@@ -7,6 +7,7 @@ import hikari
 from dragonpaw_bot.context import (
     PRIVATE_CHANNEL_USER_PERMS,
     GuildContext,
+    actor_name,
     check_guild_perms,
     is_guild_admin,
     role_list_label,
@@ -329,3 +330,17 @@ def test_role_list_label_names_roles():
 
 def test_role_list_label_empty_is_owner_only():
     assert role_list_label([]) == "server owner status"
+
+
+def test_actor_name_prefers_member_display_name():
+    ctx = Mock()
+    ctx.member.display_name = "Guild Nick"
+    ctx.user.display_name = "Global Name"
+    assert actor_name(ctx) == "Guild Nick"
+
+
+def test_actor_name_falls_back_to_user():
+    ctx = Mock()
+    ctx.member = None
+    ctx.user.display_name = "Global Name"
+    assert actor_name(ctx) == "Global Name"

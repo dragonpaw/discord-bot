@@ -10,7 +10,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.colors import SOLARIZED_MAGENTA, SOLARIZED_ORANGE
-from dragonpaw_bot.context import GuildContext
+from dragonpaw_bot.context import GuildContext, actor_name
 from dragonpaw_bot.plugins.birthdays import state
 from dragonpaw_bot.plugins.birthdays.constants import (
     BIRTHDAY_PREFIX,
@@ -721,7 +721,7 @@ class BirthdayRemove(
             guild=gc.name,
             user=ctx.user.display_name,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"🎂 **{actor}** removed their birthday — I'll miss celebrating them! 🐾"
         )
@@ -767,7 +767,7 @@ class BirthdayRemoveFor(
             user=ctx.user.display_name,
             target=self.user.display_name,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"🎂 **{actor}** removed birthday entry for **{self.user.display_name}** 🐾"
         )

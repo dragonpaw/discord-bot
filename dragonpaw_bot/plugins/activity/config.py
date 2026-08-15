@@ -7,7 +7,12 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.colors import SOLARIZED_BLUE
-from dragonpaw_bot.context import GuildContext, check_role_manageable, guild_owner_only
+from dragonpaw_bot.context import (
+    GuildContext,
+    actor_name,
+    check_role_manageable,
+    guild_owner_only,
+)
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import ChannelConfig, RoleConfig
 
@@ -92,7 +97,7 @@ class ActivityRoleAdd(
             role=self.role.name,
             preset=label,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"📊 **{actor}** set **{self.role.name}** to activity preset **{label}**"
             + (
@@ -137,7 +142,7 @@ class ActivityRoleRemove(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         gc.logger.info("Activity role removed", role=self.role.name)
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"📊 **{actor}** removed activity config for **{self.role.name}** 🐾"
         )
@@ -194,7 +199,7 @@ class ActivityChannelAdd(
             channel=self.channel.name,
             multiplier=mult,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"📊 **{actor}** set <#{self.channel.id}> to **{mult}×** activity points 🐉"
         )
@@ -236,7 +241,7 @@ class ActivityChannelRemove(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         gc.logger.info("Activity channel removed", channel=self.channel.name)
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"📊 **{actor}** removed the activity multiplier for <#{self.channel.id}> 🐾"
         )
@@ -267,7 +272,7 @@ class ActivityLurker(
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             gc.logger.info("Activity lurker role cleared")
-            actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+            actor = actor_name(ctx)
             await gc.log(
                 f"📊 **{actor}** cleared the lurker role — no more lurker tags! 🐾"
             )
@@ -286,7 +291,7 @@ class ActivityLurker(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         gc.logger.info("Activity lurker role set", role=self.role.name)
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"📊 **{actor}** set the lurker role to **{self.role.name}** 🐉"
             + (f" ⚠️ {warning}" if warning else " *happy tail wag* 🐾")
@@ -318,7 +323,7 @@ class ActivityViewer(
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             gc.logger.info("Activity viewer role cleared")
-            actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+            actor = actor_name(ctx)
             await gc.log(
                 f"📊 **{actor}** cleared the activity viewer role — admin-only access now 🐾"
             )
@@ -333,7 +338,7 @@ class ActivityViewer(
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         gc.logger.info("Activity viewer role set", role=self.role.name)
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"📊 **{actor}** set the activity viewer role to **{self.role.name}** 🐉"
         )

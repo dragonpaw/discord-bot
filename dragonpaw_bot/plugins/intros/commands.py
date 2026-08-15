@@ -6,7 +6,7 @@ import hikari
 import lightbulb
 import structlog
 
-from dragonpaw_bot.context import GuildContext
+from dragonpaw_bot.context import GuildContext, actor_name
 from dragonpaw_bot.plugins.intros import state as intros_state
 from dragonpaw_bot.plugins.intros.cron import scan_intros
 
@@ -80,7 +80,7 @@ class IntrosMissing(
             content = "\n".join([header, mentions, *role_action_lines])
             await ctx.edit_response(response_id, content=content)
 
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         log_bits = [
             f"👀 **{actor}** asked who's been shy — "
             f"**{len(result.missing)}** member(s) still haven't introduced themselves in <#{st.channel_id}>."

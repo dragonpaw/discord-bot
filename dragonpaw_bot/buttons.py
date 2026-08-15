@@ -22,6 +22,7 @@ from dragonpaw_bot.context import (
     CHANNEL_CLEANUP_PERMS,
     ChannelContext,
     GuildContext,
+    actor_name,
     guild_owner_only,
 )
 from dragonpaw_bot.plugins import activity, birthdays, subday, tickets
@@ -169,7 +170,7 @@ class ButtonsChannel(
         gc = GuildContext.from_ctx(ctx)
         guild = await gc.fetch_guild()
         state = _ensure_state(gc, guild)
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
 
         if self.channel is None:
             old_channel_id = state.button_channel_id

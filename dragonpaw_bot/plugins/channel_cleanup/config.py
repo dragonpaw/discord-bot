@@ -9,6 +9,7 @@ import structlog
 from dragonpaw_bot.context import (
     CHANNEL_CLEANUP_PERMS,
     GuildContext,
+    actor_name,
     check_channel_perms,
     guild_owner_only,
 )
@@ -84,7 +85,7 @@ class CleanupAdd(
             f"{format_duration(expiry_minutes)}.{warning}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"⚙️ **{actor}** put me on tidy-up duty in <#{self.channel.id}> — "
             f"I'll nom messages older than {format_duration(expiry_minutes)}! 🧹",
@@ -124,7 +125,7 @@ class CleanupRemove(
             f"<#{self.channel.id}> removed from auto-cleanup.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"⚙️ **{actor}** took <#{self.channel.id}> off my cleanup list — I'll leave those messages alone now~ 🐉",
         )

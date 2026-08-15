@@ -18,6 +18,7 @@ from dragonpaw_bot import buttons, structs
 from dragonpaw_bot.context import (
     GuildContext,
     NotAuthorized,
+    actor_name,
     guild_owner_only,
 )
 from dragonpaw_bot.logging import configure_logging
@@ -465,7 +466,7 @@ class SetGeneralChannel(
                 f"General chat channel set to <#{self.channel.id}>.",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
-            actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+            actor = actor_name(ctx)
             await gc.log(
                 f"⚙️ *tail swish* **{actor}** pointed me at <#{self.channel.id}> as the general chat channel! 🐉"
             )
@@ -476,7 +477,7 @@ class SetGeneralChannel(
             await ctx.respond(
                 "General chat channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
             )
-            actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+            actor = actor_name(ctx)
             await gc.log(f"⚙️ **{actor}** cleared the general chat channel 🐉")
 
 

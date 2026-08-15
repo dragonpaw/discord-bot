@@ -9,6 +9,7 @@ import structlog
 from dragonpaw_bot.context import (
     CHANNEL_CLEANUP_PERMS,
     GuildContext,
+    actor_name,
     check_channel_perms,
     guild_owner_only,
 )
@@ -111,7 +112,7 @@ class MediaAdd(
             )
 
         await ctx.respond("\n".join(parts), flags=hikari.MessageFlag.EPHEMERAL)
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"⚙️ **{actor}** made <#{self.channel.id}> media-only — I'll nom any text-only posts there! 🐉",
         )
@@ -152,7 +153,7 @@ class MediaRemove(
             f"<#{self.channel.id}> removed from media-only enforcement.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"⚙️ **{actor}** turned off media enforcement for <#{self.channel.id}> — I'll stop nomming text posts there~ 🐾",
         )

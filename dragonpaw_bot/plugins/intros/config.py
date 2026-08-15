@@ -9,6 +9,7 @@ import structlog
 from dragonpaw_bot.context import (
     CHANNEL_CLEANUP_PERMS,
     GuildContext,
+    actor_name,
     check_channel_perms,
     check_role_manageable,
     guild_owner_only,
@@ -106,7 +107,7 @@ class IntrosSet(
             f"Introductions channel set to <#{self.channel.id}>.{role_line}{missing_line}{warning_block}",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         bits = [
             f"📋 **{actor}** pointed me at <#{self.channel.id}> as the intros channel!"
         ]
@@ -157,7 +158,7 @@ class IntrosClear(
             "Introductions channel configuration cleared.",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        actor = ctx.member.display_name if ctx.member else ctx.user.display_name
+        actor = actor_name(ctx)
         await gc.log(
             f"📋 **{actor}** cleared the intros channel config — I'll stop keeping tabs on hellos! 🐉"
         )
