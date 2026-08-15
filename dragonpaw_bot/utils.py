@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+import asyncio
+from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from typing import TYPE_CHECKING
 
 import hikari
@@ -16,6 +17,23 @@ InteractionHandler = Callable[[hikari.ComponentInteraction], Awaitable[None]]
 ModalHandler = Callable[[hikari.ModalInteraction], Awaitable[None]]
 
 logger = structlog.get_logger(__name__)
+
+# The event loop keeps only weak references to tasks, so anything fire-and-forget
+# must be anchored here until it completes or it can be garbage-collected mid-run.
+_background_tasks: set[asyncio.Task[None]] = set()
+
+
+def create_background_task(coro: Coroutine[None, None, None]) -> None:
+    """Run a coroutine in the background, logging (not raising) any exception."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_finish_background_task)
+
+
+def _finish_background_task(task: asyncio.Task[None]) -> None:
+    _background_tasks.discard(task)
+    if not task.cancelled() and (exc := task.exception()):
+        logger.warning("Background task failed", task=task.get_name(), exc_info=exc)
 
 
 # ---------------------------------------------------------------------------- #

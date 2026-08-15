@@ -628,6 +628,7 @@ async def test_cron_deadline(tmp_path, monkeypatch, case):
     )
 
     await validation_reminder_cron(bot)
+    await asyncio.sleep(0)  # the close runs as a background task now
 
     assert close_calls == expected_close_calls
     validation_state._cache.clear()
@@ -675,3 +676,94 @@ async def test_cron_deadline_removes_state_before_kick(tmp_path, monkeypatch):
     await validation_reminder_cron(bot)
 
     assert members_at_kick == [[]]  # state already emptied by the time the kick fired
+
+
+async def test_cron_deadline_close_failure_does_not_stop_other_members(
+    tmp_path, monkeypatch
+):
+    """A failing channel close must not abort the guild's sweep: every past-deadline
+    member still gets kicked and removed from state."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(days=5),
+                stage=ValidationStage.AWAITING_PHOTOS,
+                channel_id=55,
+            ),
+            ValidationMember(
+                user_id=43,
+                joined_at=now - timedelta(days=5),
+                stage=ValidationStage.AWAITING_PHOTOS,
+                channel_id=56,
+            ),
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+
+    async def _failing_close(_gc, _channel_id, _notice):
+        raise RuntimeError("close blew up")
+
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.validation.cron._close_validate_channel",
+        _failing_close,
+    )
+
+    await validation_reminder_cron(bot)
+    await asyncio.sleep(0)  # let the scheduled close tasks run (and fail)
+
+    assert bot.rest.kick_user.call_count == 2
+    validation_state._cache.clear()
+    assert validation_state.load(1).members == []
+
+
+async def test_cron_deadline_does_not_block_on_channel_close(tmp_path, monkeypatch):
+    """The close helper sleeps 30s before deleting; the cron must schedule it in the
+    background, not await it inline."""
+    monkeypatch.setattr(validation_state, "STATE_DIR", tmp_path)
+    validation_state._cache.clear()
+
+    now = datetime.now(UTC)
+    st = ValidationGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        lobby_channel_id=10,
+        members=[
+            ValidationMember(
+                user_id=42,
+                joined_at=now - timedelta(days=5),
+                stage=ValidationStage.AWAITING_PHOTOS,
+                channel_id=55,
+            ),
+        ],
+    )
+    validation_state.save(st)
+
+    bot = _make_cron_bot()
+    blocker = asyncio.Event()
+    close_started = asyncio.Event()
+
+    async def _hanging_close(_gc, _channel_id, _notice):
+        close_started.set()
+        await blocker.wait()
+
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.validation.cron._close_validate_channel",
+        _hanging_close,
+    )
+
+    await asyncio.wait_for(validation_reminder_cron(bot), timeout=1)
+
+    await asyncio.wait_for(close_started.wait(), timeout=1)
+    blocker.set()  # unblock so the background task can finish cleanly
+    await asyncio.sleep(0)
+    bot.rest.kick_user.assert_called_once()

@@ -1,3 +1,5 @@
+import asyncio
+import gc
 from unittest.mock import AsyncMock, Mock
 
 import hikari
@@ -7,6 +9,7 @@ from dragonpaw_bot.context import (
     has_any_role_permission,
     has_permission,
 )
+from dragonpaw_bot.utils import create_background_task
 
 # ---------------------------------------------------------------------------- #
 #                              has_permission                                   #
@@ -184,3 +187,29 @@ async def test_check_channel_perms_all_present():
     )
     result = await check_channel_perms(bot, GUILD_ID, CHANNEL_ID)
     assert result == []
+
+
+# ---------------------------------------------------------------------------- #
+#                            create_background_task                            #
+# ---------------------------------------------------------------------------- #
+
+
+async def test_create_background_task_runs_without_caller_reference():
+    done = asyncio.Event()
+
+    async def _work():
+        await asyncio.sleep(0)
+        done.set()
+
+    create_background_task(_work())
+    gc.collect()  # the loop holds only a weak ref; the helper must hold a strong one
+    await asyncio.wait_for(done.wait(), timeout=1)
+
+
+async def test_create_background_task_logs_exception_without_raising():
+    async def _boom():
+        raise RuntimeError("kaboom")
+
+    create_background_task(_boom())
+    for _ in range(3):
+        await asyncio.sleep(0)  # let the task run and its done-callback fire

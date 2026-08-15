@@ -16,6 +16,7 @@ from dragonpaw_bot.plugins.validation.commands import (
     _deadline_timestamp,
 )
 from dragonpaw_bot.plugins.validation.models import ValidationStage
+from dragonpaw_bot.utils import create_background_task
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -72,13 +73,18 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                         display_name=kicked.display_name if kicked else None,
                     )
                     if member.channel_id:
-                        await _close_validate_channel(
-                            gc,
-                            member.channel_id,
-                            f"*puffs a small smoke ring* ⏰ Hey <@{member.user_id}> — "
-                            f"your {MAX_VALIDATION_DAYS}-day validation window has closed. "
-                            f"This channel will disappear shortly. "
-                            f"You're welcome to rejoin the server and try again! 🐉",
+                        # Background task, like every other close call site: the helper
+                        # sleeps 30s inline, and a failure here must not abort the
+                        # rest of the guild's sweep.
+                        create_background_task(
+                            _close_validate_channel(
+                                gc,
+                                member.channel_id,
+                                f"*puffs a small smoke ring* ⏰ Hey <@{member.user_id}> — "
+                                f"your {MAX_VALIDATION_DAYS}-day validation window has closed. "
+                                f"This channel will disappear shortly. "
+                                f"You're welcome to rejoin the server and try again! 🐉",
+                            )
                         )
                     continue
 
