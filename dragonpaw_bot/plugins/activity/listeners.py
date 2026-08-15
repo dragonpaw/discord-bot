@@ -61,14 +61,14 @@ def _add_contribution(
             b.amount += amount
             activity_state.mark_user_dirty(guild_id, user_id)
             logger.debug(
-                "Activity recorded", user_id=user_id, kind=kind.value, raw_points=amount
+                "Activity recorded", user_id=user_id, kind=str(kind), raw_points=amount
             )
             return
 
     ua.buckets.append(ContributionBucket(hour=hour, kind=kind, amount=amount))
     activity_state.mark_user_dirty(guild_id, user_id)
     logger.debug(
-        "Activity recorded", user_id=user_id, kind=kind.value, raw_points=amount
+        "Activity recorded", user_id=user_id, kind=str(kind), raw_points=amount
     )
 
 
