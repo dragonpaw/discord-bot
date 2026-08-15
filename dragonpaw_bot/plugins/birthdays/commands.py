@@ -793,24 +793,16 @@ class BirthdayList(
         # Identify today's birthdays and the next upcoming one
         today = datetime.datetime.now(tz=datetime.UTC).date()
         today_md = (today.month, today.day)
-        today_keys: set[tuple[int, int]] = set()
+        any_birthday_today = any(
+            (e.month, e.day) == today_md for e in guild_state.birthdays.values()
+        )
 
-        def _days_until_future(entry: BirthdayEntry) -> int:
-            """Days from today until this birthday next occurs (excluding today)."""
-            try:
-                this_year = today.replace(month=entry.month, day=entry.day)
-            except ValueError:
-                # Feb 29 in a non-leap year — use Feb 28
-                this_year = today.replace(month=entry.month, day=28)
-            if (entry.month, entry.day) <= today_md:
-                this_year = this_year.replace(year=today.year + 1)
-            return (this_year - today).days
-
-        for entry in guild_state.birthdays.values():
-            if (entry.month, entry.day) == today_md:
-                today_keys.add(today_md)
-
-        next_entry = min(guild_state.birthdays.values(), key=_days_until_future)
+        # Today's birthdays get the cake marker, so the star goes to the
+        # soonest strictly-future one.
+        next_entry = min(
+            guild_state.birthdays.values(),
+            key=lambda e: _days_until_birthday(e.month, e.day, today) or 367,
+        )
         next_key = (next_entry.month, next_entry.day)
 
         # Group by month, sorted by day
@@ -841,7 +833,7 @@ class BirthdayList(
             for entry in entries:
                 tz = f" ({entry.timezone})" if entry.timezone else ""
                 entry_md = (entry.month, entry.day)
-                if entry_md in today_keys:
+                if entry_md == today_md:
                     marker = "🎂"
                 elif entry_md == next_key:
                     marker = "⭐"
@@ -859,7 +851,7 @@ class BirthdayList(
             )
 
         legend_parts = []
-        if today_keys:
+        if any_birthday_today:
             legend_parts.append("🎂 = birthday today!")
         legend_parts.append("⭐ = next upcoming")
 

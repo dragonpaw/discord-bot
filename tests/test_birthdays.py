@@ -6,6 +6,7 @@ import hikari
 from dragonpaw_bot.plugins.birthdays import config as birthdays_config
 from dragonpaw_bot.plugins.birthdays import cron as birthdays_cron
 from dragonpaw_bot.plugins.birthdays import state as birthdays_state
+from dragonpaw_bot.plugins.birthdays.commands import _days_until_birthday
 from dragonpaw_bot.plugins.birthdays.models import BirthdayEntry, BirthdayGuildState
 
 # ---------------------------------------------------------------------------- #
@@ -110,3 +111,30 @@ async def test_config_gate_admits_manage_guild_member(tmp_path, monkeypatch):
 
     assert responded, "admin with MANAGE_GUILD should reach the config flow"
     interaction.edit_initial_response.assert_not_called()
+
+
+# ---------------------------------------------------------------------------- #
+#                          _days_until_birthday                                #
+# ---------------------------------------------------------------------------- #
+
+
+def test_days_until_birthday_today_is_zero():
+    today = datetime.date(2026, 6, 15)
+    assert _days_until_birthday(6, 15, today) == 0
+
+
+def test_days_until_birthday_upcoming():
+    today = datetime.date(2026, 6, 15)
+    assert _days_until_birthday(6, 20, today) == 5
+
+
+def test_days_until_birthday_wraps_to_next_year():
+    today = datetime.date(2026, 12, 31)
+    assert _days_until_birthday(1, 1, today) == 1
+
+
+def test_days_until_birthday_feb29_non_leap_maps_to_mar1():
+    # 2026 is not a leap year: Feb 29 birthdays celebrate Mar 1 (as
+    # is_birthday_on_date does), never Feb 28.
+    today = datetime.date(2026, 2, 28)
+    assert _days_until_birthday(2, 29, today) == 1
