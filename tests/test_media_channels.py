@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock
 
@@ -6,7 +7,7 @@ import pytest
 
 from dragonpaw_bot.plugins.media_channels import cron as media_cron
 from dragonpaw_bot.plugins.media_channels import state as media_state
-from dragonpaw_bot.plugins.media_channels.listeners import _has_media
+from dragonpaw_bot.plugins.media_channels.listeners import _has_media, on_message
 from dragonpaw_bot.plugins.media_channels.models import (
     MediaChannelEntry,
     MediaGuildState,
@@ -291,3 +292,64 @@ async def test_cron_skips_entries_without_expiry(monkeypatch):
     await media_cron.media_channels_hourly(bot)
 
     run_cleanup_mock.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------- #
+#                               on_message                                     #
+# ---------------------------------------------------------------------------- #
+
+
+async def test_on_message_deletes_text_post_and_schedules_notice_cleanup(
+    tmp_path, monkeypatch
+):
+    """Text-only post in a media channel: message deleted, notice posted, and the
+    notice's 15s auto-delete actually scheduled and run."""
+    monkeypatch.setattr(media_state, "STATE_DIR", tmp_path)
+    media_state._cache.clear()
+    media_state.save(
+        MediaGuildState(
+            guild_id=1,
+            guild_name="TestGuild",
+            channels=[MediaChannelEntry(channel_id=77, channel_name="pics")],
+        )
+    )
+
+    msg = _mock_message(content="just some words")
+    msg.id = hikari.Snowflake(900)
+    msg.author.is_bot = False
+    msg.author.id = 42
+
+    event = MagicMock()
+    event.message = msg
+    event.guild_id = hikari.Snowflake(1)
+    event.channel_id = hikari.Snowflake(77)
+    event.member.display_name = "Wordy"
+
+    bot = event.app
+    bot.state = Mock(return_value=None)  # no log channel configured
+    bot.rest.delete_message = AsyncMock()
+    notice = Mock()
+    notice.id = hikari.Snowflake(901)
+    bot.rest.create_message = AsyncMock(return_value=notice)
+    guild = Mock()
+    guild.id = hikari.Snowflake(1)
+    guild.name = "TestGuild"
+    bot.cache.get_guild = Mock(return_value=guild)
+
+    scheduled: list[tuple[int, float]] = []
+
+    async def _fake_delete_after(_bot, _channel_id, message_id, delay):
+        scheduled.append((int(message_id), delay))
+
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.media_channels.listeners._delete_after",
+        _fake_delete_after,
+    )
+
+    await on_message(event)
+    await asyncio.sleep(0)  # let the scheduled auto-delete task run
+
+    bot.rest.delete_message.assert_awaited_once_with(channel=77, message=900)
+    bot.rest.create_message.assert_awaited_once()
+    assert "<@42>" in bot.rest.create_message.call_args.kwargs["content"]
+    assert scheduled == [(901, 15.0)]

@@ -12,6 +12,7 @@ import structlog
 
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.media_channels import state as media_state
+from dragonpaw_bot.utils import create_background_task
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -113,17 +114,8 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
         notice = await bot.rest.create_message(
             channel=event.channel_id, content=notice_text
         )
-        task = asyncio.create_task(
+        create_background_task(
             _delete_after(bot, event.channel_id, notice.id, delay=15.0)
-        )
-        task.add_done_callback(
-            lambda t: (
-                logger.warning(
-                    "Unexpected error deleting notice message", error=str(t.exception())
-                )
-                if not t.cancelled() and t.exception() is not None
-                else None
-            )
         )
     except hikari.HTTPError as exc:
         logger.warning(
