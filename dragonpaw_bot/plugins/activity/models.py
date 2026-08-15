@@ -80,15 +80,6 @@ class ActivityGuildMeta(pydantic.BaseModel):
     config: ActivityGuildConfig = pydantic.Field(default_factory=ActivityGuildConfig)
 
 
-class ActivityGuildState(pydantic.BaseModel):
-    """Legacy combined model — used only for migrating old YAML files. TODO: remove after migration cycle."""
-
-    guild_id: int = pydantic.Field(gt=0)
-    guild_name: str = ""
-    config: ActivityGuildConfig = pydantic.Field(default_factory=ActivityGuildConfig)
-    users: dict[int, UserActivity] = {}
-
-
 def bucket_is_negligible(
     bucket: ContributionBucket,
     now: float,

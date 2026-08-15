@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 import hikari
 import pydantic
 import pytest
-import yaml
 
 from dragonpaw_bot.plugins.activity import listeners as activity_listeners
 from dragonpaw_bot.plugins.activity import state as activity_state
@@ -429,49 +428,6 @@ def test_load_config_uses_cache(tmp_path, monkeypatch):
     assert first is second
 
 
-def test_migration_from_old_combined_file(tmp_path, monkeypatch):
-    """Old activity_{guild_id}.yaml is split into config + per-user files on first load."""
-
-    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
-    activity_state._config_cache.clear()
-    activity_state._user_cache.clear()
-
-    old_data = {
-        "guild_id": 7777,
-        "guild_name": "Old Guild",
-        "config": {
-            "role_configs": [],
-            "channel_configs": [],
-            "lurker_role_id": None,
-            "lurker_role_name": "",
-            "viewer_role_id": None,
-            "viewer_role_name": "",
-        },
-        "users": {
-            99: {
-                "user_id": 99,
-                "buckets": [{"hour": 3600000, "kind": "text", "amount": 2.0}],
-            }
-        },
-    }
-    old_path = tmp_path / "activity_7777.yaml"
-    with open(old_path, "w") as f:
-        yaml.dump(old_data, f)
-
-    meta = activity_state.load_config(7777)
-    assert meta.guild_id == 7777
-    assert meta.guild_name == "Old Guild"
-
-    ua = activity_state.load_user(7777, 99)
-    assert ua is not None
-    assert ua.buckets[0].amount == 2.0
-
-    # Old file should be gone
-    assert not old_path.exists()
-    assert (tmp_path / "activity_config_7777.yaml").exists()
-    assert (tmp_path / "activity_user_7777_99.yaml").exists()
-
-
 def test_list_user_ids(tmp_path, monkeypatch):
     monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
     activity_state._user_cache.clear()
@@ -661,19 +617,6 @@ def test_flush_dirty_missing_cache_entry_cleaned_up(
 # ---------------------------------------------------------------------------- #
 #                            migration                                         #
 # ---------------------------------------------------------------------------- #
-
-
-def test_migration_empty_old_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
-    activity_state._config_cache.clear()
-    activity_state._user_cache.clear()
-
-    old_path = tmp_path / "activity_8888.yaml"
-    old_path.write_text("")
-
-    meta = activity_state.load_config(8888)
-    assert meta.guild_id == 8888
-    assert not old_path.exists()
 
 
 # ---------------------------------------------------------------------------- #

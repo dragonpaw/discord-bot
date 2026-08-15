@@ -7,11 +7,7 @@ import safer
 import structlog
 import yaml
 
-from dragonpaw_bot.plugins.activity.models import (
-    ActivityGuildMeta,
-    ActivityGuildState,
-    UserActivity,
-)
+from dragonpaw_bot.plugins.activity.models import ActivityGuildMeta, UserActivity
 
 logger = structlog.get_logger(__name__)
 
@@ -31,68 +27,14 @@ def _user_path(guild_id: int, user_id: int) -> Path:
     return STATE_DIR / f"activity_user_{guild_id}_{user_id}.yaml"
 
 
-def _old_combined_path(guild_id: int) -> Path:
-    return STATE_DIR / f"activity_{guild_id}.yaml"
-
-
-def _migrate(guild_id: int) -> ActivityGuildMeta:
-    """Read old combined YAML, split into per-user files + config file, delete old file."""
-    old_path = _old_combined_path(guild_id)
-    try:
-        with open(old_path) as f:
-            data = yaml.safe_load(f)
-    except (OSError, yaml.YAMLError):
-        logger.exception(
-            "Failed to read legacy activity state",
-            guild_id=guild_id,
-            path=str(old_path),
-        )
-        raise
-
-    if not data:
-        old_path.unlink(missing_ok=True)
-        return ActivityGuildMeta(guild_id=guild_id)
-
-    try:
-        old = ActivityGuildState.model_validate(data)
-    except pydantic.ValidationError:
-        logger.exception("Legacy activity state validation failed", guild_id=guild_id)
-        raise
-
-    meta = ActivityGuildMeta(
-        guild_id=old.guild_id,
-        guild_name=old.guild_name,
-        config=old.config,
-    )
-    save_config(meta)
-
-    for uid, ua in old.users.items():
-        try:
-            save_user(guild_id, uid, ua)
-        except Exception:
-            logger.exception(
-                "Failed to migrate user activity — data may be lost",
-                guild_id=guild_id,
-                user_id=uid,
-            )
-
-    old_path.unlink()
-    logger.debug(
-        "Migrated legacy activity state",
-        guild=old.guild_name,
-        users=len(old.users),
-    )
-    return meta
-
-
 def is_configured(guild_id: int) -> bool:
     """True if an admin has configured the activity tracker for this guild.
     Used to decide whether to show the button channel card."""
-    return _config_path(guild_id).exists() or _old_combined_path(guild_id).exists()
+    return _config_path(guild_id).exists()
 
 
 def load_config(guild_id: int) -> ActivityGuildMeta:
-    """Load guild config from cache or disk. Migrates old combined file if needed."""
+    """Load guild config from cache or disk."""
     if guild_id in _config_cache:
         return _config_cache[guild_id]
 
@@ -100,10 +42,6 @@ def load_config(guild_id: int) -> ActivityGuildMeta:
     config_path = _config_path(guild_id)
 
     if not config_path.exists():
-        if _old_combined_path(guild_id).exists():
-            meta = _migrate(guild_id)
-            _config_cache[guild_id] = meta
-            return meta
         meta = ActivityGuildMeta(guild_id=guild_id)
         _config_cache[guild_id] = meta
         return meta

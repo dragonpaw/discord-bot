@@ -215,11 +215,6 @@ def _state_to_yaml_dict(state: structs.GuildState) -> dict[str, Any]:
 
 def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
     """Convert a YAML-loaded dict back into a GuildState."""
-    # Strip legacy role menu fields that now live in per-guild role_menus state
-    data.pop("role_emojis", None)
-    data.pop("role_names", None)
-    data.pop("role_channel_id", None)
-
     data["id"] = hikari.Snowflake(data["id"])
 
     if data.get("log_channel_id") is not None:
@@ -230,18 +225,6 @@ def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
 
     if data.get("button_channel_id") is not None:
         data["button_channel_id"] = hikari.Snowflake(data["button_channel_id"])
-
-    # Strip legacy lobby fields
-    for field in (
-        "lobby_role_id",
-        "lobby_welcome_message",
-        "lobby_channel_id",
-        "lobby_click_for_rules",
-        "lobby_kick_days",
-        "lobby_rules",
-        "lobby_rules_message_id",
-    ):
-        data.pop(field, None)
 
     return structs.GuildState.model_validate(data)
 

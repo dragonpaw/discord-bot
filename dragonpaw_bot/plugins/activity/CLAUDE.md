@@ -112,7 +112,6 @@ Split across two file types per guild:
 - **`state/activity_config_{guild_id}.yaml`** — `ActivityGuildMeta`: guild_id, guild_name, config (ActivityGuildConfig with role_configs, channel_configs, lurker_role_id/name, viewer_role_id/name)
 - **`state/activity_user_{guild_id}_{user_id}.yaml`** — `UserActivity`: user_id, list of ContributionBuckets
 
-Old combined `state/activity_{guild_id}.yaml` files are automatically migrated on first load.
 
 Dirty tracking is per-user: only modified user files are written during the hourly flush.
 

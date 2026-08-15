@@ -91,7 +91,7 @@ Rendering is wipe-and-repost (same as role menus), so only `GuildState.button_ch
 
 **Global error handler:** A lightbulb error handler on the client logs full stack traces for command failures via `logger.exception()`, then returns `False` to let lightbulb continue default handling.
 
-**State serialization note:** Role menu state is now persisted separately in `state/role_menus_{guild_id}.yaml`. The main `GuildState` YAML is straightforward Pydantic JSON-mode serialization. Legacy YAML files containing `role_emojis`/`role_names`/`role_channel_id` are automatically stripped on load.
+**State serialization note:** Role menu state is persisted separately in `state/role_menus_{guild_id}.yaml`. The main `GuildState` YAML is straightforward Pydantic JSON-mode serialization.
 
 ## Git Workflow
 

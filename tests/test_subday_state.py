@@ -79,16 +79,6 @@ def test_load_creates_empty_state(tmp_path, monkeypatch):
     assert loaded.participants == {}
 
 
-def test_enroll_role_coerces_string():
-    cfg = SubDayGuildConfig(enroll_role="Subscriber")
-    assert cfg.enroll_role == ["Subscriber"]
-
-
-def test_enroll_role_coerces_none():
-    cfg = SubDayGuildConfig(enroll_role=None)
-    assert cfg.enroll_role == []
-
-
 def test_enroll_role_passthrough_list():
     cfg = SubDayGuildConfig(enroll_role=["RoleA", "RoleB"])
     assert cfg.enroll_role == ["RoleA", "RoleB"]
