@@ -4,6 +4,7 @@ import hikari
 
 from dragonpaw_bot.plugins.tickets import state as tickets_state
 from dragonpaw_bot.plugins.tickets.commands import (
+    _find_open_ticket,
     _sanitize_channel_name,
     handle_ticket_add_person_select,
 )
@@ -183,3 +184,16 @@ async def test_add_person_select_forbidden_reports_error():
     assert calls[0] == "initial_response"
     interaction.edit_initial_response.assert_awaited_once()
     interaction.app.rest.create_message.assert_not_awaited()
+
+
+def test_find_open_ticket_found():
+    st = TicketGuildState(
+        guild_id=1, open_tickets=[OpenTicket(user_id=10, channel_id=20, topic="t")]
+    )
+    ticket = _find_open_ticket(st, 10)
+    assert ticket is not None and ticket.channel_id == 20
+
+
+def test_find_open_ticket_absent():
+    st = TicketGuildState(guild_id=1)
+    assert _find_open_ticket(st, 10) is None

@@ -29,9 +29,16 @@ TOPIC_INPUT_ID = "ticket_topic_input"
 TOPIC_MODAL_TITLE = "*flaps wings* What's the snack? 🐉"
 TICKET_OPEN_ID = "ticket_open"
 
-_TICKET_CREATE_PERMS: dict[hikari.Permissions, str] = {
+TICKET_CREATE_PERMS: dict[hikari.Permissions, str] = {
     hikari.Permissions.MANAGE_CHANNELS: "Manage Channels",
 }
+
+
+def _find_open_ticket(
+    st: TicketGuildState, user_id: hikari.Snowflakeish
+) -> OpenTicket | None:
+    """The user's open ticket in this guild, if any."""
+    return next((t for t in st.open_tickets if t.user_id == user_id), None)
 
 
 async def _check_create_perms(
@@ -42,10 +49,10 @@ async def _check_create_perms(
     """Return (missing_perm_names, scope_description) for ticket channel creation."""
     if category_id:
         missing = await check_channel_perms(
-            bot, guild_id, hikari.Snowflake(category_id), _TICKET_CREATE_PERMS
+            bot, guild_id, hikari.Snowflake(category_id), TICKET_CREATE_PERMS
         )
         return missing, f"the ticket category (<#{category_id}>)"
-    missing = await check_guild_perms(bot, guild_id, _TICKET_CREATE_PERMS)
+    missing = await check_guild_perms(bot, guild_id, TICKET_CREATE_PERMS)
     return missing, "the server"
 
 
@@ -74,7 +81,7 @@ def _ticket_block_reason(
     ):
         return "*snorts smoke* Hmm, I don't think you're allowed to open a ticket just yet! 🐉"
 
-    existing = next((t for t in st.open_tickets if t.user_id == user_id), None)
+    existing = _find_open_ticket(st, user_id)
     if existing:
         return (
             f"*happy tail wag* You've already got a ticket open over in "
@@ -178,9 +185,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
     )
 
     # Race guard: check again after defer
-    existing = next(
-        (t for t in st.open_tickets if t.user_id == interaction.user.id), None
-    )
+    existing = _find_open_ticket(st, interaction.user.id)
     if existing:
         await interaction.edit_initial_response(
             content=f"*happy tail wag* Looks like your ticket just got opened: <#{existing.channel_id}>! 🐾"

@@ -6,6 +6,7 @@ import structlog
 
 from dragonpaw_bot.context import GuildContext, check_channel_perms, guild_owner_only
 from dragonpaw_bot.plugins.tickets import state as tickets_state
+from dragonpaw_bot.plugins.tickets.commands import TICKET_CREATE_PERMS
 
 logger = structlog.get_logger(__name__)
 
@@ -73,10 +74,7 @@ class TicketsSet(
         warning = ""
         if self.category is not None:
             missing = await check_channel_perms(
-                gc.bot,
-                ctx.guild_id,
-                self.category.id,
-                {hikari.Permissions.MANAGE_CHANNELS: "Manage Channels"},
+                gc.bot, ctx.guild_id, self.category.id, TICKET_CREATE_PERMS
             )
             if missing:
                 warning = "\n⚠️ I'm missing **Manage Channels** in that category — I won't be able to create or delete ticket channels!"
