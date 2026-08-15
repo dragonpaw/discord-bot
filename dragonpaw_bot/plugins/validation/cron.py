@@ -11,6 +11,7 @@ from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.validation import state as validation_state
 from dragonpaw_bot.plugins.validation.commands import (
     MAX_VALIDATION_DAYS,
+    MIN_PHOTOS,
     RULES_AGREED_PREFIX,
     _close_validate_channel,
     _deadline_timestamp,
@@ -130,7 +131,7 @@ async def validation_reminder_cron(bot: hikari.GatewayBot) -> None:  # noqa: PLR
                             channel=member.channel_id,
                             content=(
                                 f"*peers in curiously* Hey <@{member.user_id}>! 🐉 Don't forget — "
-                                f"I'm still waiting for your verification photos! Drop at least 2 "
+                                f"I'm still waiting for your verification photos! Drop at least {MIN_PHOTOS} "
                                 f"photos in here when you're ready~ 🐾\n\n"
                                 f"⏳ I'll have to boop you back out of the nest {_deadline_timestamp(member.joined_at)} "
                                 f"if you haven't finished up—so don't keep me waiting! 🐾"

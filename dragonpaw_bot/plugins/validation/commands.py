@@ -44,7 +44,7 @@ def _deadline_timestamp(joined_at: datetime) -> str:
 async def _close_validate_channel(
     gc: GuildContext, channel_id: int, notice: str
 ) -> None:
-    """Post a closing notice in the validate channel, wait 30s, then delete it."""
+    """Post a closing notice, then delete the channel after CHANNEL_CLOSE_DELAY."""
     try:
         await gc.bot.rest.create_message(channel=channel_id, content=notice)
     except hikari.NotFoundError:
@@ -96,6 +96,12 @@ async def on_member_join(event: hikari.MemberCreateEvent) -> None:
     bot: DragonpawBot = event.app  # type: ignore[assignment]
     st = validation_state.load(int(event.guild_id))
 
+    if not st.lobby_channel_id:
+        logger.debug(
+            "No lobby channel configured, skipping welcome", guild_id=event.guild_id
+        )
+        return
+
     if event.member.is_bot:
         gc = GuildContext.from_guild(
             bot,
@@ -104,12 +110,6 @@ async def on_member_join(event: hikari.MemberCreateEvent) -> None:
         )
         await gc.log(
             f"🤖 Bot joined: **{event.member.display_name}** — skipping onboarding 🐉"
-        )
-        return
-
-    if not st.lobby_channel_id:
-        logger.debug(
-            "No lobby channel configured, skipping welcome", guild_id=event.guild_id
         )
         return
 
@@ -513,7 +513,7 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
             content=(
                 f"*wiggles tail* Hiya {interaction.user.mention}! 🐉 Thanks for reading the rules — "
                 f"you're almost in the hoard!\n\n"
-                f"To finish up, I need you to post **two photos** in this channel:\n"
+                f"To finish up, I need you to post **{MIN_PHOTOS} photos** in this channel:\n"
                 f"1. 📄 A photo of your **government-issued ID** showing your date of birth\n"
                 f"2. 🤳 A **selfie of you holding that same ID**, along with a handwritten note showing "
                 f'**"{gc.name}"** and today\'s date (**{interaction.created_at.strftime("%B %d, %Y")}**) '

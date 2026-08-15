@@ -607,6 +607,11 @@ class SubDayAbout(
 async def handle_about_interaction(interaction: hikari.ComponentInteraction) -> None:
     """Show the program explainer from the button channel card."""
     if not interaction.guild_id:
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="*confused head tilt* This button only works inside a server! 🐉",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
         return
 
     guild_state = state.load(int(interaction.guild_id))

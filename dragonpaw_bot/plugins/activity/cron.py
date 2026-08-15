@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
+
+# Lurker sync needs at least a week of hourly history to judge anyone fairly.
+MIN_HISTORY_BUCKETS = 7 * 24
 loader = lightbulb.Loader()
 
 
@@ -78,7 +81,7 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     bucket_count = await _prune_state(bot, meta, members, now)
 
     if meta.config.lurker_role_id:
-        if bucket_count < 7 * 24:
+        if bucket_count < MIN_HISTORY_BUCKETS:
             logger.debug(
                 "Skipping lurker sync — not enough history yet",
                 guild=meta.guild_name,
@@ -121,6 +124,7 @@ async def _prune_state(
             ua = activity_state.load_user(meta.guild_id, user_id)
             if ua is None:
                 activity_state.delete_user(meta.guild_id, user_id)
+                removed_users += 1
                 changed = True
                 continue
 

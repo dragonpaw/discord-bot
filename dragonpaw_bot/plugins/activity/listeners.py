@@ -60,10 +60,16 @@ def _add_contribution(
         if b.hour == hour and b.kind == kind:
             b.amount += amount
             activity_state.mark_user_dirty(guild_id, user_id)
+            logger.debug(
+                "Activity recorded", user_id=user_id, kind=kind.value, raw_points=amount
+            )
             return
 
     ua.buckets.append(ContributionBucket(hour=hour, kind=kind, amount=amount))
     activity_state.mark_user_dirty(guild_id, user_id)
+    logger.debug(
+        "Activity recorded", user_id=user_id, kind=kind.value, raw_points=amount
+    )
 
 
 def _ensure_guild_name(
