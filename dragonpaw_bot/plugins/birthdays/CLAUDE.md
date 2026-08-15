@@ -22,7 +22,7 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 
 ### Config Commands (`/config birthday`)
 
-- **settings** — Owner only. Shows current settings with interactive select menus. Each menu displays the current configured value (not None/blank) as its default selection. Changes save immediately on each selection.
+- **settings** — Admin only (MANAGE_GUILD or ADMINISTRATOR). Shows current settings with interactive select menus. Each menu displays the current configured value (not None/blank) as its default selection. Changes save immediately on each selection.
 
 ### Config Settings (`/config birthday settings`)
 

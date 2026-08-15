@@ -150,9 +150,6 @@ async def process_guild_birthdays(gc: GuildContext) -> None:
 
     changed = False
     for uid, entry in list(guild_state.birthdays.items()):
-        if not entry.timezone:
-            continue
-
         local_hour = commands.user_local_hour(entry)
         if local_hour != 0:
             continue

@@ -4,7 +4,7 @@ A 52-week guided journal program for submissives. Participants sign up, receive 
 
 ### Per-Server Configuration
 
-All settings are configurable per server via `/config subday settings`, `/config subday prize-roles`, and `/config subday prizes` (owner only). Settings are stored in the guild's `SubDayGuildState` and persisted to YAML. Old state files without a `config` key automatically get defaults via Pydantic.
+All settings are configurable per server via `/config subday settings`, `/config subday prize-roles`, and `/config subday prizes` (admin only: MANAGE_GUILD or ADMINISTRATOR). Settings are stored in the guild's `SubDayGuildState` and persisted to YAML. Old state files without a `config` key automatically get defaults via Pydantic.
 
 All role fields default to None (guild-owner-only access) and channel fields default to None (disabled) until configured. `enroll_role` supports multiple roles (OR logic: any match grants access); old single-string values are automatically migrated to a list.
 
@@ -27,9 +27,9 @@ Notifications (completions, milestones, signups, removals, owner accept/deny, co
 
 ### Config Commands (`/config subday`)
 
-- **settings** — Owner only. Shows current settings with interactive select menus. Changes save immediately on each selection.
-- **prize-roles** — Owner only. Shows 4 role select menus (one per milestone week). Deselect to disable role assignment for that milestone.
-- **prizes** — Owner only. Sets milestone prize descriptions. With no options, shows current prizes.
+- **settings** — Admin only. Shows current settings with interactive select menus. Changes save immediately on each selection.
+- **prize-roles** — Admin only. Shows 4 role select menus (one per milestone week). Deselect to disable role assignment for that milestone.
+- **prizes** — Admin only. Sets milestone prize descriptions. With no options, shows current prizes.
 
 ### Config Settings
 

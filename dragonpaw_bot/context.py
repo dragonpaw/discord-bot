@@ -832,14 +832,20 @@ class NotAuthorized(Exception):
     """Raised when a user lacks permission to invoke a command."""
 
 
+def is_guild_admin(member: hikari.InteractionMember | None) -> bool:
+    """Whether this member may change bot configuration: MANAGE_GUILD or
+    ADMINISTRATOR. The single home for the rule — command hooks and config-panel
+    interaction handlers must agree on who gets in."""
+    return member is not None and bool(
+        member.permissions
+        & (hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD)
+    )
+
+
 @lightbulb.hook(
     lightbulb.ExecutionSteps.CHECKS, skip_when_failed=True, name="config_admin_only"
 )
 def guild_owner_only(_: lightbulb.ExecutionPipeline, ctx: lightbulb.Context) -> None:
     """Hook: restricts a command to members with MANAGE_GUILD (or ADMINISTRATOR)."""
-    if ctx.member is None:
+    if not is_guild_admin(ctx.member):
         raise NotAuthorized
-    perms = ctx.member.permissions
-    if perms & (hikari.Permissions.ADMINISTRATOR | hikari.Permissions.MANAGE_GUILD):
-        return
-    raise NotAuthorized

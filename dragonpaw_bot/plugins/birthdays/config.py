@@ -14,6 +14,7 @@ from dragonpaw_bot.context import (
     check_channel_perms,
     check_role_manageable,
     guild_owner_only,
+    is_guild_admin,
 )
 from dragonpaw_bot.plugins.birthdays import state
 from dragonpaw_bot.plugins.birthdays.constants import BIRTHDAY_CONFIG_PREFIX
@@ -315,16 +316,16 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         response_type=hikari.ResponseType.DEFERRED_MESSAGE_UPDATE,
     )
 
-    # Now do slow REST calls safely
-    guild = await bot.rest.fetch_guild(guild_id)
-    if interaction.user.id != guild.owner_id:
+    # Same rule as the guild_owner_only hook on the settings command.
+    if not is_guild_admin(interaction.member):
         await interaction.edit_initial_response(
-            content="*guards the treasure* 🐉 Only the server owner can change these settings!",
+            content="*guards the treasure* 🐉 Only server admins can change these settings!",
             embeds=[],
             components=[],
         )
         return
 
+    guild = await bot.rest.fetch_guild(guild_id)
     guild_state = state.load(int(guild_id))
     cfg = guild_state.config
     old_value = getattr(cfg, field)
@@ -404,7 +405,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
 class BirthdaySettings(
     lightbulb.SlashCommand,
     name="settings",
-    description="Configure birthday settings for this server (owner only)",
+    description="Configure birthday settings for this server (admin only)",
     hooks=[guild_owner_only],
 ):
     @lightbulb.invoke

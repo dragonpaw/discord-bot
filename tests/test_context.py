@@ -8,6 +8,7 @@ from dragonpaw_bot.context import (
     PRIVATE_CHANNEL_USER_PERMS,
     GuildContext,
     check_guild_perms,
+    is_guild_admin,
 )
 
 GUILD_ID = hikari.Snowflake(50)
@@ -292,3 +293,30 @@ async def test_create_private_channel_forbidden_logs_and_reraises():
     gc.bot.rest.create_message.assert_called_once()
     content = gc.bot.rest.create_message.call_args.kwargs["content"]
     assert "Manage Channels" in content
+
+
+# ---------------------------------------------------------------------------- #
+#                              is_guild_admin                                  #
+# ---------------------------------------------------------------------------- #
+
+
+def test_is_guild_admin_none_member():
+    assert is_guild_admin(None) is False
+
+
+def test_is_guild_admin_manage_guild():
+    member = Mock()
+    member.permissions = hikari.Permissions.MANAGE_GUILD
+    assert is_guild_admin(member) is True
+
+
+def test_is_guild_admin_administrator():
+    member = Mock()
+    member.permissions = hikari.Permissions.ADMINISTRATOR
+    assert is_guild_admin(member) is True
+
+
+def test_is_guild_admin_plain_member():
+    member = Mock()
+    member.permissions = hikari.Permissions.SEND_MESSAGES
+    assert is_guild_admin(member) is False

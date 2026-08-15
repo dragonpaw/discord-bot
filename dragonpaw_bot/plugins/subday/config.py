@@ -9,7 +9,12 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.colors import SOLARIZED_VIOLET
-from dragonpaw_bot.context import GuildContext, check_channel_perms, guild_owner_only
+from dragonpaw_bot.context import (
+    GuildContext,
+    check_channel_perms,
+    guild_owner_only,
+    is_guild_admin,
+)
 from dragonpaw_bot.plugins.subday import state
 from dragonpaw_bot.plugins.subday.constants import (
     MILESTONE_WEEKS,
@@ -311,17 +316,18 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         )
         return
 
-    # Only allow the guild owner
+    # Same rule as the guild_owner_only hook on the settings command. Checked
+    # before any REST call — component interactions get no auto-defer.
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
-    guild = await bot.rest.fetch_guild(guild_id)
-    if interaction.user.id != guild.owner_id:
+    if not is_guild_admin(interaction.member):
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="*guards the treasure* 🐉 Only the server owner can change these settings!",
+            content="*guards the treasure* 🐉 Only server admins can change these settings!",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
 
+    guild = await bot.rest.fetch_guild(guild_id)
     guild_state = state.load(int(guild_id))
     cfg = guild_state.config
     old_value = getattr(cfg, field)
@@ -449,7 +455,7 @@ async def _prize_roles_components(
 class SubDaySettings(
     lightbulb.SlashCommand,
     name="settings",
-    description="Configure SubDay settings for this server (owner only)",
+    description="Configure SubDay settings for this server (admin only)",
     hooks=[guild_owner_only],
 ):
     @lightbulb.invoke
@@ -470,7 +476,7 @@ class SubDaySettings(
 class SubDayPrizeRoles(
     lightbulb.SlashCommand,
     name="prize-roles",
-    description="Configure milestone roles for this server (owner only)",
+    description="Configure milestone roles for this server (admin only)",
     hooks=[guild_owner_only],
 ):
     @lightbulb.invoke
@@ -491,7 +497,7 @@ class SubDayPrizeRoles(
 class SubDayPrizes(
     lightbulb.SlashCommand,
     name="prizes",
-    description="Set milestone prize descriptions (owner only)",
+    description="Set milestone prize descriptions (admin only)",
     hooks=[guild_owner_only],
 ):
     prize_13 = lightbulb.string("prize_13", "Prize for week 13 milestone", default=None)
