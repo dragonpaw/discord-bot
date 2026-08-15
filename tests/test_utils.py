@@ -9,7 +9,7 @@ from dragonpaw_bot.context import (
     has_any_role_permission,
     has_permission,
 )
-from dragonpaw_bot.utils import create_background_task
+from dragonpaw_bot.utils import DefaultsActionRow, create_background_task
 
 # ---------------------------------------------------------------------------- #
 #                              has_permission                                   #
@@ -213,3 +213,40 @@ async def test_create_background_task_logs_exception_without_raising():
     create_background_task(_boom())
     for _ in range(3):
         await asyncio.sleep(0)  # let the task run and its done-callback fire
+
+
+# ---------------------------------------------------------------------------- #
+#                             DefaultsActionRow                                #
+# ---------------------------------------------------------------------------- #
+
+
+class _FakeRowBuilder:
+    type = hikari.ComponentType.ACTION_ROW
+    id = 7
+
+    def build(self):
+        return {"components": [{"custom_id": "x"}]}, []
+
+
+def test_defaults_action_row_injects_defaults():
+    defaults = [{"id": "123", "type": "role"}]
+    row = DefaultsActionRow(_FakeRowBuilder(), defaults)
+    payload, _resources = row.build()
+    assert payload["components"][0]["default_values"] == defaults
+    assert row.type == hikari.ComponentType.ACTION_ROW
+    assert row.id == 7
+
+
+def test_defaults_action_row_empty_defaults_leaves_payload_alone():
+    row = DefaultsActionRow(_FakeRowBuilder(), [])
+    payload, _resources = row.build()
+    assert "default_values" not in payload["components"][0]
+
+
+def test_defaults_action_row_tolerates_missing_components():
+    class _Empty(_FakeRowBuilder):
+        def build(self):
+            return {}, []
+
+    payload, _resources = DefaultsActionRow(_Empty(), [{"id": "1", "type": "role"}]).build()
+    assert payload == {}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import hikari
 import hikari.messages
@@ -52,6 +52,37 @@ def _msg_has_media(
     return (
         bool(attachments) or _URL_RE.search(content or "") is not None or bool(stickers)
     )
+
+
+class DefaultsActionRow(hikari.api.ComponentBuilder):
+    """Wraps a MessageActionRowBuilder to inject default_values into the payload.
+
+    Hikari's select menu builders don't emit ``default_values`` for
+    auto-populated selects (role/channel).  Discord's API *does* support
+    the field, so we patch it into the built dict.
+    """
+
+    def __init__(
+        self,
+        inner: hikari.api.ComponentBuilder,
+        defaults: list[dict[str, str]],
+    ) -> None:
+        self._inner = inner
+        self._defaults = defaults
+
+    @property
+    def type(self) -> int | hikari.ComponentType:
+        return self._inner.type
+
+    @property
+    def id(self) -> hikari.UndefinedOr[int]:
+        return self._inner.id
+
+    def build(self) -> Any:
+        payload, resources = self._inner.build()
+        if self._defaults and payload.get("components"):
+            payload["components"][0]["default_values"] = self._defaults
+        return payload, resources
 
 
 def message_has_media(message: hikari.Message) -> bool:

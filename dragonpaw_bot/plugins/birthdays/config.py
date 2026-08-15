@@ -18,6 +18,7 @@ from dragonpaw_bot.context import (
 )
 from dragonpaw_bot.plugins.birthdays import state
 from dragonpaw_bot.plugins.birthdays.constants import BIRTHDAY_CONFIG_PREFIX
+from dragonpaw_bot.utils import DefaultsActionRow
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -70,35 +71,6 @@ def config_embed(cfg: BirthdayGuildConfig) -> hikari.Embed:
     return embed
 
 
-class _DefaultsActionRow:
-    """Wraps a MessageActionRowBuilder to inject default_values into the payload.
-
-    Hikari's select menu builders don't emit ``default_values`` for
-    auto-populated selects (role/channel).  Discord's API *does* support
-    the field, so we patch it into the built dict.
-    """
-
-    def __init__(
-        self,
-        inner: hikari.api.ComponentBuilder,
-        defaults: list[dict[str, str]],
-    ) -> None:
-        self._inner = inner
-        self._defaults = defaults
-
-    def __getattr__(self, name: str) -> Any:
-        """Delegate attribute access to the inner builder."""
-        return getattr(self._inner, name)
-
-    def build(self) -> tuple[Any, Any]:
-        payload, resources = self._inner.build()
-        if self._defaults:
-            components = payload.get("components")
-            if components and len(components) > 0:
-                components[0]["default_values"] = self._defaults
-        return payload, resources
-
-
 ROLE_FIELDS = {"register_role", "manage_role", "list_role", "birthday_role"}
 MULTI_ROLE_FIELDS = {"register_role"}
 
@@ -118,7 +90,7 @@ async def config_components(
 
     # Register role select (multi-select)
     rows.append(
-        _DefaultsActionRow(
+        DefaultsActionRow(
             bot.rest.build_message_action_row().add_select_menu(
                 hikari.ComponentType.ROLE_SELECT_MENU,
                 f"{BIRTHDAY_CONFIG_PREFIX}register_role",
@@ -136,7 +108,7 @@ async def config_components(
 
     # Manage role select
     rows.append(
-        _DefaultsActionRow(
+        DefaultsActionRow(
             bot.rest.build_message_action_row().add_select_menu(
                 hikari.ComponentType.ROLE_SELECT_MENU,
                 f"{BIRTHDAY_CONFIG_PREFIX}manage_role",
@@ -152,7 +124,7 @@ async def config_components(
 
     # List role select
     rows.append(
-        _DefaultsActionRow(
+        DefaultsActionRow(
             bot.rest.build_message_action_row().add_select_menu(
                 hikari.ComponentType.ROLE_SELECT_MENU,
                 f"{BIRTHDAY_CONFIG_PREFIX}list_role",
@@ -168,7 +140,7 @@ async def config_components(
 
     # Announcement channel select
     rows.append(
-        _DefaultsActionRow(
+        DefaultsActionRow(
             bot.rest.build_message_action_row().add_channel_menu(
                 f"{BIRTHDAY_CONFIG_PREFIX}announcement_channel",
                 channel_types=[hikari.ChannelType.GUILD_TEXT],
@@ -184,7 +156,7 @@ async def config_components(
 
     # Birthday role select
     rows.append(
-        _DefaultsActionRow(
+        DefaultsActionRow(
             bot.rest.build_message_action_row().add_select_menu(
                 hikari.ComponentType.ROLE_SELECT_MENU,
                 f"{BIRTHDAY_CONFIG_PREFIX}birthday_role",

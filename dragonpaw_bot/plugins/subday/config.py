@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import hikari
 import lightbulb
@@ -21,6 +21,7 @@ from dragonpaw_bot.plugins.subday.constants import (
     SUBDAY_CFG_ROLE_PREFIX,
     SUBDAY_CONFIG_PREFIX,
 )
+from dragonpaw_bot.utils import DefaultsActionRow
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -85,37 +86,6 @@ def _config_embed(cfg: SubDayGuildConfig) -> hikari.Embed:
     return embed
 
 
-class _DefaultsActionRow(hikari.api.ComponentBuilder):
-    """Wraps a MessageActionRowBuilder to inject default_values into the payload.
-
-    Hikari's select menu builders don't emit ``default_values`` for
-    auto-populated selects (role/channel).  Discord's API *does* support
-    the field, so we patch it into the built dict.
-    """
-
-    def __init__(
-        self,
-        inner: hikari.api.ComponentBuilder,
-        defaults: list[dict[str, str]],
-    ) -> None:
-        self._inner = inner
-        self._defaults = defaults
-
-    @property
-    def type(self) -> int | hikari.ComponentType:
-        return self._inner.type
-
-    @property
-    def id(self) -> hikari.UndefinedOr[int]:
-        return self._inner.id
-
-    def build(self) -> Any:
-        payload, resources = self._inner.build()
-        if self._defaults:
-            payload["components"][0]["default_values"] = self._defaults
-        return payload, resources
-
-
 async def _config_components(
     bot: DragonpawBot,
     guild_id: hikari.Snowflakeish,
@@ -131,7 +101,7 @@ async def _config_components(
 
     # Enroll role select (multi-select)
     rows.append(
-        _DefaultsActionRow(
+        DefaultsActionRow(
             bot.rest.build_message_action_row().add_select_menu(
                 hikari.ComponentType.ROLE_SELECT_MENU,
                 f"{SUBDAY_CONFIG_PREFIX}enroll_role",
@@ -149,7 +119,7 @@ async def _config_components(
 
     # Complete role select
     rows.append(
-        _DefaultsActionRow(
+        DefaultsActionRow(
             bot.rest.build_message_action_row().add_select_menu(
                 hikari.ComponentType.ROLE_SELECT_MENU,
                 f"{SUBDAY_CONFIG_PREFIX}complete_role",
@@ -165,7 +135,7 @@ async def _config_components(
 
     # Backfill role select
     rows.append(
-        _DefaultsActionRow(
+        DefaultsActionRow(
             bot.rest.build_message_action_row().add_select_menu(
                 hikari.ComponentType.ROLE_SELECT_MENU,
                 f"{SUBDAY_CONFIG_PREFIX}backfill_role",
@@ -181,7 +151,7 @@ async def _config_components(
 
     # Achievements channel select
     rows.append(
-        _DefaultsActionRow(
+        DefaultsActionRow(
             bot.rest.build_message_action_row().add_channel_menu(
                 f"{SUBDAY_CONFIG_PREFIX}achievements_channel",
                 channel_types=[hikari.ChannelType.GUILD_TEXT],
@@ -436,7 +406,7 @@ async def _prize_roles_components(
     for week in MILESTONE_WEEKS:
         role_name = getattr(cfg, f"role_{week}")
         rows.append(
-            _DefaultsActionRow(
+            DefaultsActionRow(
                 bot.rest.build_message_action_row().add_select_menu(
                     hikari.ComponentType.ROLE_SELECT_MENU,
                     f"{SUBDAY_CFG_ROLE_PREFIX}role_{week}",
