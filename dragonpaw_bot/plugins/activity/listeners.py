@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from typing import TYPE_CHECKING
 
@@ -16,7 +15,7 @@ from dragonpaw_bot.plugins.activity.models import (
     ContributionKind,
     UserActivity,
 )
-from dragonpaw_bot.utils import guild_member
+from dragonpaw_bot.utils import guild_member, message_has_media
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -25,18 +24,8 @@ logger = structlog.get_logger(__name__)
 
 loader = lightbulb.Loader()
 
-_URL_RE = re.compile(r"https?://", re.IGNORECASE)
-
 # guild_id → {user_id → join_timestamp}
 _vc_sessions: dict[int, dict[int, float]] = {}
-
-
-def _has_media(message: hikari.Message) -> bool:
-    return (
-        bool(message.attachments)
-        or _URL_RE.search(message.content or "") is not None
-        or bool(message.stickers)
-    )
 
 
 def _add_contribution(
@@ -115,7 +104,9 @@ async def _handle_message(event: hikari.GuildMessageCreateEvent) -> None:
         return  # Not yet through onboarding
 
     kind = (
-        ContributionKind.MEDIA if _has_media(event.message) else ContributionKind.TEXT
+        ContributionKind.MEDIA
+        if message_has_media(event.message)
+        else ContributionKind.TEXT
     )
 
     # Per-channel point multiplier

@@ -7,11 +7,12 @@ import pytest
 
 from dragonpaw_bot.plugins.media_channels import cron as media_cron
 from dragonpaw_bot.plugins.media_channels import state as media_state
-from dragonpaw_bot.plugins.media_channels.listeners import _has_media, on_message
+from dragonpaw_bot.plugins.media_channels.listeners import on_message
 from dragonpaw_bot.plugins.media_channels.models import (
     MediaChannelEntry,
     MediaGuildState,
 )
+from dragonpaw_bot.utils import message_has_media
 
 # ---------------------------------------------------------------------------- #
 #                               _has_media                                     #
@@ -46,67 +47,67 @@ def _mock_message(
 
 def test_has_media_with_attachment():
     msg = _mock_message(content=None, attachments=[Mock()])
-    assert _has_media(msg) is True
+    assert message_has_media(msg) is True
 
 
 def test_has_media_with_https_url():
     msg = _mock_message(content="check this out https://example.com")
-    assert _has_media(msg) is True
+    assert message_has_media(msg) is True
 
 
 def test_has_media_with_http_url():
     msg = _mock_message(content="http://example.com/image.png")
-    assert _has_media(msg) is True
+    assert message_has_media(msg) is True
 
 
 def test_has_media_with_sticker():
     msg = _mock_message(stickers=[Mock()])
-    assert _has_media(msg) is True
+    assert message_has_media(msg) is True
 
 
 def test_has_media_plain_text():
     msg = _mock_message(content="just some text")
-    assert _has_media(msg) is False
+    assert message_has_media(msg) is False
 
 
 def test_has_media_none_content():
     msg = _mock_message(content=None)
-    assert _has_media(msg) is False
+    assert message_has_media(msg) is False
 
 
 def test_has_media_requires_scheme():
     # "http" without "://" should not match
     msg = _mock_message(content="see http for more info")
-    assert _has_media(msg) is False
+    assert message_has_media(msg) is False
 
 
 def test_has_media_url_case_insensitive():
     msg = _mock_message(content="HTTPS://EXAMPLE.COM")
-    assert _has_media(msg) is True
+    assert message_has_media(msg) is True
 
 
 def test_has_media_forwarded_with_attachment():
     snap = _mock_snapshot(attachments=[Mock()])
     msg = _mock_message(snapshots=[snap])
-    assert _has_media(msg) is True
+    assert message_has_media(msg) is True
 
 
 def test_has_media_forwarded_with_url():
     snap = _mock_snapshot(content="https://example.com/pic.png")
     msg = _mock_message(snapshots=[snap])
-    assert _has_media(msg) is True
+    assert message_has_media(msg) is True
 
 
 def test_has_media_forwarded_with_sticker():
     snap = _mock_snapshot(stickers=[Mock()])
     msg = _mock_message(snapshots=[snap])
-    assert _has_media(msg) is True
+    assert message_has_media(msg) is True
 
 
 def test_has_media_forwarded_text_only():
     snap = _mock_snapshot(content="just text")
     msg = _mock_message(snapshots=[snap])
-    assert _has_media(msg) is False
+    assert message_has_media(msg) is False
 
 
 # ---------------------------------------------------------------------------- #

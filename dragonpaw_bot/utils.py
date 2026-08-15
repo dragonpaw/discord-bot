@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Coroutine, Mapping
+import re
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 import hikari
@@ -39,6 +40,31 @@ def _finish_background_task(task: asyncio.Task[None]) -> None:
 # ---------------------------------------------------------------------------- #
 #                           Discord utility functions                          #
 # ---------------------------------------------------------------------------- #
+
+_URL_RE = re.compile(r"https?://", re.IGNORECASE)
+
+
+def _msg_has_media(
+    attachments: Sequence[hikari.Attachment],
+    content: str | None,
+    stickers: Sequence[hikari.PartialSticker],
+) -> bool:
+    return (
+        bool(attachments) or _URL_RE.search(content or "") is not None or bool(stickers)
+    )
+
+
+def message_has_media(message: hikari.Message) -> bool:
+    """Return True if this message (or any forwarded snapshot) contains media
+    (attachments, URLs, or stickers)."""
+    if _msg_has_media(message.attachments, message.content, message.stickers):
+        return True
+    # Forwarded messages carry their media inside message_snapshots, not on the
+    # message itself — check each snapshot with the same rules.
+    return any(
+        _msg_has_media(s.attachments, s.content, s.stickers)
+        for s in message.message_snapshots
+    )
 
 
 async def guild_members(

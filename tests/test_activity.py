@@ -10,6 +10,7 @@ import pydantic
 import pytest
 import yaml
 
+from dragonpaw_bot.plugins.activity import listeners as activity_listeners
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.commands import _classify_members
 from dragonpaw_bot.plugins.activity.cron import (
@@ -17,7 +18,7 @@ from dragonpaw_bot.plugins.activity.cron import (
     _prune_state,
     _sync_lurker_role,
 )
-from dragonpaw_bot.plugins.activity.listeners import _add_contribution, _has_media
+from dragonpaw_bot.plugins.activity.listeners import _add_contribution
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
     BASE_HALF_LIFE,
@@ -26,6 +27,7 @@ from dragonpaw_bot.plugins.activity.models import (
     ActivityGuildMeta,
     ChannelConfig,
     ContributionBucket,
+    ContributionKind,
     RoleConfig,
     UserActivity,
     best_role_config,
@@ -241,43 +243,6 @@ def test_add_contribution_different_hour_creates_new_bucket(clear_user_state):
     _add_contribution(1, 42, "text", 1.0, now=1_000_000.0 + 3601)
     ua = activity_state._user_cache[(1, 42)]
     assert len(ua.buckets) == 2
-
-
-# ---------------------------------------------------------------------------- #
-#                            _has_media                                        #
-# ---------------------------------------------------------------------------- #
-
-
-def _msg(content=None, attachments=None, stickers=None):
-    return SimpleNamespace(
-        content=content,
-        attachments=attachments or [],
-        stickers=stickers or [],
-    )
-
-
-def test_has_media_plain_text():
-    assert _has_media(_msg(content="hello there")) is False
-
-
-def test_has_media_with_attachment():
-    assert _has_media(_msg(content="", attachments=[object()])) is True
-
-
-def test_has_media_with_url_in_content():
-    assert _has_media(_msg(content="check this https://example.com")) is True
-
-
-def test_has_media_with_sticker():
-    assert _has_media(_msg(content="", stickers=[object()])) is True
-
-
-def test_has_media_none_content():
-    assert _has_media(_msg(content=None)) is False
-
-
-def test_has_media_http_url():
-    assert _has_media(_msg(content="http://example.com")) is True
 
 
 # ---------------------------------------------------------------------------- #
@@ -869,3 +834,39 @@ def test_evaluate_lurker_score_at_floor_is_not_lurker():
     )
     assert should_lurker is False
     assert reason == "now active"
+
+
+async def test_forwarded_media_message_scores_as_media(monkeypatch):
+    """A forwarded image carries its media in message_snapshots — it must count
+    as MEDIA (2.0), not TEXT, same as media_channels' detection."""
+    snap = SimpleNamespace(content=None, attachments=[object()], stickers=[])
+    msg = SimpleNamespace(
+        content=None, attachments=[], stickers=[], message_snapshots=[snap]
+    )
+    msg.author = SimpleNamespace(is_bot=False)
+
+    event = MagicMock()
+    event.message = msg
+    event.guild_id = hikari.Snowflake(1)
+    event.author_id = hikari.Snowflake(42)
+    event.channel_id = hikari.Snowflake(7)
+
+    meta = SimpleNamespace(
+        guild_name="G", config=SimpleNamespace(channel_configs=[])
+    )
+    monkeypatch.setattr(activity_listeners.activity_state, "load_config", lambda _g: meta)
+    monkeypatch.setattr(
+        activity_listeners,
+        "guild_member",
+        AsyncMock(return_value=SimpleNamespace(role_ids=[hikari.Snowflake(5)])),
+    )
+    recorded: list[tuple] = []
+    monkeypatch.setattr(
+        activity_listeners,
+        "_add_contribution",
+        lambda gid, uid, kind, amount, now=None: recorded.append((kind, amount)),
+    )
+
+    await activity_listeners._handle_message(event)
+
+    assert recorded == [(ContributionKind.MEDIA, 1.0)]

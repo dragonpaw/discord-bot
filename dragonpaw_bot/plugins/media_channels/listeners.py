@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from typing import TYPE_CHECKING
 
 import hikari
@@ -12,41 +11,15 @@ import structlog
 
 from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.media_channels import state as media_state
-from dragonpaw_bot.utils import create_background_task
+from dragonpaw_bot.utils import create_background_task, message_has_media
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
 
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
 
 loader = lightbulb.Loader()
-
-_URL_RE = re.compile(r"https?://", re.IGNORECASE)
-
-
-def _msg_has_media(
-    attachments: Sequence[hikari.Attachment],
-    content: str | None,
-    stickers: Sequence[hikari.PartialSticker],
-) -> bool:
-    return (
-        bool(attachments) or _URL_RE.search(content or "") is not None or bool(stickers)
-    )
-
-
-def _has_media(message: hikari.Message) -> bool:
-    """Return True if this message (or any forwarded snapshot) contains media."""
-    if _msg_has_media(message.attachments, message.content, message.stickers):
-        return True
-    # Forwarded messages carry their media inside message_snapshots, not on the
-    # message itself — check each snapshot with the same rules.
-    return any(
-        _msg_has_media(s.attachments, s.content, s.stickers)
-        for s in message.message_snapshots
-    )
-
 
 async def _delete_after(
     bot: DragonpawBot,
@@ -82,7 +55,7 @@ async def on_message(event: hikari.GuildMessageCreateEvent) -> None:
     if entry is None:
         return
 
-    if _has_media(msg):
+    if message_has_media(msg):
         return
 
     try:
