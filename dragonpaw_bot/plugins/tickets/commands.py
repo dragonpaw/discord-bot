@@ -352,6 +352,13 @@ async def handle_ticket_add_person_select(
     selected_user_id = hikari.Snowflake(interaction.values[0])
     channel_id = interaction.channel_id
 
+    # Defer before the REST calls below — component interactions get no
+    # auto-defer, so slow work first would blow Discord's 3-second deadline.
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.DEFERRED_MESSAGE_CREATE,
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+
     try:
         await bot.rest.edit_permission_overwrite(
             channel=channel_id,
@@ -360,10 +367,8 @@ async def handle_ticket_add_person_select(
             allow=PRIVATE_CHANNEL_USER_PERMS,
         )
     except hikari.ForbiddenError:
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="*sad smoke puff* I couldn't add them — missing permissions! 🐉",
-            flags=hikari.MessageFlag.EPHEMERAL,
+        await interaction.edit_initial_response(
+            "*sad smoke puff* I couldn't add them — missing permissions! 🐉"
         )
         return
 
@@ -371,8 +376,6 @@ async def handle_ticket_add_person_select(
         channel=channel_id,
         content=f"*nom* I've let <@{selected_user_id}> into the ticket! 🐾",
     )
-    await interaction.create_initial_response(
-        response_type=hikari.ResponseType.MESSAGE_CREATE,
-        content=f"Done! <@{selected_user_id}> can now see this ticket 🐉",
-        flags=hikari.MessageFlag.EPHEMERAL,
+    await interaction.edit_initial_response(
+        f"Done! <@{selected_user_id}> can now see this ticket 🐉"
     )

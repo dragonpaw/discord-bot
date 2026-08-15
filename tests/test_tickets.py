@@ -1,5 +1,12 @@
+from unittest.mock import AsyncMock, MagicMock
+
+import hikari
+
 from dragonpaw_bot.plugins.tickets import state as tickets_state
-from dragonpaw_bot.plugins.tickets.commands import _sanitize_channel_name
+from dragonpaw_bot.plugins.tickets.commands import (
+    _sanitize_channel_name,
+    handle_ticket_add_person_select,
+)
 from dragonpaw_bot.plugins.tickets.models import OpenTicket, TicketGuildState
 
 
@@ -130,3 +137,49 @@ def test_sanitize_truncated_to_100_chars():
     result = _sanitize_channel_name(long_name)
     assert len(result) <= 100
     assert result.startswith("help-")
+
+
+def _add_person_interaction(calls: list[str]) -> MagicMock:
+    interaction = MagicMock()
+    interaction.guild_id = 100
+    interaction.values = ["555"]
+    interaction.channel_id = 42
+    interaction.create_initial_response = AsyncMock(
+        side_effect=lambda *a, **k: calls.append("initial_response")
+    )
+    interaction.edit_initial_response = AsyncMock(
+        side_effect=lambda *a, **k: calls.append("edit_response")
+    )
+    bot = interaction.app
+    bot.rest.edit_permission_overwrite = AsyncMock(
+        side_effect=lambda *a, **k: calls.append("edit_permission_overwrite")
+    )
+    bot.rest.create_message = AsyncMock(
+        side_effect=lambda *a, **k: calls.append("create_message")
+    )
+    return interaction
+
+
+async def test_add_person_select_responds_before_rest_work():
+    calls: list[str] = []
+    interaction = _add_person_interaction(calls)
+
+    await handle_ticket_add_person_select(interaction)
+
+    assert calls[0] == "initial_response"
+    assert "edit_permission_overwrite" in calls
+    assert calls[-1] == "edit_response"
+
+
+async def test_add_person_select_forbidden_reports_error():
+    calls: list[str] = []
+    interaction = _add_person_interaction(calls)
+    interaction.app.rest.edit_permission_overwrite.side_effect = hikari.ForbiddenError(
+        url="", headers={}, raw_body=b""
+    )
+
+    await handle_ticket_add_person_select(interaction)
+
+    assert calls[0] == "initial_response"
+    interaction.edit_initial_response.assert_awaited_once()
+    interaction.app.rest.create_message.assert_not_awaited()
