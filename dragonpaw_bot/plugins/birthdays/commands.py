@@ -337,7 +337,7 @@ class BirthdayWishlist(
         logger.info(
             "Updated wishlist URL",
             guild=guild_state.guild_name,
-            user=ctx.user.username,
+            user=ctx.user.display_name,
         )
 
 
@@ -719,7 +719,7 @@ class BirthdayRemove(
         logger.info(
             "Removed own birthday",
             guild=gc.name,
-            user=ctx.user.username,
+            user=ctx.user.display_name,
         )
         actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(
@@ -764,8 +764,8 @@ class BirthdayRemoveFor(
         logger.info(
             "Removed birthday for other user",
             guild=gc.name,
-            user=ctx.user.username,
-            target=self.user.username,
+            user=ctx.user.display_name,
+            target=self.user.display_name,
         )
         actor = ctx.member.display_name if ctx.member else ctx.user.display_name
         await gc.log(

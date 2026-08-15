@@ -70,7 +70,7 @@ async def on_member_leave(event: hikari.MemberDeleteEvent) -> None:
     name = (
         event.old_member.display_name
         if event.old_member
-        else (event.user.username if event.user else str(uid))
+        else (event.user.display_name if event.user else str(uid))
     )
     await gc.log(
         f"🎂 Removed birthday entry for **{name}** who left the server — I'll miss celebrating them! 🐾"

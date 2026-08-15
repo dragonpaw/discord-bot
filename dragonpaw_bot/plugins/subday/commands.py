@@ -274,9 +274,9 @@ async def _post_achievement(
         )
         embed = _graduation_embed(target, prizes)
         staff_msg = (
-            f"🎓 **{completer.display_name}** — **{target.display_name}** has **graduated** "
-            f"from Where I am Led! Please arrange their prize: "
-            f"**{prizes.get(TOTAL_WEEKS, 'a prize')}**."
+            f"🎓 *proud dragon tears* **{target.display_name}** has **graduated** from "
+            f"Where I am Led (approved by **{completer.display_name}**)! Please arrange "
+            f"their prize: **{prizes.get(TOTAL_WEEKS, 'a prize')}** — they earned it! 🐉✨"
         )
     else:
         logger.info(
@@ -289,9 +289,9 @@ async def _post_achievement(
         embed = _milestone_embed(target, week, role_name, prizes)
         prize = prizes.get(week, "a prize")
         staff_msg = (
-            f"🎁 **{completer.display_name}** — **{target.display_name}** has reached the "
-            f"**week {week} milestone** of Where I am Led! "
-            f"Please arrange their prize: **{prize}**."
+            f"🎁 *excited wing flaps* **{target.display_name}** just hit the "
+            f"**week {week} milestone** of Where I am Led (approved by "
+            f"**{completer.display_name}**)! Please arrange their prize: **{prize}**~ 🐾"
         )
 
     await _try_post_achievement_embed(
@@ -335,7 +335,7 @@ def _do_signup(
         logger.debug(
             "SubDay signup rejected, already enrolled",
             guild=guild_state.guild_name,
-            user=user.username,
+            user=user.display_name,
         )
         return None
 
@@ -393,13 +393,13 @@ async def _do_signup_async(
         logger.warning(
             "Cannot DM user for SubDay signup",
             guild=guild.name,
-            user=user.username,
+            user=user.display_name,
             error=str(exc),
         )
     logger.info(
         "Signed up for SubDay",
         guild=guild.name,
-        user=user.username,
+        user=user.display_name,
     )
     await gc.log(
         f"📝 **{user.display_name}** just signed up for **Where I am Led**! *happy tail wag* 🐉"
@@ -605,7 +605,7 @@ class SubDayAbout(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         guild_state = state.load(int(ctx.guild_id))
-        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
+        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.display_name)
         log.info("Viewed SubDay about")
 
         gc = GuildContext.from_ctx(ctx)
@@ -739,7 +739,7 @@ class SubDayStatus(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         guild_state = state.load(int(ctx.guild_id))
-        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.username)
+        log = logger.bind(guild=guild_state.guild_name, user=ctx.user.display_name)
         log.info("Checking SubDay status")
         user_id = int(ctx.user.id)
 
@@ -889,7 +889,7 @@ class SubDayOwner(
             state.save(guild_state)
             log.warning(
                 "Failed to DM owner request",
-                target=target.username,
+                target=target.display_name,
                 error=str(exc),
             )
             await ctx.respond(
@@ -900,7 +900,7 @@ class SubDayOwner(
             return
 
         state.save(guild_state)
-        log.info("Sent owner request", target=target.username)
+        log.info("Sent owner request", target=target.display_name)
         await ctx.respond(
             f"🐉 Done! I've sent an owner request to {target.mention}. "
             "They'll need to accept it in their DMs~ 💜",
@@ -1300,16 +1300,19 @@ class SubDayComplete(
         # Respond first to avoid interaction timeout, then do async work
         if auto_enrolled:
             response = (
-                f"Enrolled {target.mention} and completed "
-                f"**Week {week}** of Where I am Led."
+                f"*scribbles them in* 🐉 Enrolled {target.mention} and completed "
+                f"**Week {week}** of Where I am Led! 🐾"
             )
         elif sent_next:
             response = (
-                f"Marked {target.mention} as complete for **Week {week}**, "
-                f"advanced to Week {week + 1} (prompt already sent)."
+                f"*happy stamp* ✅ Marked {target.mention} complete for **Week {week}** "
+                f"and advanced them to Week {week + 1} (prompt already sent)! 🐉"
             )
         else:
-            response = f"Marked {target.mention} as complete for **Week {week}**."
+            response = (
+                f"*happy stamp* ✅ Marked {target.mention} complete for "
+                f"**Week {week}**! 🐉"
+            )
 
         await ctx.respond(response, flags=hikari.MessageFlag.EPHEMERAL)
 
@@ -1320,25 +1323,25 @@ class SubDayComplete(
         if week not in MILESTONE_WEEKS:
             if is_backfill:
                 staff_msg = (
-                    f"⏩ **{ctx.member.display_name}** backfilled **{target.display_name}** "
-                    f"to **Week {week}** (complete)"
+                    f"⏩ *flips through my journal* **{ctx.member.display_name}** "
+                    f"backfilled **{target.display_name}** to **Week {week}** (complete)"
                     + (
                         f", advanced to Week {week + 1} (prompt already sent)"
                         if sent_next
                         else ""
                     )
-                    + "."
+                    + " 🐉"
                 )
             elif sent_next:
                 staff_msg = (
-                    f"✅ **{ctx.member.display_name}** marked **{target.display_name}** "
-                    f"complete for **Week {week}**, "
-                    f"and advanced to Week {week + 1} (prompt already sent)."
+                    f"✅ *stamps with my paw* **{ctx.member.display_name}** marked "
+                    f"**{target.display_name}** complete for **Week {week}** and "
+                    f"advanced them to Week {week + 1} (prompt already sent)~ 🐾"
                 )
             else:
                 staff_msg = (
-                    f"✅ **{ctx.member.display_name}** marked **{target.display_name}** "
-                    f"complete for **Week {week}**."
+                    f"✅ *stamps with my paw* **{ctx.member.display_name}** marked "
+                    f"**{target.display_name}** complete for **Week {week}**~ 🐾"
                 )
             await gc.log(staff_msg)
         logger.info(

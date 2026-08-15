@@ -245,8 +245,6 @@ async def _reject_missing_perms(
     )
     logger.warning(
         "SubDay config rejected, missing channel permissions",
-        guild=guild_state.guild_name,
-        user=interaction.user.username,
         channel=channel_name,
         missing_perms=", ".join(missing),
     )

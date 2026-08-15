@@ -337,10 +337,7 @@ async def handle_role_menu_interaction(
 ) -> None:
     """Handle a role menu select interaction."""
     if not interaction.guild_id or not interaction.member:
-        logger.error(
-            "Role menu interaction missing guild_id or member",
-            custom_id=interaction.custom_id,
-        )
+        logger.error("Role menu interaction missing guild_id or member")
         return
 
     guild_id = int(interaction.guild_id)

@@ -178,7 +178,7 @@ async def _try_delete(message: hikari.Message, reason: str, guild_name: str) -> 
         logger.warning(
             f"Cannot delete {reason} — missing permissions",
             guild=guild_name,
-            user=message.author.username,
+            user=message.author.display_name,
         )
         return False
     except hikari.NotFoundError:
@@ -264,7 +264,7 @@ async def _cleanup_messages(
             continue
 
         author_id = int(message.author.id)
-        author_name = message.author.username
+        author_name = str(message.author.display_name or message.author.id)
 
         present = author_id in member_ids
         if not present:

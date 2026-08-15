@@ -467,7 +467,7 @@ class SetGeneralChannel(
             )
             actor = ctx.member.display_name if ctx.member else ctx.user.display_name
             await gc.log(
-                f"⚙️ **{actor}** set the general chat channel to <#{self.channel.id}> 🐉"
+                f"⚙️ *tail swish* **{actor}** pointed me at <#{self.channel.id}> as the general chat channel! 🐉"
             )
         else:
             state.general_channel_id = None

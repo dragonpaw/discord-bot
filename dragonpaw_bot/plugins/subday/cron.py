@@ -301,7 +301,7 @@ async def _process_guild_friday_reminders(
         participant.reminder_sent = True
         any_sent = True
         await gc.log(
-            f"🔔 Sent Friday reminder to **{member.display_name}** for Week {participant.current_week}"
+            f"🔔 *gentle nudge delivered* I reminded **{member.display_name}** about Week {participant.current_week}~ 🐾"
         )
 
     if any_sent:

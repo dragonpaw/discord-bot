@@ -29,7 +29,7 @@ async def announce_birthday(
     cfg: BirthdayGuildConfig,
 ) -> None:
     """Post announcement and assign birthday role for a member."""
-    log = gc.logger.bind(user=member.username)
+    log = gc.logger.bind(user=member.display_name)
     # Post announcement embed
     if cfg.announcement_channel:
         channel = await utils.guild_channel_by_name(gc, cfg.announcement_channel)
@@ -84,7 +84,7 @@ async def cleanup_birthday_role(
     role = await utils.guild_role_by_name(gc, cfg.birthday_role)
     if not role:
         return
-    log = gc.logger.bind(user=member.username)
+    log = gc.logger.bind(user=member.display_name)
     try:
         await gc.bot.rest.remove_role_from_member(gc.guild_id, member.id, role.id)
         log.info("Removed birthday role (birthday over)")
@@ -107,7 +107,7 @@ async def send_week_ahead_dm(
         state.save(guild_state)
         return
 
-    member_log = gc.logger.bind(user=member.username)
+    member_log = gc.logger.bind(user=member.display_name)
     if entry.wishlist_url:
         wishlist_line = (
             f"Your current wishlist: {entry.wishlist_url}\n"

@@ -54,13 +54,13 @@ def _message(
     *,
     pinned: bool = False,
     is_bot: bool = False,
-    username: str | None = None,
+    display_name: str | None = None,
 ) -> MagicMock:
     msg = MagicMock(spec=hikari.Message)
     msg.author = MagicMock(spec=hikari.User)
     msg.author.id = hikari.Snowflake(author_id)
     msg.author.is_bot = is_bot
-    msg.author.username = username or f"user{author_id}"
+    msg.author.display_name = display_name or f"user{author_id}"
     msg.is_pinned = pinned
     msg.delete = AsyncMock()
     return msg
@@ -338,7 +338,7 @@ async def test_scan_skips_role_sync_when_no_missing_role_configured():
 
 
 async def test_cleanup_deletes_departed_members_post():
-    departed = _message(2, username="Gone")
+    departed = _message(2, display_name="Gone")
     bot = _bot()
 
     await _cleanup_messages(_gc(bot), [], [departed])
@@ -465,7 +465,7 @@ async def test_daily_guild_cleans_and_reconciles_from_one_fetch(tmp_path, monkey
 
     poster = _member(2, role_ids=(MISSING_ROLE_ID,))
     straggler = _member(3)
-    departed_post = _message(4, username="Gone")
+    departed_post = _message(4, display_name="Gone")
     bot = _bot(members=(poster, straggler), messages=(departed_post, _message(2)))
 
     await _daily_guild(bot, _guild())
