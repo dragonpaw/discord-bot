@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import math
 import random
+import zlib
 from pathlib import Path
 
 import hikari
@@ -343,7 +344,9 @@ def render_star_chart(
         current_week: The participant's current week (1-52, or 53 if graduated).
         week_completed: Whether the current week has been completed.
     """
-    rng = random.Random(hash(username))
+    # zlib.crc32, not hash(): str hash is salted per process, which would
+    # reshuffle everyone's star colors on every bot restart.
+    rng = random.Random(zlib.crc32(username.encode()))
 
     # Pre-assign a random color and rotation to each week for consistency
     week_colors = [rng.choice(STICKER_COLORS) for _ in range(TOTAL_WEEKS)]

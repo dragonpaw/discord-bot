@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import io
+import os
+import subprocess
+import sys
 
 import hikari
 from PIL import Image
@@ -65,3 +69,23 @@ def test_same_user_is_deterministic():
     r1 = render_star_chart("Alice", 10, True)
     r2 = render_star_chart("Alice", 10, True)
     assert r1.data == r2.data
+
+
+def test_chart_stable_across_processes():
+    """Star colors are seeded by username and documented as consistent across
+    renders — the seed must survive a bot restart (hash() is salted per process)."""
+    script = (
+        "from dragonpaw_bot.plugins.subday import chart; import sys; "
+        "b = chart.render_star_chart(username='Testy', current_week=5, "
+        "week_completed=True); sys.stdout.buffer.write(bytes(b.data))"
+    )
+    digests = []
+    for seed in ("1", "2"):
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            check=True,
+            env={**os.environ, "PYTHONHASHSEED": seed},
+        )
+        digests.append(hashlib.sha256(proc.stdout).hexdigest())
+    assert digests[0] == digests[1]
