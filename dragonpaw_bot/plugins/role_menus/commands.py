@@ -30,6 +30,10 @@ logger = structlog.get_logger(__name__)
 
 SINGLE_ROLE_NOTE = "You can only pick one option from this menu."
 
+# Discord's select-option description limit; the truncation in build_menu_select
+# and the admin warning in configure_role_menus must agree on it.
+_MAX_DESC = 100
+
 
 def parse_role_config(text: str) -> RolesConfig:
     """Parse a TOML string in the flat role menu format into a RolesConfig."""
@@ -83,7 +87,6 @@ def build_menu_select(
         emoji: hikari.Emoji | hikari.UndefinedType = hikari.UNDEFINED
         if emoji_name and emoji_name in emoji_map:
             emoji = emoji_map[emoji_name]
-        _MAX_DESC = 100
         desc = (
             description[: _MAX_DESC - 1] + "…"
             if len(description) > _MAX_DESC
@@ -154,7 +157,6 @@ async def configure_role_menus(
                 errors.append(
                     f"Menu '{menu.name}': Emoji '{o.emoji}' not found, skipped."
                 )
-            _MAX_DESC = 100
             if len(o.description) > _MAX_DESC:
                 errors.append(
                     f"Menu '{menu.name}', role '{o.role}': "
