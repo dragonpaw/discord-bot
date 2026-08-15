@@ -13,8 +13,11 @@ import yaml
 from dragonpaw_bot.plugins.activity import listeners as activity_listeners
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.commands import (
+    _EMBED_DESCRIPTION_LIMIT,
+    _TRUNCATION_NOTE,
     _can_view_others,
     _classify_members,
+    _truncate_description,
 )
 from dragonpaw_bot.plugins.activity.cron import (
     _evaluate_lurker,
@@ -926,3 +929,220 @@ def test_channel_multiplier_configured():
 def test_channel_multiplier_unconfigured_defaults_to_one():
     meta = SimpleNamespace(config=SimpleNamespace(channel_configs=[]))
     assert _channel_multiplier(meta, 7) == 1.0
+
+
+# ---------------------------------------------------------------------------- #
+#                      voice-state session accounting                          #
+# ---------------------------------------------------------------------------- #
+
+
+@pytest.fixture(autouse=False)
+def clear_vc_sessions():
+    """Clear the module-level VC session map before and after each test."""
+    activity_listeners._vc_sessions.clear()
+    yield
+    activity_listeners._vc_sessions.clear()
+
+
+def _vc_event(guild_id, user_id, old_channel, new_channel):
+    """A VoiceStateUpdateEvent stand-in; channel None means "not in a channel"."""
+    return SimpleNamespace(
+        app=MagicMock(),
+        guild_id=hikari.Snowflake(guild_id),
+        old_state=(
+            None
+            if old_channel is None
+            else SimpleNamespace(channel_id=hikari.Snowflake(old_channel))
+        ),
+        state=SimpleNamespace(
+            user_id=hikari.Snowflake(user_id),
+            channel_id=(None if new_channel is None else hikari.Snowflake(new_channel)),
+        ),
+    )
+
+
+def _vc_setup(monkeypatch, channel_mults=(), *, is_bot=False, role_ids=(5,)):
+    """Patch the listener's clock, member lookup, config and contribution sink.
+
+    Returns (recorded, clock): `recorded` collects _add_contribution calls,
+    `clock[0]` is the time the listener sees.
+    """
+    clock = [0.0]
+    monkeypatch.setattr(
+        activity_listeners, "time", SimpleNamespace(time=lambda: clock[0])
+    )
+    meta = SimpleNamespace(
+        guild_name="G",
+        config=SimpleNamespace(
+            channel_configs=[
+                SimpleNamespace(channel_id=cid, point_multiplier=mult)
+                for cid, mult in channel_mults
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        activity_listeners.activity_state, "load_config", lambda _g: meta
+    )
+    monkeypatch.setattr(
+        activity_listeners,
+        "guild_member",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                is_bot=is_bot, role_ids=[hikari.Snowflake(r) for r in role_ids]
+            )
+        ),
+    )
+    recorded: list[tuple] = []
+    monkeypatch.setattr(
+        activity_listeners,
+        "_add_contribution",
+        lambda gid, uid, kind, amount, now=None: recorded.append(
+            (gid, uid, kind, amount)
+        ),
+    )
+    return recorded, clock
+
+
+async def test_vc_join_stores_session_timestamp(monkeypatch, clear_vc_sessions):
+    """Fails if the join branch stops seeding _vc_sessions with the current time."""
+    recorded, clock = _vc_setup(monkeypatch)
+    clock[0] = 1_000.0
+
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, None, 7))
+
+    assert activity_listeners._vc_sessions[1][42] == 1_000.0
+    assert recorded == []
+
+
+async def test_vc_leave_records_minutes_times_channel_multiplier(
+    monkeypatch, clear_vc_sessions
+):
+    """Fails if elapsed time stops being converted to minutes, or the leaving
+    channel's multiplier stops being applied."""
+    recorded, clock = _vc_setup(monkeypatch, channel_mults=[(7, 2.5)])
+    clock[0] = 1_000.0
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, None, 7))
+
+    clock[0] = 1_000.0 + 120.0  # 2 minutes in the channel
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, 7, None))
+
+    assert recorded == [(1, 42, ContributionKind.VC, 5.0)]  # 2 min x 2.5
+    assert activity_listeners._vc_sessions[1] == {}
+
+
+async def test_vc_leave_under_one_minute_records_nothing(
+    monkeypatch, clear_vc_sessions
+):
+    """Fails if the `minutes >= 1.0` floor is dropped — a drive-by join/leave
+    would then score."""
+    recorded, clock = _vc_setup(monkeypatch, channel_mults=[(7, 2.5)])
+    clock[0] = 1_000.0
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, None, 7))
+
+    clock[0] = 1_000.0 + 59.0
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, 7, None))
+
+    assert recorded == []
+    assert activity_listeners._vc_sessions[1] == {}
+
+
+async def test_vc_channel_switch_scores_old_channel_and_restarts_session(
+    monkeypatch, clear_vc_sessions
+):
+    """Fails if a switch stops closing the old session (double-counting on the
+    eventual leave) or scores with the destination channel's multiplier."""
+    recorded, clock = _vc_setup(monkeypatch, channel_mults=[(7, 2.0), (8, 10.0)])
+    clock[0] = 500.0
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, None, 7))
+
+    clock[0] = 500.0 + 180.0  # 3 minutes in channel 7, then move to channel 8
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, 7, 8))
+
+    assert recorded == [(1, 42, ContributionKind.VC, 6.0)]  # 3 min x 2.0
+    assert activity_listeners._vc_sessions[1][42] == 680.0
+
+
+async def test_vc_leave_without_recorded_join_records_nothing(
+    monkeypatch, clear_vc_sessions
+):
+    """Fails if a missing session start stops being tolerated — a leave after a
+    bot restart would score from a bogus baseline (or raise)."""
+    recorded, clock = _vc_setup(monkeypatch, channel_mults=[(7, 2.0)])
+    clock[0] = 1_000.0
+
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, 7, None))
+
+    assert recorded == []
+    assert activity_listeners._vc_sessions == {}
+
+
+async def test_vc_leave_by_bot_records_nothing(monkeypatch, clear_vc_sessions):
+    """Fails if the is_bot guard is dropped — music bots parked in VC would
+    out-score every human."""
+    recorded, clock = _vc_setup(monkeypatch, channel_mults=[(7, 2.0)], is_bot=True)
+    clock[0] = 1_000.0
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, None, 7))
+
+    clock[0] = 1_000.0 + 600.0
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, 7, None))
+
+    assert recorded == []
+
+
+async def test_vc_leave_from_zero_multiplier_channel_records_nothing(
+    monkeypatch, clear_vc_sessions
+):
+    """Fails if a 0 multiplier stops silencing VC time — an AFK channel would
+    then score like any other."""
+    recorded, clock = _vc_setup(monkeypatch, channel_mults=[(7, 0.0)])
+    clock[0] = 1_000.0
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, None, 7))
+
+    clock[0] = 1_000.0 + 600.0
+    await activity_listeners._handle_voice_state_update(_vc_event(1, 42, 7, None))
+
+    assert recorded == []
+
+
+# ---------------------------------------------------------------------------- #
+#                        _truncate_description                                 #
+# ---------------------------------------------------------------------------- #
+
+
+def test_truncate_description_within_budget_unchanged():
+    """Fails if short reports gain a truncation note or lose their joining."""
+    lines = ["🐉 Amber — 4.20", "💤 Basil — 0.01"]
+    assert _truncate_description(lines) == "🐉 Amber — 4.20\n💤 Basil — 0.01"
+
+
+def test_truncate_description_over_budget_keeps_a_prefix_and_notes_it():
+    """Fails if truncation stops keeping whole leading lines in order, or the
+    result stops fitting inside Discord's description limit."""
+    lines = [f"🐉 member {i:04d} " + "z" * 80 for i in range(100)]
+
+    result = _truncate_description(lines)
+
+    assert result.endswith(_TRUNCATION_NOTE)
+    kept = result.removesuffix(_TRUNCATION_NOTE).split("\n")
+    assert 0 < len(kept) < len(lines)
+    assert kept == lines[: len(kept)]
+    assert len(result) <= _EMBED_DESCRIPTION_LIMIT
+
+
+def test_truncate_description_charges_for_newline_separators():
+    """Packs single-character lines so the '+1 for the newline' accounting is
+    the only thing keeping the result inside the limit: fails if that +1 is
+    dropped (result overflows) and if the budget check turns pessimistic
+    (result stops being packed tight)."""
+    result = _truncate_description(["x"] * 5000)
+
+    assert result.endswith(_TRUNCATION_NOTE)
+    assert _EMBED_DESCRIPTION_LIMIT - 1 <= len(result) <= _EMBED_DESCRIPTION_LIMIT
+
+
+def test_truncate_description_single_oversized_line_keeps_nothing():
+    """The empty-`kept` branch: fails if it emits a stray leading newline or
+    returns the oversized line anyway."""
+    assert _truncate_description(["y" * (_EMBED_DESCRIPTION_LIMIT + 1)]) == (
+        _TRUNCATION_NOTE
+    )
