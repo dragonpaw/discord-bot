@@ -172,10 +172,7 @@ ROLE_FIELDS = {
     "enroll_role",
     "complete_role",
     "backfill_role",
-    "role_13",
-    "role_26",
-    "role_39",
-    "role_52",
+    *(f"role_{w}" for w in MILESTONE_WEEKS),
 }
 
 

@@ -6,9 +6,11 @@ import hikari
 
 from dragonpaw_bot.colors import SOLARIZED_CYAN, SOLARIZED_VIOLET, SOLARIZED_YELLOW
 from dragonpaw_bot.plugins.subday.constants import (
-    MILESTONE_WEEKS,
     TOTAL_WEEKS,
     WEEKS_DIR,
+)
+from dragonpaw_bot.plugins.subday.constants import (
+    next_milestone as constants_next_milestone,
 )
 
 _cache: dict[int, WeekPrompt] = {}
@@ -135,7 +137,7 @@ def build_weekly_dm_embeds(prompt: WeekPrompt) -> list[hikari.Embed]:
     week = prompt.week
 
     # Pick a color and flavour based on milestones
-    next_milestone = next((m for m in MILESTONE_WEEKS if m >= week), TOTAL_WEEKS)
+    next_milestone = constants_next_milestone(week) or TOTAL_WEEKS
     weeks_to_milestone = next_milestone - week
 
     if weeks_to_milestone == 0:

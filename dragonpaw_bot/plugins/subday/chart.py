@@ -9,7 +9,7 @@ from pathlib import Path
 import hikari
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
+from dragonpaw_bot.plugins.subday.constants import MILESTONE_WEEKS, TOTAL_WEEKS
 
 # ---------------------------------------------------------------------------- #
 #                                   Constants                                   #
@@ -304,7 +304,7 @@ def _draw_progress_bar(
 
     # Milestone markers at 13, 26, 39, 52
     bar_cy = bar_y + bar_height / 2
-    for mw in (13, 26, 39, 52):
+    for mw in MILESTONE_WEEKS:
         mx = bar_left + int(bar_width * mw / TOTAL_WEEKS)
         reached = last_completed >= mw
         color = PROGRESS_FILL_COLOR if reached else PROGRESS_TRACK_COLOR

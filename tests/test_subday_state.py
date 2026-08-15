@@ -4,7 +4,11 @@ import yaml
 
 from dragonpaw_bot.plugins.subday import state
 from dragonpaw_bot.plugins.subday.commands import _prepare_backfill
-from dragonpaw_bot.plugins.subday.constants import MILESTONE_WEEKS, TOTAL_WEEKS
+from dragonpaw_bot.plugins.subday.constants import (
+    MILESTONE_WEEKS,
+    TOTAL_WEEKS,
+    next_milestone,
+)
 from dragonpaw_bot.plugins.subday.models import (
     SubDayGuildConfig,
     SubDayGuildState,
@@ -195,3 +199,24 @@ def test_sent_next_blocked_at_total_weeks():
     sent_next = p.current_week < TOTAL_WEEKS
     assert sent_next is False
     assert p.current_week == TOTAL_WEEKS
+
+
+# ---------------------------------------------------------------------------- #
+#                              next_milestone                                  #
+# ---------------------------------------------------------------------------- #
+
+
+def test_next_milestone_before_first():
+    assert next_milestone(1) == 13
+
+
+def test_next_milestone_on_a_milestone():
+    assert next_milestone(26) == 26
+
+
+def test_next_milestone_between():
+    assert next_milestone(27) == 39
+
+
+def test_next_milestone_past_last():
+    assert next_milestone(53) is None

@@ -23,6 +23,9 @@ from dragonpaw_bot.plugins.subday.constants import (
     SUBDAY_SIGNUP_ID,
     TOTAL_WEEKS,
 )
+from dragonpaw_bot.plugins.subday.constants import (
+    next_milestone as constants_next_milestone,
+)
 from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig, SubDayParticipant
 
 if TYPE_CHECKING:
@@ -167,7 +170,7 @@ async def _dm_completion(
 
 def _milestone_prize_teaser(current_week: int, cfg: SubDayGuildConfig) -> str:
     """Return a prize-teaser string for the next upcoming milestone, or ''."""
-    next_milestone = next((m for m in MILESTONE_WEEKS if m >= current_week), None)
+    next_milestone = constants_next_milestone(current_week)
     if not next_milestone:
         return ""
     prize = cfg.milestone_prizes().get(next_milestone, "a prize")
@@ -237,7 +240,7 @@ async def _post_achievement(
     milestone_roles = cfg.milestone_roles()
 
     # Regular completion — just post the embed
-    if week not in milestone_roles:
+    if week not in MILESTONE_WEEKS:
         embed = _regular_completion_embed(target, week)
         await _try_post_achievement_embed(
             achievements, embed, chart_bytes, cfg.achievements_channel
@@ -653,7 +656,7 @@ def _own_progress_embed(
             "Complete it and show a reviewer to move on."
         )
 
-    next_milestone = next((m for m in MILESTONE_WEEKS if m >= p.current_week), None)
+    next_milestone = constants_next_milestone(p.current_week)
     if next_milestone:
         milestone_roles = cfg.milestone_roles()
         role_name = milestone_roles.get(next_milestone)
@@ -1291,8 +1294,7 @@ class SubDayComplete(
 
         # Log completion (milestones are already logged by _post_achievement,
         # so only send for regular completions/backfills)
-        milestone_roles = cfg.milestone_roles()
-        if week not in milestone_roles:
+        if week not in MILESTONE_WEEKS:
             if is_backfill:
                 staff_msg = (
                     f"⏩ **{ctx.member.display_name}** backfilled **{target.display_name}** "
