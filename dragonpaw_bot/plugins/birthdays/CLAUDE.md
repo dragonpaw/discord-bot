@@ -8,7 +8,7 @@ All settings are configurable per server via `/config birthday settings` (owner 
 
 The guild owner (i.e. the Discord server owner, not a SubDay "owner") always passes role permission checks regardless of whether they have the required role.
 
-Notifications (registrations, removals, config changes) are sent to the guild-wide log channel configured via `/config bot logging`.
+Notifications (registrations, removals, config changes) are sent to the guild-wide log channel configured via `/config channels log`.
 
 ### Slash Commands (`/birthday`)
 
@@ -52,7 +52,7 @@ No birth year is collected or stored.
 
 ### Hourly Cron Task
 
-Runs every hour (`0 * * * *`). Per guild, with per-guild error isolation. For each user, computes the current date and hour in their configured timezone (defaulting to UTC). Only processes events when the user's local hour is 0 (midnight):
+Runs at `:05` past each hour (`5 * * * *`). Per guild, with per-guild error isolation. For each user, computes the current date and hour in their configured timezone (defaulting to UTC). Only processes events when the user's local hour is 0 (midnight):
 
 1. **Birthday announcements:** If it's the user's birthday in their local timezone and `last_announced` doesn't match today, post a themed embed in the announcement channel (if configured). Assign the birthday role (if configured). Update `last_announced` to prevent double-posting.
 2. **Birthday role cleanup:** If the user's birthday was yesterday in their local timezone and a birthday role is configured, remove the role.
@@ -67,7 +67,7 @@ Listen for `hikari.MemberDeleteEvent`. When a member leaves a guild, automatical
 Posted in the configured announcement channel on the member's birthday:
 
 - Themed embed (festive color)
-- Mentions the birthday user
+- Pings `@everyone` (`mentions_everyone=True`) and mentions the birthday user
 - Shows wishlist link as a clickable hyperlink if set
 - Unique leading emoji for guild log messages (e.g. 🎂)
 
@@ -110,5 +110,5 @@ All log messages use structlog with `guild=` and `user=` keyword arguments. Inte
 - Announcement channel via `/config birthday settings`
 - Birthday role via `/config birthday settings` (optional)
 - Permission roles via `/config birthday settings` (optional, defaults to owner-only)
-- Guild-wide log channel via `/config bot logging` (optional)
+- Guild-wide log channel via `/config channels log` (optional)
 - Bot needs Manage Roles permission if birthday role is configured

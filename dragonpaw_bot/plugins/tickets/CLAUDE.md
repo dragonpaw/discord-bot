@@ -14,7 +14,7 @@ The button and the slash command share `_ticket_block_reason()` (required-role g
 
 ### Configuration
 
-Managed via `/config tickets` (guild owner only):
+Managed via `/config tickets` (admin only: MANAGE_GUILD or ADMINISTRATOR):
 
 - **`set [category] [staff_role] [required_role]`** — Set any combination of config options. Omitted options are left unchanged.
 - **`status`** — Show current configuration and open ticket count.
@@ -42,4 +42,4 @@ State is persisted to `state/tickets_{guild_id}.yaml`.
 ### Required Discord Permissions
 
 - `MANAGE_CHANNELS` — create and delete ticket channels, set permission overwrites
-- `SEND_MESSAGES`, `VIEW_CHANNEL`, `READ_MESSAGE_HISTORY`, `ATTACH_FILES` — for the bot, opener, staff role, and any user added via Add Person inside ticket channels (see `PRIVATE_CHANNEL_USER_PERMS` in `context.py`)
+- `SEND_MESSAGES`, `VIEW_CHANNEL`, `READ_MESSAGE_HISTORY`, `ATTACH_FILES`, `MANAGE_MESSAGES` — granted to the bot in ticket channels; the user set (`PRIVATE_CHANNEL_USER_PERMS` in `context.py`) covers the opener, staff role, and anyone added via Add Person

@@ -40,7 +40,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **Entry point:** `dragonpaw_bot/__main__.py` → calls `bot.run()` from `bot.py`.
 
-**`bot.py`** — Core module. Defines `DragonpawBot` (subclass of `hikari.GatewayBot`) with state management, plus a `lightbulb.Client` created via `client_from_app()`. The `/config` command group and `/config bot logging` command are defined here. Extensions are loaded asynchronously on `StartingEvent`.
+**`bot.py`** — Core module. Defines `DragonpawBot` (subclass of `hikari.GatewayBot`) with state management, plus a `lightbulb.Client` created via `client_from_app()`. The `/config` command group and the `/config channels log|general` commands are defined here, along with a global `auto_defer` PRE_INVOKE hook that ephemeral-defers every slash command except those in `_AUTO_DEFER_EXCLUSIONS` (commands that must show a modal as their initial response). Extensions are loaded asynchronously on `StartingEvent`.
 
 **`structs.py`** — All data models using Pydantic v2. Two layers:
 
@@ -63,6 +63,8 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **`duration.py`** — Shared `parse_duration_minutes()` and `format_duration()` helpers used by plugin config commands.
 
+**`state_store.py`** — `GuildStateStore` + `GuildStateBase`: the shared cache-backed YAML persistence every plugin state module builds on (one store instance per plugin, files named `{plugin}_{guild_id}.yaml`).
+
 **`buttons.py`** — The button channel. Collects a `BUTTON_ENTRY` from each plugin that declares one, renders them as embed-and-button cards into a configured channel, and owns `/config buttons`. See **Button channel** below.
 
 **`context.py`** — `GuildContext` and `ChannelContext` dataclasses that bundle bot + guild info for convenient access throughout plugins. `GuildContext` provides factory methods (`from_ctx`, `from_interaction`, `from_guild`), permission checks, and `gc.log()` for sending notifications to the guild's configured log channel. `ChannelContext` extends it with channel-level operations like `purge_old_messages()` and `delete_my_messages()`. Also contains standalone permission helpers (`member_has_role`, `has_permission`, `has_any_role_permission`), `check_channel_perms` (accepts optional `required` permission set — defaults to `CHANNEL_POST_PERMS`; use `CHANNEL_CLEANUP_PERMS` for cleanup channels), and `check_role_manageable` (checks bot can manage a role via permissions + hierarchy).
@@ -73,7 +75,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 **`colors.py`** — Solarized color constants and a `rainbow()` helper using `palettable` for generating embed color palettes.
 
-**Config flow:** Server admins use the `/config roles setup` slash command with a URL to a role-menu TOML file. The bot fetches and parses it directly into a `RolesConfig`, sets up role menus, then persists `GuildState` to disk as YAML. The `/config bot logging` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/config roles setup` reloads.
+**Config flow:** Server admins use the `/config roles setup` slash command with a URL to a role-menu TOML file. The bot fetches and parses it directly into a `RolesConfig`, sets up role menus, then persists `GuildState` to disk as YAML. The `/config channels log` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/config roles setup` reloads.
 
 **Guild logging:** `gc.log()` (on `GuildContext`) sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji. Use first-person ("I/me/my") in bot-facing staff messages (dragon persona).
 
@@ -98,7 +100,7 @@ Rendering is wipe-and-repost (same as role menus), so only `GuildState.button_ch
 ## Key Conventions
 
 - Uses `uvloop` as the async event loop
-- **Discord interaction timeout:** Discord gives 3 seconds to respond to an interaction before it expires. Always call `ctx.respond()` (or `interaction.create_initial_response()`) **before** any slow work like sending DMs, posting to channels, assigning roles, or calling `gc.log()`. Do the fast stuff (state save, build response), respond, then do async work after.
+- **Discord interaction timeout:** Discord gives 3 seconds to respond to an interaction before it expires. Slash commands are covered by `bot.py`'s global `auto_defer` hook (unless excluded to show a modal), so the rule bites hardest in **component and modal handlers**, which get no auto-defer: defer or respond first, then do slow work (DMs, channel posts, role assigns, `gc.log()`).
 - **lightbulb v3 patterns:**
   - Extensions use `lightbulb.Loader()` (not `Plugin`)
   - Commands are class-based, inheriting from `lightbulb.SlashCommand` with `@lightbulb.invoke` on the invoke method

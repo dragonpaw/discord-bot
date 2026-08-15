@@ -61,9 +61,15 @@ Persisted as `state/role_menus_{guild_id}.yaml`, separate from the main guild st
 - **`state.py`** — YAML state persistence (load/save) with in-memory cache
 - **`constants.py`** — `ROLE_MENU_PREFIX` interaction ID prefix
 
+### Setup-Time Validation
+
+`configure_role_menus` checks bot permissions in the role channel (post perms +
+Manage Messages) and `check_role_manageable` for every referenced role, reporting
+problems in the setup warnings — the config still loads (warn, don't block).
+
 ### Error Handling
 
-- Missing roles: logged as errors, skipped in menu options, reported to guild log channel
+- Missing roles: logged as warnings, skipped in menu options, reported in the setup summary
 - Missing emojis: logged as warnings (emoji is optional/decorative), option still included
 - `ForbiddenError` on role add/remove: logged to guild log channel
 - Menus with no valid options: posted as embed only (no select component)

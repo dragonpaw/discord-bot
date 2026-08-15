@@ -15,7 +15,7 @@ The `missing_role` (if configured) is managed by these paths:
 
 ### Configuration
 
-Managed via `/config intros` (guild owner only):
+Managed via `/config intros` (admin only: MANAGE_GUILD or ADMINISTRATOR):
 
 - **`set #channel [role:role] [missing_role:role]`** — Set the introductions channel. The optional `role` restricts the `/intros missing` / weekly scan to only members who have that role (e.g. a "verified member" role). The optional `missing_role` is added by the bot to anyone subject to the check who hasn't posted, and removed once they have. No other role exempts a member from needing an intro — eligibility is decided purely by `required_role_id`. Warns if the bot lacks required permissions or can't manage `missing_role`, but saves anyway.
 - **`clear`** — Remove the intros configuration for this guild (channel, required role, missing-intro role).
@@ -63,8 +63,8 @@ Runs at 8:15pm UTC Saturday (`15 20 * * 6` = noon PST / 1pm PDT). For each confi
 
 ### Required Discord Permissions
 
-- `READ_MESSAGE_HISTORY` — to iterate messages in the intros channel
-- `MANAGE_MESSAGES` — to delete departed members' intro posts
+- `VIEW_CHANNEL`, `READ_MESSAGE_HISTORY` — to see and iterate messages in the intros channel
+- `MANAGE_MESSAGES`, `MANAGE_THREADS` — to delete departed members' intro posts (the cron gates on the full `CHANNEL_CLEANUP_PERMS` set in `context.py`)
 - `MANAGE_ROLES` (+ role hierarchy) — only if `missing_role_id` is configured; needed to add the missing-intro role (daily/weekly) and remove it live (listener)
 
 ### Logging

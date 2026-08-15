@@ -39,6 +39,13 @@ a private verify channel where they submit age-verification photos for staff rev
    The welcome message, validate-channel intro, and both reminders embed a live Discord relative
    timestamp (`_deadline_timestamp` in `commands.py`) showing how long remains before the kick.
 
+### Manual Role Assignment
+
+`on_member_update` (`MemberUpdateEvent`) watches for the member role being hand-assigned
+by staff. When someone gains the member role outside the approval flow, the bot fetches
+the audit log to confirm it was a manual grant, then drops the member from onboarding
+state and closes their validate channel — the flow is considered manually completed.
+
 ### Member Leave Cleanup
 
 If a member leaves the server mid-onboarding, `on_member_leave` (`MemberDeleteEvent`)
@@ -85,7 +92,7 @@ Each `ValidationMember` tracks: `user_id`, `joined_at`, `reminder_count` (16h pi
 
 Sample images live in `assets/` and are attached via `hikari.File`:
 - `validation-id.jpg` — example government ID photo
-- `validation-selfie.jpg` — example selfie holding ID (**must be added before going live**)
+- `validation-selfie.jpg` — example selfie holding ID
 
 ### Interaction custom IDs
 
@@ -97,9 +104,10 @@ Sample images live in `assets/` and are attached via `hikari.File`:
 
 - **`__init__.py`** — Loader re-export, `INTERACTION_HANDLERS`, `MODAL_HANDLERS`
 - **`commands.py`** — All event listeners (`on_member_join`, `on_member_leave`,
-  `on_startup_reconcile`, `on_member_update`, `on_message_create`), cron task,
+  `on_startup_reconcile`, `on_member_update`, `on_message_create`),
   interaction/modal handlers, and helpers (`_close_validate_channel`, `_reconcile_guild`,
   `_sanitize_channel_name`, `_is_staff`)
+- **`cron.py`** — Hourly reminder/deadline cron task (`validation_reminder_cron`)
 - **`config.py`** — `/config validation` subcommands
 - **`models.py`** — `ValidationStage`, `ValidationMember`, `ValidationGuildState`
 - **`state.py`** — YAML state persistence (load/save with in-memory cache).

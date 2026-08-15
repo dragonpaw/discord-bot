@@ -25,7 +25,7 @@ CONTRIBUTION_VALUES: dict[ContributionKind, float] = {
 
 BASE_HALF_LIFE = 14 * 24 * 3600  # 14 days in seconds
 ACTIVITY_FLOOR = 0.3
-PRUNE_THRESHOLD = ACTIVITY_FLOOR * 0.1  # 0.01 — bucket is negligible at 1% of floor
+PRUNE_THRESHOLD = ACTIVITY_FLOOR * 0.1  # 0.03 — bucket is negligible at 10% of floor
 PRUNE_DAYS_MAX = 300  # hard cap; contribution-based pruning fires well before this
 
 
@@ -96,7 +96,9 @@ def bucket_is_negligible(
     contrib_mult: float,
 ) -> bool:
     """True when even at the best log_weight (position 0 = 1/ln(2)), the bucket's
-    contribution is below PRUNE_THRESHOLD. Safe to delete without affecting scores."""
+    contribution is below PRUNE_THRESHOLD. The estimate ignores the activity
+    bonus, so for very active users (whose bonus stretches the half-life) a pruned
+    bucket can still have carried real weight — the daily cadence keeps that rare."""
     t = now - bucket.hour
     base = CONTRIBUTION_VALUES[bucket.kind] * bucket.amount
     max_contribution = (

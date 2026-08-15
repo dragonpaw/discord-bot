@@ -4,7 +4,7 @@ Enforces a media-only policy in configured channels: text-only posts are automat
 
 ### Configuration
 
-Managed via `/config media` (guild owner only):
+Managed via `/config media` (admin only: MANAGE_GUILD or ADMINISTRATOR):
 
 - **`add #channel [redirect:#channel] [expires:duration]`** — Add a channel to media-only enforcement. Optionally set a per-channel redirect hint and/or an auto-expiry duration for old messages.
 - **`remove #channel`** — Stop monitoring a channel.
@@ -14,10 +14,12 @@ State is persisted to `state/media_channels_{guild_id}.yaml`.
 
 ### Media Detection
 
-A message is considered to have media if it contains:
+A message is considered to have media if it — or any forwarded snapshot it carries in `message_snapshots` — contains:
 - Any attachment (images, videos, files)
 - A URL matching `https?://`
 - Any sticker
+
+Detection lives in `utils.message_has_media` (shared with the activity plugin's media scoring).
 
 Requires the `MESSAGE_CONTENT` privileged intent (enabled in Discord Developer Portal under Bot > Privileged Gateway Intents > Message Content Intent).
 

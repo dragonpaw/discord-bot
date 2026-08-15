@@ -21,7 +21,7 @@ Contributions are grouped into per-hour buckets `(kind, hour_timestamp)` rather 
 
 Buckets are pruned per-user daily based on contribution negligibility, not a fixed age cutoff:
 
-- A bucket is pruned when its maximum possible decayed contribution (at best-case log_weight position 0 with the user's effective half_life and contrib_mult, ignoring activity bonus) falls below `PRUNE_THRESHOLD = 0.03` (1% of `ACTIVITY_FLOOR`).
+- A bucket is pruned when its maximum possible decayed contribution (at best-case log_weight position 0 with the user's effective half_life and contrib_mult, ignoring activity bonus) falls below `PRUNE_THRESHOLD = 0.03` (10% of `ACTIVITY_FLOOR`).
 - Hard cap: buckets are always removed after `PRUNE_DAYS_MAX = 300` days regardless.
 - Users with no remaining buckets have their state file deleted entirely.
 - Users who have left the guild are also pruned.
@@ -63,24 +63,25 @@ Configured via `/config activity role-add` with a Discord choices dropdown:
 | Veteran               | 1.2                       | 1.7                | False     | ~124 days               |
 | Ignore (staff/exempt) | 1.0                       | 1.0                | True      | —                       |
 
-Ignored roles are silently skipped at event time — activity is never recorded.
+Ignored roles still have their activity recorded at event time (all members do); immunity is applied when scoring and during the lurker sync.
 
 ### Config Commands (`/config activity`)
 
-All require guild owner.
+All require MANAGE_GUILD or ADMINISTRATOR (the guild_owner_only hook).
 
 - **`role-add @role [preset]`** — Add or update a role's activity preset.
 - **`role-remove @role`** — Remove a role's activity configuration.
 - **`channel-add #channel [multiplier]`** — Add or update a channel's point multiplier (default 2.0). Multiplier 0 silently ignores all activity (messages, reactions, VC) in that channel.
 - **`channel-remove #channel`** — Remove a channel's multiplier.
 - **`lurker @role`** — Set the lurker role (omit to clear). Validates bot can manage the role via `check_role_manageable`.
+- **`viewer @role`** — Set the activity viewer role (omit to clear) — who may check others' scores and run `/activity report` without admin permissions.
 - **`status`** — Show current configuration: roles, channel multipliers, lurker role, total tracked members.
 
 ### Slash Commands (`/activity`)
 
 `/activity report` requires the `activity_viewer_only` hook: passes if the invoker has `ADMINISTRATOR` or `MANAGE_GUILD`, or has the configured viewer role. Fails if no viewer role is set and the user lacks those permissions.
 
-- **`score [user]`** — Show activity score for a member (defaults to self). Any member can check their own score without restriction. Checking another member's score requires the viewer role or admin/manage-guild permission. Responds ephemerally with score, status (🐉 Active / 💤 Lurking / 🛡️ Immune), bucket count, role info, and a stacked bar chart image of daily activity over the past 60 days. Guild owner always shows 🛡️ Immune (Guild Owner).
+- **`score [user]`** — Show activity score for a member (defaults to self). Any member can check their own score without restriction. Checking another member's score requires the viewer role or admin/manage-guild permission. Responds ephemerally with score, status (🐉 Active / 💤 Lurking / 🛡️ Immune), bucket count, role info, and a stacked bar chart image of hourly activity over the past 14 days (`MAX_HOURS` in `chart.py`). Guild owner always shows 🛡️ Immune (Guild Owner).
 - **`report`** — Requires viewer permission. Show all non-bot members sorted alphabetically by display name. Each member gets an emoji badge: 🥇🥈🥉 for top 3 by score, 🐉 active, 💤 lurker, 🛡️ immune. Immune members (ignored role or guild owner) show their score. Members with no activity data appear with score 0.00 (lurker).
 
 ### Button Channel Card
@@ -122,6 +123,7 @@ Dirty tracking is per-user: only modified user files are written during the hour
 - **`models.py`** — Pydantic models, `ContributionKind` enum, `calculate_score()`, `bucket_is_negligible()`, `best_role_config()`, `has_ignored_role()`
 - **`state.py`** — Per-user YAML persistence: `load_config`, `save_config`, `load_user`, `save_user`, `delete_user`, `list_user_ids`, `mark_user_dirty`, `flush_dirty`
 - **`commands.py`** — `/activity score` and `/activity report`
+- **`chart.py`** — Stacked-bar activity chart rendering (Pillow)
 - **`config.py`** — `/config activity` subcommands
 - **`cron.py`** — Hourly flush + daily prune + lurker sync tasks
 

@@ -4,7 +4,7 @@ Auto-deletes messages **and threads** older than a configured duration from any 
 
 ### Configuration
 
-Managed via `/config cleanup` (guild owner only):
+Managed via `/config cleanup` (admin only: MANAGE_GUILD or ADMINISTRATOR):
 
 - **`add #channel expires:duration`** — Add a channel for auto-expiry.
 - **`remove #channel`** — Stop monitoring a channel.
@@ -14,7 +14,7 @@ State is persisted to `state/channel_cleanup_{guild_id}.yaml`.
 
 ### Hourly Cleanup Cron
 
-Runs at the top of each hour (`0 * * * *`). For each configured channel, first checks bot permissions via `cc.check_perms(CHANNEL_CLEANUP_PERMS)` — if any are missing, logs a warning and posts to the guild log channel, then skips that channel. Otherwise:
+Runs at `:45` past each hour (`45 * * * *`). For each configured channel, first checks bot permissions via `cc.check_perms(CHANNEL_CLEANUP_PERMS)` — if any are missing, logs a warning and posts to the guild log channel, then skips that channel. Otherwise:
 
 1. Calls `ChannelContext.purge_old_messages()` to delete messages older than the configured duration.
 2. Calls `ChannelContext.purge_old_threads()` to delete threads whose last activity (last message, or creation time if no messages) is older than the configured duration.
