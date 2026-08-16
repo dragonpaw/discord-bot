@@ -160,13 +160,19 @@ If the build fails: pull the failing job's logs with `gh run view "$RUN_ID" --lo
 
 The bot runs as the standalone (non-git) compose stack **`discord-bot`** (id `28`) on **endpoint 6** (`nas`) of the Portainer hub on **plugger** (`http://10.0.2.203:19900`). The single service `bot` runs as container **`discord-bot`** (host network). See `~/.claude/skills/asustor-nas/SKILL.md` for the hub/endpoint model. (History: re-adopted onto ep6 on 2026-07-04 from the retired ep3 stack id 5; the old on-box `docker compose --env-file stack.env` path is dead — ep3's endpoint no longer exists.)
 
-Credentials come from `~/.config/fish/conf.d/nas.fish`: `$PORTAINER_URL`, `$PORTAINER_TOKEN` (`ptr_…`), `$PORTAINER_ENDPOINT` (`6` = nas). **The token is a secret — never print it.** The hub is LAN-direct from the workstation (no ssh); off-LAN, tunnel with `ssh -L 19900:10.0.2.203:19900 …`.
+Credentials come from `~/.config/portainer.env` (plain `KEY=value`): `PORTAINER_URL`, `PORTAINER_TOKEN` (`ptr_…`), `PORTAINER_ENDPOINT` (`6` = nas). **The token is a secret — never print it.** In zsh/bash load it with `set -a; source ~/.config/portainer.env; set +a`; fish sessions get it automatically via the `~/.config/fish/conf.d/portainer.fish` loader. **Never source a `.fish` file from zsh/bash** — `set -x` there enables xtrace and echoes the token. The hub is LAN-direct from the workstation (no ssh); off-LAN, tunnel with `ssh -L 19900:10.0.2.203:19900 …`.
 
 Redeploy = re-pull `:latest` and recreate the container, round-tripping the stack's stored env (`BOT_TOKEN`/`CLIENT_ID`) so you never handle the token. A single `PUT …?endpointId=6` with `pullImage:true` does it. Write this to scratchpad and run it:
 
 ```python
-# scratchpad/redeploy.py — needs PORTAINER_URL / PORTAINER_TOKEN in env
-import json, os, urllib.request
+# scratchpad/redeploy.py — reads PORTAINER_URL / PORTAINER_TOKEN from env,
+# falling back to ~/.config/portainer.env. Never prints the token.
+import json, os, pathlib, urllib.request
+if "PORTAINER_TOKEN" not in os.environ:
+    for line in pathlib.Path.home().joinpath(".config/portainer.env").read_text().splitlines():
+        if line and not line.startswith("#") and "=" in line:
+            name, _, value = line.partition("=")
+            os.environ.setdefault(name, value)
 URL, TOK = os.environ["PORTAINER_URL"], os.environ["PORTAINER_TOKEN"]
 H = {"X-API-Key": TOK, "Content-Type": "application/json"}
 def call(method, path, body=None):
@@ -182,8 +188,7 @@ print("redeploy status:", call("PUT", f"/api/stacks/{sid}?endpointId=6", body).s
 ```
 
 ```
-source ~/.config/fish/conf.d/nas.fish   # or export PORTAINER_URL / PORTAINER_TOKEN
-python3 scratchpad/redeploy.py
+python3 scratchpad/redeploy.py   # self-loads ~/.config/portainer.env
 ```
 
 `pullImage: true` re-pulls `ghcr.io/dragonpaw/discord-bot:latest` before recreating `discord-bot` in place; the named volume `discord-bot_bot-state` (guild/config state) is preserved.
@@ -197,7 +202,7 @@ python3 scratchpad/redeploy.py
 Fetch the container's logs from the hub (no ssh). Container name is **`discord-bot`**:
 
 ```
-source ~/.config/fish/conf.d/nas.fish
+set -a; source ~/.config/portainer.env; set +a
 curl -s -H "X-API-Key: $PORTAINER_TOKEN" \
   "$PORTAINER_URL/api/endpoints/6/docker/containers/discord-bot/logs?stdout=true&stderr=true&timestamps=true&tail=200" \
   | LC_ALL=C sed -E 's/^.{8}//' | sed 's/\x1b\[[0-9;]*m//g' > /tmp/ship-it-logs.txt
@@ -248,7 +253,7 @@ One-paragraph summary: commit SHA, simplify/review outcomes (including any step 
 | CI workflow | `.github/workflows/build.yaml` |
 | NAS host | `nas` (ssh config) — see `~/.claude/skills/asustor-nas/SKILL.md` |
 | Portainer hub | plugger `http://10.0.2.203:19900`, endpoint `6` = nas |
-| Portainer creds | `~/.config/fish/conf.d/nas.fish` → `$PORTAINER_URL`, `$PORTAINER_TOKEN` (secret) |
+| Portainer creds | `~/.config/portainer.env` → `PORTAINER_URL`, `PORTAINER_TOKEN` (secret) |
 | Portainer stack | name `discord-bot`, id `28` (look up by name + `EndpointId==6`) |
 | Container name | `discord-bot` |
 | Deploy | `PUT /api/stacks/{id}?endpointId=6` with `pullImage:true` (see step 8) |
