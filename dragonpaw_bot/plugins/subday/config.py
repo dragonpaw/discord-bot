@@ -235,13 +235,11 @@ async def _reject_missing_perms(
     if not missing:
         return False
     missing_str = ", ".join(f"**{p}**" for p in missing)
-    await interaction.create_initial_response(
-        response_type=hikari.ResponseType.MESSAGE_CREATE,
+    await interaction.edit_initial_response(
         content=(
             f"I can't use #{channel_name} — I'm missing these permissions: "
             f"{missing_str}. Please fix the channel permissions and try again."
         ),
-        flags=hikari.MessageFlag.EPHEMERAL,
     )
     logger.warning(
         "SubDay config rejected, missing channel permissions",
@@ -281,18 +279,22 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         )
         return
 
-    # Same rule as the guild_owner_only hook on the settings command. Checked
-    # before any REST call — component interactions get no auto-defer.
+    # Defer immediately — component interactions get no auto-defer and the
+    # rest of the handler does REST work.
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.DEFERRED_MESSAGE_UPDATE,
+    )
+
+    # Same rule as the guild_owner_only hook on the settings command.
     if not is_guild_admin(interaction.member):
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_CREATE,
+        await interaction.edit_initial_response(
             content="*guards the treasure* 🐉 Only server admins can change these settings!",
-            flags=hikari.MessageFlag.EPHEMERAL,
+            embeds=[],
+            components=[],
         )
         return
 
-    guild = await bot.rest.fetch_guild(guild_id)
     guild_state = state.load(int(guild_id))
     cfg = guild_state.config
     old_value = getattr(cfg, field)
@@ -322,14 +324,11 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
         )
         embed = embed_builder(cfg)
         components = await components_builder(bot, guild_id, cfg)
-        await interaction.create_initial_response(
-            response_type=hikari.ResponseType.MESSAGE_UPDATE,
-            embed=embed,
-            components=components,
-        )
+        await interaction.edit_initial_response(embed=embed, components=components)
         return
 
     setattr(cfg, field, new_value)
+    guild = await bot.rest.fetch_guild(guild_id)
     guild_state.guild_name = guild.name
     state.save(guild_state)
 
@@ -356,11 +355,7 @@ async def handle_config_interaction(interaction: hikari.ComponentInteraction) ->
     embed = embed_builder(cfg)
     embed.set_footer(text="Settings updated.")
     components = await components_builder(bot, guild_id, cfg)
-    await interaction.create_initial_response(
-        response_type=hikari.ResponseType.MESSAGE_UPDATE,
-        embed=embed,
-        components=components,
-    )
+    await interaction.edit_initial_response(embed=embed, components=components)
 
 
 # ---------------------------------------------------------------------------- #

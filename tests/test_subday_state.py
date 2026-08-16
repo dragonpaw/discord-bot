@@ -169,6 +169,13 @@ def test_owned_sub_embed_shows_graduated():
     assert "Graduated" in embed.description
 
 
+def test_owned_sub_embed_graduated_has_no_prize_teaser():
+    """A graduated sub has earned every prize — no upcoming-prize teaser."""
+    p = _sample_participant(current_week=TOTAL_WEEKS, week_completed=True)
+    embed = _owned_sub_status_embed(p, SubDayGuildConfig(), "Subby")
+    assert "🎁" not in embed.description
+
+
 def test_validate_normal_complete_rejects_graduated():
     guild_state = SubDayGuildState(guild_id=1, guild_name="test")
     p = _sample_participant(current_week=TOTAL_WEEKS, week_completed=True)

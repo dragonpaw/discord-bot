@@ -813,7 +813,9 @@ async def test_handle_interaction_summary_failure_does_not_raise(role_menus_stat
     interaction.app.rest.add_role_to_member.assert_awaited_once()
 
 
-async def test_configure_warns_on_missing_channel_perms(monkeypatch, role_menus_state_dir):
+async def test_configure_warns_on_missing_channel_perms(
+    monkeypatch, role_menus_state_dir
+):
     """Setup validates bot permissions in the role channel and reports what's
     missing, while still posting the menus (warn, don't block)."""
     channel = MagicMock()
@@ -902,3 +904,55 @@ async def test_configure_warns_on_unmanageable_role(monkeypatch, role_menus_stat
     errors = await configure_role_menus(gc, config, {"Red": role})
 
     assert any("highest role" in e for e in errors)
+
+
+async def test_configure_checks_only_referenced_roles(
+    monkeypatch, role_menus_state_dir
+):
+    """The role_map holds every guild role; hierarchy warnings must only cover
+    roles the menu config actually references."""
+    channel = MagicMock()
+    channel.id = hikari.Snowflake(77)
+    channel.name = "role-select"
+    channel.send = AsyncMock(return_value=MagicMock(id=hikari.Snowflake(900)))
+    monkeypatch.setattr(
+        "dragonpaw_bot.utils.guild_channel_by_name", AsyncMock(return_value=channel)
+    )
+    monkeypatch.setattr("dragonpaw_bot.utils.guild_emojis", AsyncMock(return_value={}))
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.role_menus.commands.check_channel_perms",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.role_menus.commands.check_role_manageable",
+        AsyncMock(return_value="My highest role is below it"),
+    )
+    monkeypatch.setattr(
+        "dragonpaw_bot.context.ChannelContext.delete_my_messages", AsyncMock()
+    )
+
+    gc = MagicMock()
+    gc.guild_id = hikari.Snowflake(1)
+    gc.name = "G"
+    gc.logger = MagicMock()
+
+    red = MagicMock()
+    red.id = hikari.Snowflake(5)
+    red.name = "Red"
+    admin = MagicMock()
+    admin.id = hikari.Snowflake(6)
+    admin.name = "Admin"
+    config = parse_role_config(
+        'channel = "role-select"\n'
+        "[[menu]]\n"
+        'name = "Colors"\n'
+        'description = "Pick"\n'
+        "options = [\n"
+        '  { role = "Red", description = "Red role" },\n'
+        "]\n"
+    )
+
+    errors = await configure_role_menus(gc, config, {"Red": red, "Admin": admin})
+
+    assert any("Red" in e for e in errors)
+    assert not any("Admin" in e for e in errors)

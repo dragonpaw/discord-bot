@@ -23,6 +23,7 @@ from dragonpaw_bot.plugins.validation.commands import (
     handle_approve_button,
     handle_approve_modal,
     handle_rules_agreed,
+    on_member_join,
     on_message_create,
 )
 from dragonpaw_bot.plugins.validation.cron import validation_reminder_cron
@@ -199,6 +200,37 @@ def test_validation_guild_state_round_trip():
     assert loaded.members[0].stage == ValidationStage.AWAITING_PHOTOS
     assert loaded.members[0].channel_id == 500
     assert loaded.members[0].photo_count == 1
+
+
+# ---------------------------------------------------------------------------- #
+#                             on_member_join                                    #
+# ---------------------------------------------------------------------------- #
+
+
+async def test_member_join_bot_logged_without_lobby_config(tmp_path, monkeypatch):
+    """A bot joining is worth a staff log even when validation isn't set up."""
+    monkeypatch.setattr(validation_state.store, "state_dir", tmp_path)
+    validation_state.store.cache.clear()
+
+    logged: list[str] = []
+
+    async def _capture_log(_self, message: str) -> None:
+        logged.append(message)
+
+    monkeypatch.setattr("dragonpaw_bot.context.GuildContext.log", _capture_log)
+
+    event = Mock()
+    event.guild_id = hikari.Snowflake(1)
+    event.member.is_bot = True
+    event.member.display_name = "Beep Boop"
+    event.app.cache.get_guild.return_value = Mock(
+        id=hikari.Snowflake(1), name="G", icon_url=None
+    )
+
+    await on_member_join(event)
+
+    assert logged and "Bot joined" in logged[0]
+    assert validation_state.load(1).members == []
 
 
 # ---------------------------------------------------------------------------- #
@@ -807,15 +839,15 @@ def _use_tmp_state(tmp_path, monkeypatch) -> None:
     intros_state.store.cache.clear()
 
 
-def _make_handler_bot(*, guild_id: int = 1, guild_name: str = "TestGuild"):
+def _make_handler_bot():
     """Bot mock for interaction/listener tests.
 
     bot.state() returns None so GuildContext has no log channel and gc.log() is a
     silent no-op (and no general-channel announcement is attempted).
     """
     guild = Mock()
-    guild.id = hikari.Snowflake(guild_id)
-    guild.name = guild_name
+    guild.id = GUILD_ID
+    guild.name = "TestGuild"
 
     bot = Mock()
     bot.user_id = hikari.Snowflake(999)
@@ -901,10 +933,10 @@ def _response_text(mock_call) -> str:
     return mock_call.kwargs["content"]
 
 
-def _saved_members(guild_id: int = 1):
+def _saved_members():
     """Re-read the guild's members from disk, bypassing the in-memory cache."""
     validation_state.store.cache.clear()
-    return validation_state.load(guild_id).members
+    return validation_state.load(GUILD_ID).members
 
 
 # ---------------------------------------------------------------------------- #

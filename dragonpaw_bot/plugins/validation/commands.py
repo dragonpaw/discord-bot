@@ -96,12 +96,6 @@ async def on_member_join(event: hikari.MemberCreateEvent) -> None:
     bot: DragonpawBot = event.app  # type: ignore[assignment]
     st = validation_state.load(int(event.guild_id))
 
-    if not st.lobby_channel_id:
-        logger.debug(
-            "No lobby channel configured, skipping welcome", guild_id=event.guild_id
-        )
-        return
-
     if event.member.is_bot:
         gc = GuildContext.from_guild(
             bot,
@@ -110,6 +104,12 @@ async def on_member_join(event: hikari.MemberCreateEvent) -> None:
         )
         await gc.log(
             f"🤖 Bot joined: **{event.member.display_name}** — skipping onboarding 🐉"
+        )
+        return
+
+    if not st.lobby_channel_id:
+        logger.debug(
+            "No lobby channel configured, skipping welcome", guild_id=event.guild_id
         )
         return
 
@@ -619,9 +619,7 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
         return
 
     st = validation_state.load(int(interaction.guild_id))
-    member_entry = next(
-        (m for m in st.members if m.channel_id == channel_id), None
-    )
+    member_entry = next((m for m in st.members if m.channel_id == channel_id), None)
     if member_entry and int(interaction.user.id) == member_entry.user_id:
         await interaction.edit_initial_response(
             content="*side-eyes you* 🐉 You can't approve your own verification! 🐾"

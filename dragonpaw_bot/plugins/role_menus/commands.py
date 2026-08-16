@@ -152,7 +152,12 @@ async def configure_role_menus(
         errors.append("Role channel is set, but no role menus seem to exist.")
         return errors
 
-    errors.extend(await _setup_warnings(gc, channel, role_map))
+    referenced = {o.role for m in config.menu for o in m.options}
+    errors.extend(
+        await _setup_warnings(
+            gc, channel, {n: r for n, r in role_map.items() if n in referenced}
+        )
+    )
 
     emoji_map = await utils.guild_emojis(gc)
 

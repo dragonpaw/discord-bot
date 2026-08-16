@@ -22,9 +22,7 @@ from dragonpaw_bot.plugins.subday.constants import (
     SUBDAY_OWNER_REQUEST_PREFIX,
     SUBDAY_SIGNUP_ID,
     TOTAL_WEEKS,
-)
-from dragonpaw_bot.plugins.subday.constants import (
-    next_milestone as constants_next_milestone,
+    next_milestone,
 )
 from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig, SubDayParticipant
 
@@ -186,11 +184,11 @@ async def _role_mention(gc: GuildContext, role_name: str | None) -> str | None:
 
 def _milestone_prize_teaser(current_week: int, cfg: SubDayGuildConfig) -> str:
     """Return a prize-teaser string for the next upcoming milestone, or ''."""
-    next_milestone = constants_next_milestone(current_week)
-    if not next_milestone:
+    milestone = next_milestone(current_week)
+    if not milestone:
         return ""
-    prize = cfg.milestone_prizes().get(next_milestone, "a prize")
-    weeks_away = next_milestone - current_week
+    prize = cfg.milestone_prizes().get(milestone, "a prize")
+    weeks_away = milestone - current_week
     if weeks_away == 0:
         return f"\n🎁 Milestone week! Prize: **{prize}**"
     return f"\n🎁 Next prize ({weeks_away}w away): **{prize}**"
@@ -651,7 +649,8 @@ def _owned_sub_status_embed(
         icon = "⏳"
         status = f"Week {p.current_week} — in progress"
 
-    status += _milestone_prize_teaser(p.current_week, cfg)
+    if not p.graduated:
+        status += _milestone_prize_teaser(p.current_week, cfg)
     status += _progress_footer(p)
 
     return hikari.Embed(
@@ -693,17 +692,17 @@ def _own_progress_embed(
             "Complete it and show a reviewer to move on."
         )
 
-    next_milestone = constants_next_milestone(p.current_week)
-    if next_milestone:
+    milestone = next_milestone(p.current_week)
+    if milestone:
         milestone_roles = cfg.milestone_roles()
-        role_name = milestone_roles.get(next_milestone)
+        role_name = milestone_roles.get(milestone)
         role_label = f" ({role_name})" if role_name else ""
-        weeks_away = next_milestone - p.current_week
+        weeks_away = milestone - p.current_week
         if weeks_away == 0:
             milestone_text = f"This is a milestone week!{role_label}"
         else:
             milestone_text = (
-                f"Next milestone: **Week {next_milestone}**"
+                f"Next milestone: **Week {milestone}**"
                 f"{role_label} — "
                 f"{weeks_away} week{'s' if weeks_away != 1 else ''} away"
             )
