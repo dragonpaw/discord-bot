@@ -8,9 +8,7 @@ from dragonpaw_bot.colors import SOLARIZED_CYAN, SOLARIZED_VIOLET, SOLARIZED_YEL
 from dragonpaw_bot.plugins.subday.constants import (
     TOTAL_WEEKS,
     WEEKS_DIR,
-)
-from dragonpaw_bot.plugins.subday.constants import (
-    next_milestone as constants_next_milestone,
+    next_milestone,
 )
 
 _cache: dict[int, WeekPrompt] = {}
@@ -137,15 +135,17 @@ def build_weekly_dm_embeds(prompt: WeekPrompt) -> list[hikari.Embed]:
     week = prompt.week
 
     # Pick a color and flavour based on milestones
-    next_milestone = constants_next_milestone(week) or TOTAL_WEEKS
-    weeks_to_milestone = next_milestone - week
+    milestone = next_milestone(week) or TOTAL_WEEKS
+    weeks_to_milestone = milestone - week
 
     if weeks_to_milestone == 0:
-        milestone_note = f"🌟 **This is a milestone week!** Complete it to reach the **Week {next_milestone}** milestone!"
+        milestone_note = f"🌟 **This is a milestone week!** Complete it to reach the **Week {milestone}** milestone!"
     elif weeks_to_milestone <= _MILESTONE_NEAR_THRESHOLD:
-        milestone_note = f"✨ Only **{weeks_to_milestone}** week{'s' if weeks_to_milestone != 1 else ''} until your **Week {next_milestone}** milestone!"
+        milestone_note = f"✨ Only **{weeks_to_milestone}** week{'s' if weeks_to_milestone != 1 else ''} until your **Week {milestone}** milestone!"
     else:
-        milestone_note = f"Next milestone: **Week {next_milestone}** ({weeks_to_milestone} weeks away)"
+        milestone_note = (
+            f"Next milestone: **Week {milestone}** ({weeks_to_milestone} weeks away)"
+        )
 
     rules_text = load_rules()
     greeting = hikari.Embed(

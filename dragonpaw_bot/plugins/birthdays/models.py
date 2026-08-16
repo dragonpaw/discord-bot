@@ -6,9 +6,6 @@ import pydantic
 
 from dragonpaw_bot.state_store import GuildStateBase
 
-_FEB = 2
-_LEAP_DAY = 29
-
 
 class BirthdayEntry(pydantic.BaseModel):
     user_id: int = pydantic.Field(gt=0)

@@ -14,12 +14,12 @@ from dragonpaw_bot.plugins.media_channels import state as media_state
 from dragonpaw_bot.utils import create_background_task, message_has_media
 
 if TYPE_CHECKING:
-
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
 
 loader = lightbulb.Loader()
+
 
 async def _delete_after(
     bot: DragonpawBot,

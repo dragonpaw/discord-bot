@@ -47,11 +47,6 @@ def test_milestone_week_26():
 
 
 def test_graduated():
-    result = render_star_chart("TestUser", 52, True)
-    assert len(result.data) > 0
-
-
-def test_graduated_chart():
     """Week 52 completed means graduated — the full chart still renders."""
     result = render_star_chart("TestUser", 52, True)
     assert len(result.data) > 0

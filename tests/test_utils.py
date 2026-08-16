@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import logging
 from unittest.mock import AsyncMock, Mock
 
 import hikari
@@ -206,13 +207,16 @@ async def test_create_background_task_runs_without_caller_reference():
     await asyncio.wait_for(done.wait(), timeout=1)
 
 
-async def test_create_background_task_logs_exception_without_raising():
+async def test_create_background_task_logs_exception_without_raising(caplog):
     async def _boom():
         raise RuntimeError("kaboom")
 
-    create_background_task(_boom())
-    for _ in range(3):
-        await asyncio.sleep(0)  # let the task run and its done-callback fire
+    with caplog.at_level(logging.WARNING, logger="dragonpaw_bot.utils"):
+        create_background_task(_boom())
+        for _ in range(3):
+            await asyncio.sleep(0)  # let the task run and its done-callback fire
+
+    assert any("Background task failed" in r.message for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------- #
@@ -248,5 +252,7 @@ def test_defaults_action_row_tolerates_missing_components():
         def build(self):
             return {}, []
 
-    payload, _resources = DefaultsActionRow(_Empty(), [{"id": "1", "type": "role"}]).build()
+    payload, _resources = DefaultsActionRow(
+        _Empty(), [{"id": "1", "type": "role"}]
+    ).build()
     assert payload == {}

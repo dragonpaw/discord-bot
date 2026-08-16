@@ -38,13 +38,12 @@ def _member(
     *,
     role_ids: tuple[int, ...] = (),
     is_bot: bool = False,
-    name: str | None = None,
 ) -> MagicMock:
     m = MagicMock(spec=hikari.Member)
     m.id = hikari.Snowflake(member_id)
     m.role_ids = [hikari.Snowflake(r) for r in role_ids]
     m.is_bot = is_bot
-    m.display_name = name or f"user{member_id}"
+    m.display_name = f"user{member_id}"
     m.mention = f"<@{member_id}>"
     return m
 
@@ -78,13 +77,12 @@ def _bot(
     *,
     members: tuple[MagicMock, ...] = (),
     messages: tuple[MagicMock, ...] = (),
-    general_channel_id: int | None = None,
 ) -> MagicMock:
     """A bot whose only real behaviour is the Discord cache/REST boundary."""
     bot = MagicMock()
     bot.state.return_value = SimpleNamespace(
         log_channel_id=hikari.Snowflake(LOG_CHANNEL_ID),
-        general_channel_id=general_channel_id,
+        general_channel_id=None,
     )
     bot.cache.get_members_view_for_guild.return_value = {m.id: m for m in members}
     bot.cache.get_member.return_value = None

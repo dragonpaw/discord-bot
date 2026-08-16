@@ -790,7 +790,8 @@ def test_evaluate_lurker_score_at_floor_is_not_lurker():
 
 async def test_forwarded_media_message_scores_as_media(monkeypatch):
     """A forwarded image carries its media in message_snapshots — it must count
-    as MEDIA (2.0), not TEXT, same as media_channels' detection."""
+    as MEDIA, not TEXT, same as media_channels' detection. The amount recorded
+    here is the channel multiplier; the per-kind weight is applied downstream."""
     snap = SimpleNamespace(content=None, attachments=[object()], stickers=[])
     msg = SimpleNamespace(
         content=None, attachments=[], stickers=[], message_snapshots=[snap]
@@ -803,10 +804,10 @@ async def test_forwarded_media_message_scores_as_media(monkeypatch):
     event.author_id = hikari.Snowflake(42)
     event.channel_id = hikari.Snowflake(7)
 
-    meta = SimpleNamespace(
-        guild_name="G", config=SimpleNamespace(channel_configs=[])
+    meta = SimpleNamespace(guild_name="G", config=SimpleNamespace(channel_configs=[]))
+    monkeypatch.setattr(
+        activity_listeners.activity_state, "load_config", lambda _g: meta
     )
-    monkeypatch.setattr(activity_listeners.activity_state, "load_config", lambda _g: meta)
     monkeypatch.setattr(
         activity_listeners,
         "guild_member",
@@ -879,7 +880,7 @@ def test_channel_multiplier_unconfigured_defaults_to_one():
 # ---------------------------------------------------------------------------- #
 
 
-@pytest.fixture(autouse=False)
+@pytest.fixture
 def clear_vc_sessions():
     """Clear the module-level VC session map before and after each test."""
     activity_listeners._vc_sessions.clear()

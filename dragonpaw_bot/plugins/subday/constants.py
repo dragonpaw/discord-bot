@@ -9,6 +9,7 @@ def next_milestone(week: int) -> int | None:
     """The first milestone at or after this week, or None past the last."""
     return next((m for m in MILESTONE_WEEKS if m >= week), None)
 
+
 # Component interaction custom IDs
 SUBDAY_SIGNUP_ID = "subday_signup"
 SUBDAY_ABOUT_ID = "subday_about"

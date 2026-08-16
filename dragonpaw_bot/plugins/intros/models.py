@@ -1,4 +1,3 @@
-
 from dragonpaw_bot.state_store import GuildStateBase
 
 
