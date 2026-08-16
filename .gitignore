@@ -44,3 +44,6 @@ BUILD_TAG
 
 # Claude Code local settings
 .claude.local.md
+
+# Session working files
+scratchpad/
