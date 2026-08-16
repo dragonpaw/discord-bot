@@ -193,6 +193,8 @@ python3 scratchpad/redeploy.py   # self-loads ~/.config/portainer.env
 
 `pullImage: true` re-pulls `ghcr.io/dragonpaw/discord-bot:latest` before recreating `discord-bot` in place; the named volume `discord-bot_bot-state` (guild/config state) is preserved.
 
+**The PUT is slow and the recreate is unreliable (both observed 2026-08-15).** Give the request a ≥10-minute timeout — killing the client mid-request does NOT cancel the server-side redeploy. And after **every** PUT (even one that returns cleanly), verify the container actually started: `ssh nas 'sudo docker ps -a --filter name=discord-bot --format "{{.Status}}"'`. The hub has twice recreated the container and left it in **Created** (bot down); if you see `Created`, run `ssh nas 'sudo docker start discord-bot'`.
+
 **If the stack is missing** (someone deleted it): recreate with `POST /api/stacks/create/standalone/string?endpointId=6`, name `discord-bot`, `stackFileContent` from `~/src/discord-bot/docker-compose.yml`, and env `BOT_TOKEN`/`CLIENT_ID`. The values are recoverable from the stale ep3 file: `ssh nas 'cat /share/Docker/PortainerCE/data/compose/5/stack.env'` — pipe it into the create, **never print it**. Keep `TEST_GUILDS` unset in prod (global command registration only).
 
 **Note:** these Portainer-API writes are production deploys — the auto-mode classifier may prompt for approval even though `ssh nas` itself is pre-authorized via the asustor-nas standing grant.
