@@ -155,6 +155,7 @@ _AUTO_DEFER_EXCLUSIONS: set[str] = {
     "adultier-adult",
     "journal add",
     "journal followup",
+    "Log warning",
 }
 
 

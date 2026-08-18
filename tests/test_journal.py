@@ -249,3 +249,16 @@ def test_modal_prefixes_are_unambiguous():
         for b in prefixes:
             if a != b:
                 assert not a.startswith(b), f"{a!r} shadows {b!r} in prefix routing"
+
+
+def test_jump_url_format():
+    assert journal_commands.jump_url(1, 2, 3) == "https://discord.com/channels/1/2/3"
+
+
+def test_warn_message_modal_prefix_is_routed():
+    assert journal_commands.WARN_MSG_MODAL_PREFIX in MODAL_HANDLERS
+
+
+def test_warn_message_custom_id_fits_discord_limit():
+    cid = journal_commands.WARN_MSG_MODAL_PREFIX + ":".join(["999999999999999999"] * 3)
+    assert len(cid) <= 100

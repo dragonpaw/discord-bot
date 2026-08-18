@@ -28,7 +28,12 @@ def staff_blocked(ctx: lightbulb.Context, staff_role_id: int | None) -> str | No
 
 ADD_MODAL_PREFIX = "journal_add_modal:"
 FOLLOWUP_MODAL_PREFIX = "journal_followup_modal:"
+WARN_MSG_MODAL_PREFIX = "journal_warn_msg_modal:"
 REASON_FIELD = "reason"
+EVIDENCE_FIELD = "evidence"
+
+#: Discord's text input cap.
+_EVIDENCE_LIMIT = 4000
 
 #: An authored entry's summary is its reason on one line; detail.reason keeps the rest.
 SUMMARY_LIMIT = 200
@@ -330,6 +335,109 @@ async def handle_followup_modal(interaction: hikari.ModalInteraction) -> None:
     await gc.log(
         f"💬 **{interaction.member.display_name}** added a follow-up to "
         f"`#{entry_id}` (**{entry.user_name}**) 🐾"
+    )
+
+
+def jump_url(guild_id: int, channel_id: int, message_id: int) -> str:
+    return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
+
+
+@loader.command
+class LogWarningMessageCommand(
+    lightbulb.MessageCommand,
+    name="Log warning",
+    description="File a warning about this message.",
+):
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        if not ctx.guild_id:
+            return
+        st = journal.load(int(ctx.guild_id))
+
+        if refusal := staff_blocked(ctx, st.staff_role_id):
+            logger.info("Journal message-command denied", actor=ctx.user.username)
+            await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
+            return
+
+        message = self.target
+
+        reason_row = hikari.impl.ModalActionRowBuilder()
+        reason_row.add_text_input(
+            REASON_FIELD,
+            "What's the problem?",
+            style=hikari.TextInputStyle.PARAGRAPH,
+            required=True,
+            min_length=1,
+            max_length=2000,
+        )
+        # Pre-filled rather than re-fetched on submit: capturing the text before
+        # it can be deleted is the whole point of the context menu.
+        evidence_row = hikari.impl.ModalActionRowBuilder()
+        evidence_row.add_text_input(
+            EVIDENCE_FIELD,
+            "Message being cited (edit to trim)",
+            style=hikari.TextInputStyle.PARAGRAPH,
+            required=False,
+            max_length=_EVIDENCE_LIMIT,
+            value=(message.content or "")[:_EVIDENCE_LIMIT],
+        )
+
+        await ctx.respond_with_modal(
+            title=f"Warning — {message.author.username}",
+            custom_id=(
+                f"{WARN_MSG_MODAL_PREFIX}{int(message.author.id)}:"
+                f"{int(message.channel_id)}:{int(message.id)}"
+            ),
+            components=[reason_row, evidence_row],
+        )
+
+
+async def handle_warn_message_modal(interaction: hikari.ModalInteraction) -> None:
+    """Persist a warning filed from the message context menu."""
+    if not interaction.guild_id or not interaction.member:
+        return
+
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.DEFERRED_MESSAGE_CREATE,
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+
+    _, user_raw, channel_raw, message_raw = interaction.custom_id.split(":", 3)
+    user_id = int(user_raw)
+    reason = modal_value(interaction, REASON_FIELD)
+    evidence = modal_value(interaction, EVIDENCE_FIELD)
+
+    gc = GuildContext.from_interaction(interaction)  # type: ignore[arg-type]
+    guild_id = int(interaction.guild_id)
+    member = gc.bot.cache.get_member(guild_id, user_id)
+    target_name = member.display_name if member else str(user_id)
+    url = jump_url(guild_id, int(channel_raw), int(message_raw))
+
+    entry = journal.record(
+        guild_id,
+        gc.name,
+        user_id=user_id,
+        user_name=target_name,
+        kind="warning",
+        summary=summarize(reason),
+        detail=journal.WarningDetail(
+            reason=reason,
+            issuer_id=int(interaction.member.id),
+            issuer_name=interaction.member.display_name,
+            evidence_url=url,
+            evidence_text=evidence or None,
+        ),
+    )
+
+    logger.info(
+        "Journal warning filed from message", target=target_name, entry_id=entry.id
+    )
+    await interaction.edit_initial_response(
+        content=f"⚠️ Filed it as `#{entry.id}`, message and all — I never forget! 🐉"
+    )
+    await gc.log(
+        f"⚠️ **{interaction.member.display_name}** filed a warning for "
+        f"**{target_name}** as `#{entry.id}` ([context]({url})) 🐾"
     )
 
 
