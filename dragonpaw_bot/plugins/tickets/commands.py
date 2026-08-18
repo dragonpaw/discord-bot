@@ -264,7 +264,10 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
     await gc.log(
         f"🎫 *happy flap* I just opened a cozy little ticket for "
         f"**{interaction.member.display_name}**! "
-        f'They need help with: "{topic}" 🐾'
+        f'They need help with: "{topic}" 🐾',
+        journal_kind="ticket_opened",
+        journal_user=interaction.member,
+        journal_summary=f'Opened a ticket: "{topic}"',
     )
 
 

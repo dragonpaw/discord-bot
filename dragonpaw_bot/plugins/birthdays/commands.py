@@ -21,6 +21,7 @@ from dragonpaw_bot.plugins.birthdays.models import (
 )
 
 if TYPE_CHECKING:
+    from dragonpaw_bot import journal
     from dragonpaw_bot.bot import DragonpawBot
 
 logger = structlog.get_logger(__name__)
@@ -76,6 +77,23 @@ def _clean_wishlist_url(url: str) -> str:
     (e.g. ?ref=wl_share) are just tracking anyway.
     """
     return url.split("?", maxsplit=1)[0]
+
+
+async def _log_birthday_event(
+    gc: GuildContext,
+    message: str,
+    *,
+    kind: journal.EntryKind,
+    member: hikari.Member | None,
+    summary: str,
+) -> None:
+    """Log to the staff channel, journaling it when the subject is resolvable."""
+    if member is None:
+        await gc.log(message)
+        return
+    await gc.log(
+        message, journal_kind=kind, journal_user=member, journal_summary=summary
+    )
 
 
 def _validate_date(month: int, day: int) -> str | None:
@@ -628,7 +646,13 @@ async def _handle_set_timezone(
         day=day,
         timezone=tz_id,
     )
-    await gc.log(log_msg)
+    await _log_birthday_event(
+        gc,
+        log_msg,
+        kind="birthday_set",
+        member=interaction.member,
+        summary=f"Birthday {action}: {MONTH_NAMES[month]} {day}",
+    )
 
 
 async def handle_tz_interaction(interaction: hikari.ComponentInteraction) -> None:
@@ -722,8 +746,12 @@ class BirthdayRemove(
             user=ctx.user.display_name,
         )
         actor = actor_name(ctx)
-        await gc.log(
-            f"🎂 **{actor}** removed their birthday — I'll miss celebrating them! 🐾"
+        await _log_birthday_event(
+            gc,
+            f"🎂 **{actor}** removed their birthday — I'll miss celebrating them! 🐾",
+            kind="birthday_removed",
+            member=ctx.member,
+            summary="Removed their birthday",
         )
 
 
@@ -768,9 +796,20 @@ class BirthdayRemoveFor(
             target=self.user.display_name,
         )
         actor = actor_name(ctx)
-        await gc.log(
+        msg = (
             f"🎂 **{actor}** removed birthday entry for **{self.user.display_name}** 🐾"
         )
+        # The subject is the target, not the caller — and they may have left.
+        target = gc.bot.cache.get_member(ctx.guild_id, self.user.id)
+        if target:
+            await gc.log(
+                msg,
+                journal_kind="birthday_removed",
+                journal_user=target,
+                journal_summary=f"Birthday entry removed by {actor}",
+            )
+        else:
+            await gc.log(msg)
 
 
 class BirthdayList(

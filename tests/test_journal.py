@@ -1,8 +1,10 @@
 from datetime import UTC, datetime
+from typing import get_args
 from unittest.mock import MagicMock
 
 import pytest
 
+import dragonpaw_bot.bot as bot_module
 from dragonpaw_bot import journal
 from dragonpaw_bot.plugins.journal import MODAL_HANDLERS
 from dragonpaw_bot.plugins.journal import commands as journal_commands
@@ -287,3 +289,23 @@ def test_no_delta_when_name_unchanged():
 
 def test_no_delta_when_old_member_uncached():
     assert journal_listeners.display_name_change(None, _NamedMember("New")) is None
+
+
+def test_every_entry_kind_has_an_emoji():
+    for kind in get_args(journal.EntryKind):
+        assert kind in journal.KIND_EMOJI, f"{kind} has no emoji"
+
+
+def test_modal_responding_commands_are_excluded_from_auto_defer():
+    """A modal cannot follow a deferred response, so these must opt out."""
+    qualified = {
+        sub._command_data.qualified_name
+        for sub in journal_commands.journal_group._commands.values()
+    }
+    qualified.add(
+        journal_commands.LogWarningMessageCommand._command_data.qualified_name
+    )
+
+    modal_commands = {"journal add", "journal followup", "Log warning"}
+    assert modal_commands <= qualified, "command names drifted from the exclusion list"
+    assert modal_commands <= bot_module._AUTO_DEFER_EXCLUSIONS

@@ -58,12 +58,15 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 - **`plugins/intros/`** — Manages a server introductions channel. Daily cron removes posts from departed members. Weekly "naughty list" cron posts missing-intros summary. See `plugins/intros/CLAUDE.md` for details.
 - **`plugins/media_channels/`** — Enforces media-only policy in configured channels; hourly cleanup cron. See `plugins/media_channels/CLAUDE.md` for details.
 - **`plugins/channel_cleanup/`** — Auto-deletes old messages from configured channels via hourly cron. See `plugins/channel_cleanup/CLAUDE.md` for details.
+- **`plugins/journal/`** — Per-member record: staff-authored notes/warnings plus observed events from other plugins. Append-only; the bot never judges or acts on it. Command surface only — the store lives in core `journal.py`. See `plugins/journal/CLAUDE.md` for details.
 
-**`/config` command group** — Defined in `bot.py` (main loader) and extended by each plugin's `config.py`. Each plugin that needs admin configuration exposes a `register(subgroup)` function in `plugin_dir/config.py`; `bot.py` imports these and wires them into the `/config` group. Subgroups: `/config channels` (log + general channel, defined in `bot.py`), `/config media` (media channels), `/config cleanup` (channel cleanup), `/config intros` (introductions channel), `/config subday` (SubDay journal), `/config birthday` (birthday tracking), `/config roles` (role menus), `/config tickets` (support tickets), `/config validation` (member validation), `/config activity` (activity tracker), `/config buttons` (button channel, defined in `buttons.py`).
+**`/config` command group** — Defined in `bot.py` (main loader) and extended by each plugin's `config.py`. Each plugin that needs admin configuration exposes a `register(subgroup)` function in `plugin_dir/config.py`; `bot.py` imports these and wires them into the `/config` group. Subgroups: `/config channels` (log + general channel, defined in `bot.py`), `/config media` (media channels), `/config cleanup` (channel cleanup), `/config intros` (introductions channel), `/config subday` (SubDay journal), `/config birthday` (birthday tracking), `/config roles` (role menus), `/config tickets` (support tickets), `/config validation` (member validation), `/config activity` (activity tracker), `/config journal` (member journal), `/config buttons` (button channel, defined in `buttons.py`).
 
 **`duration.py`** — Shared `parse_duration_minutes()` and `format_duration()` helpers used by plugin config commands.
 
 **`state_store.py`** — `GuildStateStore` + `GuildStateBase`: the shared cache-backed YAML persistence every plugin state module builds on (one store instance per plugin, files named `{plugin}_{guild_id}.yaml`).
+
+**`journal.py`** — Models, store, and write path for the member journal. Lives in core rather than under `plugins/` because `gc.log()` writes to it and `context.py` cannot import a plugin without inverting the layering. `plugins/journal/` owns only the command surface.
 
 **`buttons.py`** — The button channel. Collects a `BUTTON_ENTRY` from each plugin that declares one, renders them as embed-and-button cards into a configured channel, and owns `/config buttons`. See **Button channel** below.
 
@@ -78,6 +81,8 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 **Config flow:** Server admins use the `/config roles setup` slash command with a URL to a role-menu TOML file. The bot fetches and parses it directly into a `RolesConfig`, sets up role menus, then persists `GuildState` to disk as YAML. The `/config channels log` command sets or clears the guild's log channel (`GuildState.log_channel_id`), which is preserved across `/config roles setup` reloads.
 
 **Guild logging:** `gc.log()` (on `GuildContext`) sends plain-text notifications to the guild's configured log channel. All plugins use this for auditable events (errors, completions, config changes, signups, removals). Silently skips if no log channel is configured. Each message should have a unique leading emoji. Use first-person ("I/me/my") in bot-facing staff messages (dragon persona).
+
+`gc.log()` also writes to the member journal when passed `journal_kind=` and `journal_user=` (a `hikari.Member`), with an optional `journal_summary=` overriding the timeline text when the staff-channel wording is too chatty. The two required kwargs must be passed **together** — one without the other raises `ValueError`, since a silently dropped record is worse than a crash. An unconfigured log channel means the guild has opted out of record-keeping, so nothing is journaled either; a transient `HTTPError` is not that signal, so the entry is written before the send is attempted. Staff-authored journal entries bypass `gc.log()` and write to the store directly, so they are recorded regardless.
 
 **Button channel:** Members can't be expected to remember slash commands, so one channel hosts a card per plugin — an embed with a title, description, fixed Solarized colour, and one or two buttons for that plugin's main public action.
 
