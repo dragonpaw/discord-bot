@@ -6,6 +6,7 @@ import pytest
 from dragonpaw_bot import journal
 from dragonpaw_bot.plugins.journal import MODAL_HANDLERS
 from dragonpaw_bot.plugins.journal import commands as journal_commands
+from dragonpaw_bot.plugins.journal import listeners as journal_listeners
 
 
 @pytest.fixture
@@ -262,3 +263,27 @@ def test_warn_message_modal_prefix_is_routed():
 def test_warn_message_custom_id_fits_discord_limit():
     cid = journal_commands.WARN_MSG_MODAL_PREFIX + ":".join(["999999999999999999"] * 3)
     assert len(cid) <= 100
+
+
+class _NamedMember:
+    def __init__(self, display_name):
+        self.display_name = display_name
+
+
+def test_delta_detected_on_rename():
+    assert journal_listeners.display_name_change(
+        _NamedMember("Old"), _NamedMember("New")
+    ) == ("Old", "New")
+
+
+def test_no_delta_when_name_unchanged():
+    assert (
+        journal_listeners.display_name_change(
+            _NamedMember("Same"), _NamedMember("Same")
+        )
+        is None
+    )
+
+
+def test_no_delta_when_old_member_uncached():
+    assert journal_listeners.display_name_change(None, _NamedMember("New")) is None
