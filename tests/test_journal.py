@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from dragonpaw_bot import journal
+from dragonpaw_bot.plugins.journal import MODAL_HANDLERS
 from dragonpaw_bot.plugins.journal import commands as journal_commands
 
 
@@ -213,3 +214,26 @@ def test_render_timeline_truncates_instead_of_exploding():
     text = journal_commands.render_timeline(entries)
     assert len(text) <= 4096
     assert "older entries omitted" in text
+
+
+def test_summarize_keeps_short_reasons_whole():
+    assert journal_commands.summarize("was rude in general") == "was rude in general"
+
+
+def test_summarize_collapses_newlines():
+    assert "\n" not in journal_commands.summarize("line one\nline two")
+
+
+def test_summarize_truncates_long_reasons():
+    out = journal_commands.summarize("x" * 500)
+    assert len(out) <= journal_commands.SUMMARY_LIMIT
+    assert out.endswith("…")
+
+
+def test_add_modal_prefix_is_routed():
+    assert journal_commands.ADD_MODAL_PREFIX in MODAL_HANDLERS
+
+
+def test_add_modal_custom_id_fits_discord_limit():
+    cid = f"{journal_commands.ADD_MODAL_PREFIX}999999999999999999:ineligible"
+    assert len(cid) <= 100

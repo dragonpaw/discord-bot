@@ -26,6 +26,19 @@ def staff_blocked(ctx: lightbulb.Context, staff_role_id: int | None) -> str | No
     return None
 
 
+ADD_MODAL_PREFIX = "journal_add_modal:"
+REASON_FIELD = "reason"
+
+#: An authored entry's summary is its reason on one line; detail.reason keeps the rest.
+SUMMARY_LIMIT = 200
+
+_AUTHORED_CHOICES = [
+    lightbulb.Choice("warning", "warning"),
+    lightbulb.Choice("note", "note"),
+    lightbulb.Choice("ineligible (un-invite from parties)", "ineligible"),
+    lightbulb.Choice("eligible (re-invite to parties)", "eligible"),
+]
+
 #: Discord's embed description cap; leave room for the truncation notice.
 _DESCRIPTION_LIMIT = 4096
 _TRUNCATION_NOTICE = "\n*… older entries omitted.*"
@@ -147,6 +160,105 @@ class JournalIneligibleList(
             ),
             flags=hikari.MessageFlag.EPHEMERAL,
         )
+
+
+def summarize(reason: str) -> str:
+    """One-line form of a reason, for the timeline."""
+    flat = " ".join(reason.split())
+    if len(flat) <= SUMMARY_LIMIT:
+        return flat
+    return flat[: SUMMARY_LIMIT - 1] + "…"
+
+
+def reason_modal_rows(label: str) -> list[hikari.impl.ModalActionRowBuilder]:
+    row = hikari.impl.ModalActionRowBuilder()
+    row.add_text_input(
+        REASON_FIELD,
+        label,
+        style=hikari.TextInputStyle.PARAGRAPH,
+        required=True,
+        min_length=1,
+        max_length=2000,
+    )
+    return [row]
+
+
+def modal_value(interaction: hikari.ModalInteraction, field: str) -> str:
+    for row in interaction.components:
+        for component in row.components:
+            if component.custom_id == field:
+                return component.value or ""
+    return ""
+
+
+@journal_group.register
+class JournalAdd(
+    lightbulb.SlashCommand,
+    name="add",
+    description="File a note, warning, or eligibility change for a member.",
+):
+    user = lightbulb.user("user", "The member this is about")
+    kind = lightbulb.string("kind", "What kind of entry", choices=_AUTHORED_CHOICES)
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        if not ctx.guild_id:
+            return
+        st = journal.load(int(ctx.guild_id))
+
+        if refusal := staff_blocked(ctx, st.staff_role_id):
+            logger.info("Journal add denied", actor=ctx.user.username)
+            await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
+            return
+
+        await ctx.respond_with_modal(
+            title=f"Journal entry — {self.user.display_name}",
+            custom_id=f"{ADD_MODAL_PREFIX}{int(self.user.id)}:{self.kind}",
+            components=reason_modal_rows("What happened?"),
+        )
+
+
+async def handle_add_modal(interaction: hikari.ModalInteraction) -> None:
+    """Persist a staff-authored entry submitted from /journal add."""
+    if not interaction.guild_id or not interaction.member:
+        return
+
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.DEFERRED_MESSAGE_CREATE,
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+
+    _, user_id_raw, kind = interaction.custom_id.split(":", 2)
+    user_id = int(user_id_raw)
+    reason = modal_value(interaction, REASON_FIELD)
+
+    gc = GuildContext.from_interaction(interaction)  # type: ignore[arg-type]
+    member = gc.bot.cache.get_member(interaction.guild_id, user_id)
+    target_name = member.display_name if member else str(user_id)
+
+    entry = journal.record(
+        int(interaction.guild_id),
+        gc.name,
+        user_id=user_id,
+        user_name=target_name,
+        kind=kind,  # type: ignore[arg-type]
+        summary=summarize(reason),
+        detail=journal.WarningDetail(
+            reason=reason,
+            issuer_id=int(interaction.member.id),
+            issuer_name=interaction.member.display_name,
+        ),
+    )
+
+    emoji = journal.KIND_EMOJI.get(kind, "📖")
+    logger.info("Journal entry filed", kind=kind, target=target_name, entry_id=entry.id)
+    await interaction.edit_initial_response(
+        content=f"{emoji} Noted it down as `#{entry.id}` — I never forget! 🐉"
+    )
+    await gc.log(
+        f"{emoji} **{interaction.member.display_name}** filed a {kind} for "
+        f"**{target_name}** as `#{entry.id}` 🐾"
+    )
 
 
 loader.command(journal_group)
