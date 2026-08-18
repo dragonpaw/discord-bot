@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import hikari
 import yaml
 
+from dragonpaw_bot.colors import SOLARIZED_VIOLET
 from dragonpaw_bot.plugins.subday import state
 from dragonpaw_bot.plugins.subday.commands import (
     _do_signup_async,
@@ -203,6 +204,7 @@ def _signup_fixtures(tmp_path, monkeypatch, achievements_channel):
     user.id = 42
     user.display_name = "Newbie"
     user.username = "newbie"
+    user.mention = "<@42>"
     user.fetch_dm_channel = AsyncMock()
 
     bot = MagicMock()
@@ -225,9 +227,12 @@ async def test_signup_praise_posted_to_achievements_channel(tmp_path, monkeypatc
     await _do_signup_async(bot, hikari.Snowflake(1), user)
 
     channel.send.assert_awaited_once()
-    praise = channel.send.call_args.args[0]
-    assert "Newbie" in praise
-    assert "Where I am Led" in praise
+    args = channel.send.call_args
+    assert args.args[0] == "<@42>"  # ping lives in content; embed mentions don't notify
+    embed = args.kwargs["embed"]
+    assert embed.color == SOLARIZED_VIOLET
+    assert "<@42>" in embed.description
+    assert "Where I am Led" in embed.description
 
 
 async def test_signup_praise_skipped_when_channel_unconfigured(tmp_path, monkeypatch):

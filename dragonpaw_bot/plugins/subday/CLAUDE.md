@@ -19,7 +19,7 @@ Notifications (completions, milestones, signups, removals, owner accept/deny, co
 - **status** — Shows the user's own progress: current week, completion status, next milestone, signup date. If the user is an owner, also shows compact status embeds (cyan) for each of their subs.
 - **resend** — Self-service. Resends the caller's own current-week prompt to their DMs (a short resend greeting + the prompt embed via `prompts.build_resend_dm_embeds`). No role gate; only acts if the caller is signed up. No-ops with a friendly message if not signed up or already graduated. Does not copy the owner or post to the staff log.
 - **owner [@user]** — Sets or clears the user's owner. See Owner Feature below.
-- **signup** — Requires `enroll_role`. Registers user, DMs week 1 prompt + rules, and posts a public praise message to `achievements_channel` (skipped when unconfigured). Handles DM failures gracefully.
+- **signup** — Requires `enroll_role`. Registers user, DMs week 1 prompt + rules, and posts a public praise embed (violet, pings the member) to `achievements_channel` (skipped when unconfigured). Handles DM failures gracefully.
 - **complete @user [week:\<n\>] [sent:\<bool\>]** — Requires `complete_role`. Marks the user's current week done. Cannot complete yourself. DMs a completion embed with star chart. Posts to `achievements_channel` if set. At milestones: assigns role, logs prize info. With optional `week` parameter: requires `backfill_role` (explicit week always = backfill), sets the participant to that week and marks it complete. Auto-enrolls the user if not signed up. With `sent:True` alongside `week`: after marking complete, advances the participant to the next week without DMing (the Sunday cron only sends a prompt at the moment it advances someone itself, so nothing is re-sent — use when the next prompt was already DM'd manually).
 - **list** — Requires `complete_role`. Shows all participants + progress with status icons.
 - **remove @user** — Requires `complete_role`. Removes a participant.
@@ -73,7 +73,7 @@ Setting a role to `None` disables role assignment for that milestone (the achiev
 
 ### Achievement Embeds
 
-Controlled by `achievements_channel`. When `None` (default), channel posts are suppressed — including the signup praise message. DMs, milestone roles, and guild log messages are always sent regardless. Post failures are logged as warnings but do not block completion.
+Controlled by `achievements_channel`. When `None` (default), channel posts are suppressed — including the signup praise embed. DMs, milestone roles, and guild log messages are always sent regardless. Post failures are logged as warnings but do not block completion.
 
 - **Regular completion** — Purple embed with star emoji + star chart image
 - **Milestone (13/26/39)** — Gold embed, role assignment + star chart image

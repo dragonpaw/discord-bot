@@ -416,10 +416,19 @@ async def _do_signup_async(
             )
         else:
             try:
+                # Violet to match the SubDay button-channel card. The ping has to
+                # live in the content — mentions inside embeds don't notify.
                 await channel.send(
-                    f"*happy dragon noises* 🎉 **{user.display_name}** just embarked on "
-                    f"**Where I am Led** — {TOTAL_WEEKS} weeks of guided journaling! "
-                    f"Cheer them on~ 💜🐉"
+                    user.mention,
+                    embed=hikari.Embed(
+                        title="🎉 A new journey begins!",
+                        description=(
+                            f"*happy dragon noises* {user.mention} just embarked on "
+                            f"**Where I am Led** — {TOTAL_WEEKS} weeks of guided "
+                            f"journaling! Cheer them on~ 💜🐉"
+                        ),
+                        color=SOLARIZED_VIOLET,
+                    ),
                 )
             except hikari.HTTPError as exc:
                 logger.warning(
