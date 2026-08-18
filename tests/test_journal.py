@@ -150,3 +150,66 @@ def test_staff_gate_blocks_when_there_is_no_member():
 
 def test_staff_gate_allows_a_staff_member():
     assert journal_commands.staff_blocked(_ctx([111, 555]), 555) is None
+
+
+def test_render_entry_leads_with_kind_emoji(store):
+    entry = _record(kind="warning", summary="was rude")
+    line = journal_commands.render_entry(entry)
+    assert line.startswith("⚠️")
+    assert "was rude" in line
+    assert f"#{entry.id}" in line
+
+
+def test_render_entry_nests_follow_ups(store):
+    detail = journal.WarningDetail(reason="was rude", issuer_id=9, issuer_name="Staffy")
+    created = _record(kind="warning", detail=detail)
+    journal.add_follow_up(
+        1, created.id, author_id=9, author_name="Staffy", text="retracted, my error"
+    )
+    entry = journal.entry_by_id(1, created.id)
+    assert entry is not None
+
+    lines = journal_commands.render_entry(entry).splitlines()
+    assert len(lines) == 2
+    assert "↳" in lines[1]
+    assert "retracted, my error" in lines[1]
+    assert "Staffy" in lines[1]
+
+
+def test_render_entry_shows_evidence_link(store):
+    detail = journal.WarningDetail(
+        reason="was rude",
+        issuer_id=9,
+        issuer_name="Staffy",
+        evidence_url="https://discord.com/channels/1/2/3",
+    )
+    entry = _record(kind="warning", detail=detail)
+    assert "https://discord.com/channels/1/2/3" in journal_commands.render_entry(entry)
+
+
+def test_render_timeline_is_newest_first(store):
+    _record(summary="older")
+    _record(summary="newer")
+    text = journal_commands.render_timeline(journal.entries_for(1, 7))
+    assert text.index("newer") < text.index("older")
+
+
+def test_render_timeline_handles_empty(store):
+    assert "nothing" in journal_commands.render_timeline([]).lower()
+
+
+def test_render_timeline_truncates_instead_of_exploding():
+    entries = [
+        journal.JournalEntry(
+            id=i,
+            user_id=7,
+            user_name="Vee",
+            kind="note",
+            created_at=datetime.now(UTC),
+            summary=f"entry number {i} with some padding text to bulk it out",
+        )
+        for i in range(400)
+    ]
+    text = journal_commands.render_timeline(entries)
+    assert len(text) <= 4096
+    assert "older entries omitted" in text
