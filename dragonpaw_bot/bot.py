@@ -151,7 +151,11 @@ class DragonpawBot(hikari.GatewayBot):
 # pre-deferred — Discord rejects a modal as a follow-up to a deferred
 # interaction). Such commands must keep their own pre-respond work to
 # the cached/sync path so they meet Discord's 3s deadline without help.
-_AUTO_DEFER_EXCLUSIONS: set[str] = {"adultier-adult", "journal add"}
+_AUTO_DEFER_EXCLUSIONS: set[str] = {
+    "adultier-adult",
+    "journal add",
+    "journal followup",
+}
 
 
 @lightbulb.hook(lightbulb.ExecutionSteps.PRE_INVOKE, skip_when_failed=True)

@@ -237,3 +237,15 @@ def test_add_modal_prefix_is_routed():
 def test_add_modal_custom_id_fits_discord_limit():
     cid = f"{journal_commands.ADD_MODAL_PREFIX}999999999999999999:ineligible"
     assert len(cid) <= 100
+
+
+def test_followup_modal_prefix_is_routed():
+    assert journal_commands.FOLLOWUP_MODAL_PREFIX in MODAL_HANDLERS
+
+
+def test_modal_prefixes_are_unambiguous():
+    prefixes = list(MODAL_HANDLERS)
+    for a in prefixes:
+        for b in prefixes:
+            if a != b:
+                assert not a.startswith(b), f"{a!r} shadows {b!r} in prefix routing"

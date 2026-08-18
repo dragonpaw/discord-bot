@@ -27,6 +27,7 @@ def staff_blocked(ctx: lightbulb.Context, staff_role_id: int | None) -> str | No
 
 
 ADD_MODAL_PREFIX = "journal_add_modal:"
+FOLLOWUP_MODAL_PREFIX = "journal_followup_modal:"
 REASON_FIELD = "reason"
 
 #: An authored entry's summary is its reason on one line; detail.reason keeps the rest.
@@ -258,6 +259,77 @@ async def handle_add_modal(interaction: hikari.ModalInteraction) -> None:
     await gc.log(
         f"{emoji} **{interaction.member.display_name}** filed a {kind} for "
         f"**{target_name}** as `#{entry.id}` 🐾"
+    )
+
+
+@journal_group.register
+class JournalFollowup(
+    lightbulb.SlashCommand,
+    name="followup",
+    description="Append a follow-up to an existing entry (nothing is ever edited).",
+):
+    entry_id = lightbulb.integer("entry_id", "The `#id` shown in /journal view")
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        if not ctx.guild_id:
+            return
+        st = journal.load(int(ctx.guild_id))
+
+        if refusal := staff_blocked(ctx, st.staff_role_id):
+            logger.info("Journal followup denied", actor=ctx.user.username)
+            await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
+            return
+
+        entry = journal.entry_by_id(int(ctx.guild_id), self.entry_id)
+        if entry is None or entry.detail is None:
+            await ctx.respond(
+                f"*sniffs around* I can't find a staff-filed entry `#{self.entry_id}` "
+                f"to add to! Follow-ups only go on notes and warnings. 🐉",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        await ctx.respond_with_modal(
+            title=f"Follow-up on #{self.entry_id}",
+            custom_id=f"{FOLLOWUP_MODAL_PREFIX}{self.entry_id}",
+            components=reason_modal_rows("What's the update?"),
+        )
+
+
+async def handle_followup_modal(interaction: hikari.ModalInteraction) -> None:
+    """Append a follow-up submitted from /journal followup."""
+    if not interaction.guild_id or not interaction.member:
+        return
+
+    await interaction.create_initial_response(
+        response_type=hikari.ResponseType.DEFERRED_MESSAGE_CREATE,
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+
+    entry_id = int(interaction.custom_id.removeprefix(FOLLOWUP_MODAL_PREFIX))
+    text = modal_value(interaction, REASON_FIELD)
+    gc = GuildContext.from_interaction(interaction)  # type: ignore[arg-type]
+
+    entry = journal.add_follow_up(
+        int(interaction.guild_id),
+        entry_id,
+        author_id=int(interaction.member.id),
+        author_name=interaction.member.display_name,
+        text=text,
+    )
+    if entry is None:
+        await interaction.edit_initial_response(
+            content=f"*tilts head* Entry `#{entry_id}` slipped away on me! 🐉"
+        )
+        return
+
+    await interaction.edit_initial_response(
+        content=f"💬 Added your follow-up to `#{entry_id}` 🐉"
+    )
+    await gc.log(
+        f"💬 **{interaction.member.display_name}** added a follow-up to "
+        f"`#{entry_id}` (**{entry.user_name}**) 🐾"
     )
 
 
