@@ -28,6 +28,8 @@ from dragonpaw_bot.plugins.birthdays import MODAL_HANDLERS as birthday_modal_han
 from dragonpaw_bot.plugins.birthdays import config as birthday_config
 from dragonpaw_bot.plugins.channel_cleanup import config as cleanup_config
 from dragonpaw_bot.plugins.intros import config as intros_config
+from dragonpaw_bot.plugins.journal import MODAL_HANDLERS as journal_modal_handlers
+from dragonpaw_bot.plugins.journal import config as journal_config
 from dragonpaw_bot.plugins.media_channels import config as media_config
 from dragonpaw_bot.plugins.role_menus import INTERACTION_HANDLERS as role_menu_handlers
 from dragonpaw_bot.plugins.role_menus import config as roles_config
@@ -62,6 +64,7 @@ _INTERACTION_ROUTES: list[tuple[str, InteractionHandler, str]] = sorted(
 _MODAL_ROUTES: list[tuple[str, ModalHandler, str]] = sorted(
     [
         *((p, h, "birthdays") for p, h in birthday_modal_handlers.items()),
+        *((p, h, "journal") for p, h in journal_modal_handlers.items()),
         *((p, h, "tickets") for p, h in tickets_modal_handlers.items()),
         *((p, h, "validation") for p, h in validation_modal_handlers.items()),
     ],
@@ -367,6 +370,7 @@ _birthday_sub = _config_group.subgroup("birthday", "Birthday tracking settings")
 _roles_sub = _config_group.subgroup("roles", "Role menu settings")
 _tickets_sub = _config_group.subgroup("tickets", "Help ticket settings")
 _validation_sub = _config_group.subgroup("validation", "Member validation settings")
+_journal_sub = _config_group.subgroup("journal", "Member journal settings")
 _buttons_sub = _config_group.subgroup("buttons", "Feature button channel settings")
 
 
@@ -478,6 +482,7 @@ birthday_config.register(_birthday_sub)
 roles_config.register(_roles_sub)
 tickets_config.register(_tickets_sub)
 validation_config.register(_validation_sub)
+journal_config.register(_journal_sub)
 activity_config.register(_activity_sub)
 buttons.register(_buttons_sub)
 loader.command(_config_group)

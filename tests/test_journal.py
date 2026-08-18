@@ -1,8 +1,10 @@
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import pytest
 
 from dragonpaw_bot import journal
+from dragonpaw_bot.plugins.journal import commands as journal_commands
 
 
 @pytest.fixture
@@ -114,3 +116,37 @@ def test_created_at_is_timezone_aware(store):
     entry = _record()
     assert entry.created_at.tzinfo is not None
     assert entry.created_at <= datetime.now(UTC)
+
+
+def test_staff_role_persists(store):
+    st = journal.load(1)
+    st.staff_role_id = 555
+    journal.save(st)
+    store.cache.clear()
+    assert journal.load(1).staff_role_id == 555
+
+
+def _ctx(role_ids=()):
+    ctx = MagicMock()
+    ctx.member.role_ids = list(role_ids)
+    return ctx
+
+
+def test_staff_gate_blocks_when_no_role_configured():
+    blocked = journal_commands.staff_blocked(_ctx([555]), None)
+    assert blocked is not None
+    assert "config journal set" in blocked
+
+
+def test_staff_gate_blocks_a_non_staff_member():
+    assert journal_commands.staff_blocked(_ctx([111]), 555) is not None
+
+
+def test_staff_gate_blocks_when_there_is_no_member():
+    ctx = MagicMock()
+    ctx.member = None
+    assert journal_commands.staff_blocked(ctx, 555) is not None
+
+
+def test_staff_gate_allows_a_staff_member():
+    assert journal_commands.staff_blocked(_ctx([111, 555]), 555) is None
