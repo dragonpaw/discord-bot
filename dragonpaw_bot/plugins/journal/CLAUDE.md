@@ -63,6 +63,9 @@ events. No plugin reads this flag and nothing is blocked programmatically.
 | Log channel set, Discord errors | Recorded | Recorded |
 | Log channel set, normal | Recorded | Recorded |
 
+(`name_change` is the exception — it never routes through `gc.log()`, so it is
+gated on `staff_role_id` instead. See **Name changes** below.)
+
 An unconfigured log channel is the guild's opt-out signal, so `gc.log()` writes
 nothing. A transient `HTTPError` is *not* that signal, so the entry is written
 before the send is attempted. Staff-authored entries bypass `gc.log()` entirely
@@ -74,11 +77,14 @@ All staff-gated on `staff_role_id`, all responses ephemeral. Without a staff
 role configured the plugin refuses and points at `/config journal set` rather
 than falling open.
 
-- **`/journal view <user>`** — Full timeline, newest first, follow-ups nested.
-  Adds a field when the member is currently ineligible. Truncates with an
-  explicit notice rather than exceeding Discord's 4096-character description.
-- **`/journal add <user> <kind>`** — Modal for the reason. Kind is one of the
-  four authored kinds; defaults to `warning`.
+- **`/journal view <user>`** — Full timeline, newest first. Each entry shows
+  the cited message (if any) as a blockquote, then its follow-ups nested
+  beneath. Adds a field when the member is currently ineligible. Truncates with
+  an explicit notice rather than exceeding Discord's 4096-character
+  description — including truncating a single oversized entry, since bailing on
+  the newest one would render a timeline of nothing but the notice.
+- **`/journal add <user> [kind]`** — Modal for the reason. Kind is one of the
+  four authored kinds and defaults to `warning`.
 - **`/journal followup <id>`** — Modal; appends a follow-up. Refuses on
   observed entries, which carry no `detail` to attach to.
 - **`/journal ineligible-list`** — Everyone currently ineligible, with reason
@@ -134,6 +140,12 @@ and role changes — `display_name_change()` is the delta filter that keeps ever
 role assignment out of the journal. These entries are written straight to the
 store and **never posted to the log channel**; a few hundred renames a year
 would drown it.
+
+Because they bypass `gc.log()`, the log channel cannot be their opt-in signal.
+They are gated on `staff_role_id` instead: a guild that has never run
+`/config journal set` has nobody who could read them, and append-only means
+nobody could delete them either. This is the one observed kind whose gate is
+the plugin's own config rather than the log channel.
 
 ### No button channel card
 

@@ -796,20 +796,14 @@ class BirthdayRemoveFor(
             target=self.user.display_name,
         )
         actor = actor_name(ctx)
-        msg = (
-            f"🎂 **{actor}** removed birthday entry for **{self.user.display_name}** 🐾"
+        await _log_birthday_event(
+            gc,
+            f"🎂 **{actor}** removed birthday entry for **{self.user.display_name}** 🐾",
+            kind="birthday_removed",
+            # The subject is the target, not the caller — and they may have left.
+            member=gc.bot.cache.get_member(ctx.guild_id, self.user.id),
+            summary=f"Birthday entry removed by {actor}",
         )
-        # The subject is the target, not the caller — and they may have left.
-        target = gc.bot.cache.get_member(ctx.guild_id, self.user.id)
-        if target:
-            await gc.log(
-                msg,
-                journal_kind="birthday_removed",
-                journal_user=target,
-                journal_summary=f"Birthday entry removed by {actor}",
-            )
-        else:
-            await gc.log(msg)
 
 
 class BirthdayList(

@@ -27,11 +27,6 @@ EntryKind = Literal[
     "name_change",
 ]
 
-#: Kinds a staff member files by hand; these are the only ones carrying detail.
-AUTHORED_KINDS: frozenset[str] = frozenset(
-    {"note", "warning", "ineligible", "eligible"}
-)
-
 #: An embed has one colour, so kinds are distinguished by leading emoji instead.
 KIND_EMOJI: dict[str, str] = {
     "note": "📝",

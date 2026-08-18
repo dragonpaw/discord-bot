@@ -309,3 +309,110 @@ def test_modal_responding_commands_are_excluded_from_auto_defer():
     modal_commands = {"journal add", "journal followup", "Log warning"}
     assert modal_commands <= qualified, "command names drifted from the exclusion list"
     assert modal_commands <= bot_module._AUTO_DEFER_EXCLUSIONS
+
+
+def test_modal_title_fits_discord_cap():
+    long_name = "x" * 32
+    title = journal_commands.modal_title("Journal entry", long_name)
+    assert len(title) <= journal_commands.MODAL_TITLE_LIMIT
+    assert title.endswith("…")
+
+
+def test_modal_title_left_alone_when_short():
+    assert journal_commands.modal_title("Warning", "Vee") == "Warning — Vee"
+
+
+def test_evidence_renders_as_blockquote(store):
+    detail = journal.WarningDetail(
+        reason="was rude",
+        issuer_id=9,
+        issuer_name="Staffy",
+        evidence_text="the bad message",
+    )
+    entry = _record(kind="warning", detail=detail)
+    lines = journal_commands.render_entry(entry).splitlines()
+    assert lines[1] == "> the bad message"
+
+
+def test_evidence_collapses_newlines_into_one_quote_line():
+    # Every line would need its own '>'; flattening avoids a broken quote block.
+    out = journal_commands.render_evidence("line one\nline two")
+    assert out == "> line one line two"
+    assert "\n" not in out
+
+
+def test_evidence_is_truncated():
+    out = journal_commands.render_evidence("x" * 900)
+    assert len(out) <= journal_commands.EVIDENCE_PREVIEW_LIMIT + 2
+    assert out.endswith("…")
+
+
+def test_evidence_precedes_follow_ups(store):
+    detail = journal.WarningDetail(
+        reason="was rude", issuer_id=9, issuer_name="Staffy", evidence_text="cited text"
+    )
+    created = _record(kind="warning", detail=detail)
+    journal.add_follow_up(
+        1, created.id, author_id=9, author_name="Staffy", text="resolved"
+    )
+    entry = journal.entry_by_id(1, created.id)
+    assert entry is not None
+    lines = journal_commands.render_entry(entry).splitlines()
+    assert lines[1].startswith(">")
+    assert "↳" in lines[2]
+
+
+def test_oversized_newest_entry_still_shows_something():
+    """Bailing on the first entry would render only the omission notice."""
+    entries = [
+        journal.JournalEntry(
+            id=1,
+            user_id=7,
+            user_name="Vee",
+            kind="note",
+            created_at=datetime.now(UTC),
+            summary="y" * 6000,
+        )
+    ]
+    text = journal_commands.render_timeline(entries)
+    assert len(text) <= 4096
+    assert "yyyy" in text, "expected a truncated entry, not just the notice"
+
+
+def _member_update_event(guild_id, old_name, new_name):
+    event = MagicMock()
+    event.guild_id = guild_id
+    event.old_member = _NamedMember(old_name)
+    event.member = MagicMock()
+    event.member.id = 7
+    event.member.display_name = new_name
+    guild = MagicMock()
+    guild.name = "Guild"  # MagicMock(name=...) sets the repr, not .name
+    event.app.cache.get_guild.return_value = guild
+    return event
+
+
+async def test_name_change_skipped_when_journal_unconfigured(store):
+    """No staff role means nobody could ever read the entry."""
+    await journal_listeners.on_member_update(_member_update_event(1, "Old", "New"))
+    assert journal.load(1).entries == []
+
+
+async def test_name_change_recorded_when_configured(store):
+    st = journal.load(1)
+    st.staff_role_id = 555
+    journal.save(st)
+
+    await journal_listeners.on_member_update(_member_update_event(1, "Old", "New"))
+    entries = journal.entries_for(1, 7)
+    assert [e.kind for e in entries] == ["name_change"]
+    assert "Old" in entries[0].summary and "New" in entries[0].summary
+
+
+async def test_name_change_ignores_non_rename_updates(store):
+    st = journal.load(1)
+    st.staff_role_id = 555
+    journal.save(st)
+
+    await journal_listeners.on_member_update(_member_update_event(1, "Same", "Same"))
+    assert journal.load(1).entries == []

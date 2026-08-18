@@ -5,7 +5,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot import journal
-from dragonpaw_bot.context import GuildContext
+from dragonpaw_bot.context import GuildContext, actor_name
 
 logger = structlog.get_logger(__name__)
 
@@ -49,24 +49,46 @@ _AUTHORED_CHOICES = [
 _DESCRIPTION_LIMIT = 4096
 _TRUNCATION_NOTICE = "\n*… older entries omitted.*"
 
+#: How much of a cited message the timeline shows. The jump link has the rest.
+EVIDENCE_PREVIEW_LIMIT = 300
+
+#: Below this, a partial entry is noise rather than context.
+_MIN_PARTIAL_BLOCK = 80
+
+#: Discord's modal title cap.
+MODAL_TITLE_LIMIT = 45
+
+
+def render_evidence(text: str) -> str:
+    """The cited message as a blockquote, so it can't be read as staff commentary.
+
+    Every line needs its own '>' or the quote block ends at the first newline.
+    """
+    flat = " ".join(text.split())
+    if len(flat) > EVIDENCE_PREVIEW_LIMIT:
+        flat = flat[: EVIDENCE_PREVIEW_LIMIT - 1] + "…"
+    return f"> {flat}"
+
 
 def render_entry(entry: journal.JournalEntry) -> str:
     """One entry as display text, with its follow-ups nested beneath it."""
     emoji = journal.KIND_EMOJI.get(entry.kind, "•")
     date = entry.created_at.strftime("%Y-%m-%d")
     line = f"{emoji} `#{entry.id}` **{date}** — {entry.summary}"
+    if entry.detail is None:
+        return line
 
-    if entry.detail:
-        line += f" *(by {entry.detail.issuer_name})*"
-        if entry.detail.evidence_url:
-            line += f" · [context]({entry.detail.evidence_url})"
+    line += f" *(by {entry.detail.issuer_name})*"
+    if entry.detail.evidence_url:
+        line += f" · [context]({entry.detail.evidence_url})"
 
     lines = [line]
-    if entry.detail:
-        lines.extend(
-            f"　↳ *{f.created_at.strftime('%Y-%m-%d')} {f.author_name}:* {f.text}"
-            for f in entry.detail.follow_ups
-        )
+    if entry.detail.evidence_text:
+        lines.append(render_evidence(entry.detail.evidence_text))
+    lines.extend(
+        f"　↳ *{f.created_at.strftime('%Y-%m-%d')} {f.author_name}:* {f.text}"
+        for f in entry.detail.follow_ups
+    )
     return "\n".join(lines)
 
 
@@ -75,11 +97,17 @@ def render_timeline(entries: list[journal.JournalEntry]) -> str:
     if not entries:
         return "*wags tail* Nothing in my journal for them at all! 🐉"
 
+    budget = _DESCRIPTION_LIMIT - len(_TRUNCATION_NOTICE)
     rendered: list[str] = []
     length = 0
     for entry in entries:
         block = render_entry(entry)
-        if length + len(block) + 1 > _DESCRIPTION_LIMIT - len(_TRUNCATION_NOTICE):
+        if length + len(block) + 1 > budget:
+            # Truncate rather than bail: bailing on the *first* entry would
+            # render a timeline consisting only of the omission notice.
+            room = budget - length - 1
+            if room > _MIN_PARTIAL_BLOCK:
+                rendered.append(block[: room - 1] + "…")
             return "\n".join(rendered) + _TRUNCATION_NOTICE
         rendered.append(block)
         length += len(block) + 1
@@ -102,7 +130,7 @@ class JournalView(
         st = journal.load(guild_id)
 
         if refusal := staff_blocked(ctx, st.staff_role_id):
-            logger.info("Journal view denied", actor=ctx.user.username)
+            logger.info("Journal view denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
@@ -140,7 +168,7 @@ class JournalIneligibleList(
         st = journal.load(guild_id)
 
         if refusal := staff_blocked(ctx, st.staff_role_id):
-            logger.info("Journal ineligible-list denied", actor=ctx.user.username)
+            logger.info("Journal ineligible-list denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
@@ -166,6 +194,22 @@ class JournalIneligibleList(
             ),
             flags=hikari.MessageFlag.EPHEMERAL,
         )
+
+
+def modal_title(prefix: str, name: object) -> str:
+    """A modal title that fits Discord's 45-char cap.
+
+    Display names go to 32 characters, so an untruncated title overflows and
+    Discord rejects the modal with a 400 — which surfaces to the staff member
+    as a bare "This interaction failed", with no entry filed.
+
+    ``name`` is interpolated rather than typed as ``str`` because hikari types
+    ``display_name`` as possibly undefined.
+    """
+    title = f"{prefix} — {name}"
+    if len(title) <= MODAL_TITLE_LIMIT:
+        return title
+    return title[: MODAL_TITLE_LIMIT - 1] + "…"
 
 
 def summarize(reason: str) -> str:
@@ -204,7 +248,9 @@ class JournalAdd(
     description="File a note, warning, or eligibility change for a member.",
 ):
     user = lightbulb.user("user", "The member this is about")
-    kind = lightbulb.string("kind", "What kind of entry", choices=_AUTHORED_CHOICES)
+    kind = lightbulb.string(
+        "kind", "What kind of entry", choices=_AUTHORED_CHOICES, default="warning"
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
@@ -213,12 +259,12 @@ class JournalAdd(
         st = journal.load(int(ctx.guild_id))
 
         if refusal := staff_blocked(ctx, st.staff_role_id):
-            logger.info("Journal add denied", actor=ctx.user.username)
+            logger.info("Journal add denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
         await ctx.respond_with_modal(
-            title=f"Journal entry — {self.user.display_name}",
+            title=modal_title("Journal entry", self.user.display_name),
             custom_id=f"{ADD_MODAL_PREFIX}{int(self.user.id)}:{self.kind}",
             components=reason_modal_rows("What happened?"),
         )
@@ -282,7 +328,7 @@ class JournalFollowup(
         st = journal.load(int(ctx.guild_id))
 
         if refusal := staff_blocked(ctx, st.staff_role_id):
-            logger.info("Journal followup denied", actor=ctx.user.username)
+            logger.info("Journal followup denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
@@ -355,21 +401,13 @@ class LogWarningMessageCommand(
         st = journal.load(int(ctx.guild_id))
 
         if refusal := staff_blocked(ctx, st.staff_role_id):
-            logger.info("Journal message-command denied", actor=ctx.user.username)
+            logger.info("Journal message-command denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return
 
         message = self.target
 
-        reason_row = hikari.impl.ModalActionRowBuilder()
-        reason_row.add_text_input(
-            REASON_FIELD,
-            "What's the problem?",
-            style=hikari.TextInputStyle.PARAGRAPH,
-            required=True,
-            min_length=1,
-            max_length=2000,
-        )
+        rows = reason_modal_rows("What's the problem?")
         # Pre-filled rather than re-fetched on submit: capturing the text before
         # it can be deleted is the whole point of the context menu.
         evidence_row = hikari.impl.ModalActionRowBuilder()
@@ -381,14 +419,15 @@ class LogWarningMessageCommand(
             max_length=_EVIDENCE_LIMIT,
             value=(message.content or "")[:_EVIDENCE_LIMIT],
         )
+        rows.append(evidence_row)
 
         await ctx.respond_with_modal(
-            title=f"Warning — {message.author.username}",
+            title=modal_title("Warning", message.author.username),
             custom_id=(
                 f"{WARN_MSG_MODAL_PREFIX}{int(message.author.id)}:"
                 f"{int(message.channel_id)}:{int(message.id)}"
             ),
-            components=[reason_row, evidence_row],
+            components=rows,
         )
 
 

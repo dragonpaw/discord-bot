@@ -16,7 +16,9 @@ logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
 
 
-def display_name_change(old, new) -> tuple[str, str] | None:
+def display_name_change(
+    old: hikari.Member | None, new: hikari.Member | None
+) -> tuple[str, str] | None:
     """The (before, after) pair, or None when the display name didn't move.
 
     MemberUpdateEvent also fires on avatar and role changes, so without this
@@ -40,6 +42,12 @@ async def on_member_update(event: hikari.MemberUpdateEvent) -> None:
     if change is None:
         return
     before, after = change
+
+    # These bypass gc.log(), so the log channel can't be their opt-in signal.
+    # A guild with no staff role has nobody who could ever read them.
+    st = journal.load(int(event.guild_id))
+    if st.staff_role_id is None:
+        return
 
     bot: DragonpawBot = event.app  # type: ignore[assignment]
     guild = bot.cache.get_guild(event.guild_id)
