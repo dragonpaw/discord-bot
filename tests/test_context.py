@@ -3,7 +3,9 @@
 from unittest.mock import AsyncMock, Mock
 
 import hikari
+import pytest
 
+from dragonpaw_bot import journal
 from dragonpaw_bot.context import (
     PRIVATE_CHANNEL_USER_PERMS,
     GuildContext,
@@ -344,3 +346,90 @@ def test_actor_name_falls_back_to_user():
     ctx.member = None
     ctx.user.display_name = "Global Name"
     assert actor_name(ctx) == "Global Name"
+
+
+# ---------------------------------------------------------------------------- #
+#                        GuildContext.log journal flag                          #
+# ---------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def journal_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(journal.store, "state_dir", tmp_path)
+    journal.store.cache.clear()
+    return journal.store
+
+
+def _journal_gc(*, log_channel_id: hikari.Snowflake | None) -> GuildContext:
+    bot = Mock()
+    bot.rest.create_message = AsyncMock()
+    return GuildContext(
+        bot=bot,
+        guild_id=GUILD_ID,
+        name="Test Guild",
+        log_channel_id=log_channel_id,
+    )
+
+
+def _subject(user_id: int = 7, name: str = "Vee") -> Mock:
+    member = Mock()
+    member.id = user_id
+    member.display_name = name
+    return member
+
+
+async def test_log_records_journal_entry(journal_store):
+    gc = _journal_gc(log_channel_id=hikari.Snowflake(99))
+    await gc.log(
+        "🎫 opened a ticket", journal_kind="ticket_opened", journal_user=_subject()
+    )
+    entries = journal.entries_for(int(GUILD_ID), 7)
+    assert [e.kind for e in entries] == ["ticket_opened"]
+    assert entries[0].summary == "🎫 opened a ticket"
+    assert entries[0].user_name == "Vee"
+
+
+async def test_journal_summary_overrides_message(journal_store):
+    gc = _journal_gc(log_channel_id=hikari.Snowflake(99))
+    await gc.log(
+        "🎫 *happy flap* long chatty staff message",
+        journal_kind="ticket_opened",
+        journal_user=_subject(),
+        journal_summary="Opened a ticket",
+    )
+    assert journal.entries_for(int(GUILD_ID), 7)[0].summary == "Opened a ticket"
+
+
+async def test_no_log_channel_means_no_journal_entry(journal_store):
+    gc = _journal_gc(log_channel_id=None)
+    await gc.log("🎫 opened", journal_kind="ticket_opened", journal_user=_subject())
+    assert journal.entries_for(int(GUILD_ID), 7) == []
+
+
+async def test_http_error_still_records_journal_entry(journal_store):
+    gc = _journal_gc(log_channel_id=hikari.Snowflake(99))
+    gc.bot.rest.create_message = AsyncMock(
+        side_effect=hikari.HTTPResponseError(
+            url="", headers={}, raw_body=b"", status=500, message="oops"
+        )
+    )
+    await gc.log("🎫 opened", journal_kind="ticket_opened", journal_user=_subject())
+    assert len(journal.entries_for(int(GUILD_ID), 7)) == 1
+
+
+async def test_plain_log_records_nothing(journal_store):
+    gc = _journal_gc(log_channel_id=hikari.Snowflake(99))
+    await gc.log("⚙️ just a config change")
+    assert journal.load(int(GUILD_ID)).entries == []
+
+
+async def test_kind_without_user_raises(journal_store):
+    gc = _journal_gc(log_channel_id=hikari.Snowflake(99))
+    with pytest.raises(ValueError):
+        await gc.log("x", journal_kind="ticket_opened")
+
+
+async def test_user_without_kind_raises(journal_store):
+    gc = _journal_gc(log_channel_id=hikari.Snowflake(99))
+    with pytest.raises(ValueError):
+        await gc.log("x", journal_user=_subject())

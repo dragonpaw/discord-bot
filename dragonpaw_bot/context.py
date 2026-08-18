@@ -8,6 +8,8 @@ import hikari
 import lightbulb
 import structlog
 
+from dragonpaw_bot import journal
+
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
     from dragonpaw_bot.structs import GuildState
@@ -87,11 +89,37 @@ class GuildContext:
 
     # --- Convenience methods ---
 
-    async def log(self, message: str) -> None:
-        """Send to guild log channel. No-op if unconfigured."""
+    async def log(
+        self,
+        message: str,
+        *,
+        journal_kind: journal.EntryKind | None = None,
+        journal_user: hikari.Member | None = None,
+        journal_summary: str | None = None,
+    ) -> None:
+        """Send to guild log channel, optionally journaling the event.
+
+        An unconfigured log channel means the guild has opted out of
+        record-keeping, so nothing is journaled either. A transient send
+        failure is not that signal — the entry is written regardless.
+        """
+        if (journal_kind is None) != (journal_user is None):
+            raise ValueError("journal_kind and journal_user must be given together")
+
         if not self.log_channel_id:
             self.logger.debug("No log channel configured, skipping log message")
             return
+
+        if journal_kind is not None and journal_user is not None:
+            journal.record(
+                int(self.guild_id),
+                self.name,
+                user_id=int(journal_user.id),
+                user_name=journal_user.display_name,
+                kind=journal_kind,
+                summary=journal_summary or message,
+            )
+
         try:
             await self.bot.rest.create_message(
                 channel=self.log_channel_id, content=message
