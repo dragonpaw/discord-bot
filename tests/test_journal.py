@@ -416,3 +416,39 @@ async def test_name_change_ignores_non_rename_updates(store):
 
     await journal_listeners.on_member_update(_member_update_event(1, "Same", "Same"))
     assert journal.load(1).entries == []
+
+
+def test_escape_markdown_neutralises_formatting():
+    assert journal.escape_markdown("**bold**") == "\\*\\*bold\\*\\*"
+    assert journal.escape_markdown("a_b~c`d|e") == "a\\_b\\~c\\`d\\|e"
+
+
+def test_escape_markdown_leaves_plain_text_alone():
+    assert journal.escape_markdown("just a normal message") == "just a normal message"
+
+
+def test_evidence_cannot_forge_attribution(store):
+    """A member's own message must not be able to fake a staff byline."""
+    detail = journal.WarningDetail(
+        reason="r",
+        issuer_id=9,
+        issuer_name="Staffy",
+        evidence_text="nice *(by Admin)* nonsense **bold**",
+    )
+    entry = _record(kind="warning", detail=detail)
+    quote = journal_commands.render_entry(entry).splitlines()[1]
+    assert "**bold**" not in quote
+    assert "\\*\\*bold\\*\\*" in quote
+
+
+async def test_name_change_summary_escapes_nickname(store):
+    st = journal.load(1)
+    st.staff_role_id = 555
+    journal.save(st)
+
+    await journal_listeners.on_member_update(
+        _member_update_event(1, "Old", "Evil** *(by Admin)*")
+    )
+    summary = journal.entries_for(1, 7)[0].summary
+    assert "Evil** *(by Admin)*" not in summary
+    assert "\\*\\*" in summary

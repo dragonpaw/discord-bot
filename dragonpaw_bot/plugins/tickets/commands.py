@@ -8,6 +8,7 @@ import hikari
 import lightbulb
 import structlog
 
+from dragonpaw_bot import journal
 from dragonpaw_bot.context import (
     PRIVATE_CHANNEL_USER_PERMS,
     GuildContext,
@@ -267,7 +268,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         f'They need help with: "{topic}" 🐾',
         journal_kind="ticket_opened",
         journal_user=interaction.member,
-        journal_summary=f'Opened a ticket: "{topic}"',
+        journal_summary=f'Opened a ticket: "{journal.escape_markdown(topic)}"',
     )
 
 

@@ -64,7 +64,7 @@ def render_evidence(text: str) -> str:
 
     Every line needs its own '>' or the quote block ends at the first newline.
     """
-    flat = " ".join(text.split())
+    flat = journal.escape_markdown(" ".join(text.split()))
     if len(flat) > EVIDENCE_PREVIEW_LIMIT:
         flat = flat[: EVIDENCE_PREVIEW_LIMIT - 1] + "…"
     return f"> {flat}"
@@ -78,7 +78,7 @@ def render_entry(entry: journal.JournalEntry) -> str:
     if entry.detail is None:
         return line
 
-    line += f" *(by {entry.detail.issuer_name})*"
+    line += f" *(by {journal.escape_markdown(entry.detail.issuer_name)})*"
     if entry.detail.evidence_url:
         line += f" · [context]({entry.detail.evidence_url})"
 

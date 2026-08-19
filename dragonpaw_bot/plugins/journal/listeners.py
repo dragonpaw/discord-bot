@@ -57,5 +57,8 @@ async def on_member_update(event: hikari.MemberUpdateEvent) -> None:
         user_id=int(event.member.id),
         user_name=after,
         kind="name_change",
-        summary=f"Changed name from **{before}** to **{after}**",
+        summary=(
+            f"Changed name from **{journal.escape_markdown(before)}** "
+            f"to **{journal.escape_markdown(after)}**"
+        ),
     )

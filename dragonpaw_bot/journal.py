@@ -40,6 +40,22 @@ KIND_EMOJI: dict[str, str] = {
 }
 
 
+#: Discord formatting characters, neutralised in text the subject controls.
+_MARKDOWN_ESCAPE = str.maketrans({c: f"\\{c}" for c in "\\*_~`|"})
+
+
+def escape_markdown(text: str) -> str:
+    """Neutralise Discord formatting in text the journalled member controls.
+
+    Members choose their own nicknames and write their own messages. Unescaped,
+    a nickname like ``Bob** *(by SomeAdmin)*`` forges attribution in a ledger
+    where who-filed-what is the entire point. Applied at the point untrusted
+    text enters a summary, not to the composed summary — the bot's own emphasis
+    around it is deliberate.
+    """
+    return text.translate(_MARKDOWN_ESCAPE)
+
+
 class FollowUp(pydantic.BaseModel):
     author_id: int
     author_name: str
