@@ -102,6 +102,19 @@ Rendering is wipe-and-repost (same as role menus), so only `GuildState.button_ch
 
 - Push directly to `main` — no feature branches.
 
+## `todo/`
+
+One Markdown file per idea, potential feature, or deferred cleanup, named
+`todo/<kebab-case-slug>.md`. Prose, not checklists: a `#` title, then what the
+thing is, why it matters, what it would take, and — where it applies — why it
+was *not* done yet. Reference concrete files and dates so the entry still makes
+sense months later.
+
+These are for work not yet started. Finished specs and plans are deleted, not
+archived here; the code, its commit message, and the plugin's `CLAUDE.md` are
+the record of what shipped. Delete a todo file when the work lands or when the
+idea is decided against.
+
 ## Key Conventions
 
 - Uses `uvloop` as the async event loop
