@@ -14,3 +14,5 @@
 - [Cache-first guild lookup](feedback_cache_first_guild_lookup.md) — Event listeners must use `cache.get_guild(id) or await rest.fetch_guild(id)`, never bare REST
 - [Per-guild cron isolation](feedback_cron_per_guild_isolation.md) — Wrap each guild's cron body in try/except so one failure doesn't abort all guilds
 - [State cleanup before side effects](feedback_state_before_side_effects.md) — Save state before outbound messages/API calls; wrap notifications in try/except
+- [Explicit git add paths](feedback_explicit_git_add.md) — Never `git add <dir>` or `-A`; unrelated WIP usually sits in the tree
+- [Finished specs/plans are deleted](feedback_delete_finished_specs.md) — Write them, never commit them, delete once shipped; `todo/` is the opposite
