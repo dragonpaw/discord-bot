@@ -728,7 +728,7 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
             await bot.rest.create_message(
                 channel=general_channel_id,
                 content=(
-                    f"🎉 *does a happy little dragon wiggle* Everyone say hello to <@{user_id}>! "
+                    f"@everyone 🎉 *does a happy little dragon wiggle* Say hello to <@{user_id}>! "
                     f"They're officially part of the hoard now~ 🐉\n\n"
                     f"<@{user_id}>, welcome welcome welcome!! A few things to get you settled in:\n"
                     f"• Peek at {about_ref} to learn more about us 📖\n"
@@ -739,6 +739,8 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
                     f"*nom nom* Images and links are yummy, but please pop your comments over in {chat_ref}~ 💜\n\n"
                     f"Also — we'd love to know: **how did you find out about OGL?** Drop it in the chat! 🐾"
                 ),
+                mentions_everyone=True,
+                user_mentions=True,
             )
         except hikari.HTTPError:
             gc.logger.warning(

@@ -22,9 +22,9 @@ a private verify channel where they submit age-verification photos for staff rev
    submit: bot sets the member's server nickname, assigns the member role, **assigns the
    intros plugin's `missing_role`** (if that plugin has both an intros channel and a
    missing-intro role configured — keeps the new member intro-gated until they post),
-   posts an announcement in the general channel, closes the validate channel, and removes
-   the member from state. The missing-intro role clears automatically once they post (see
-   `plugins/intros/CLAUDE.md`).
+   posts an announcement in the general channel (pings `@everyone` and the new member),
+   closes the validate channel, and removes the member from state. The missing-intro role
+   clears automatically once they post (see `plugins/intros/CLAUDE.md`).
 
 5. **Reminders / timeout** — hourly cron checks members at `AWAITING_RULES` and `AWAITING_PHOTOS`.
    Every 16 hours a reminder is posted: lobby channel for `AWAITING_RULES`, validate channel for
