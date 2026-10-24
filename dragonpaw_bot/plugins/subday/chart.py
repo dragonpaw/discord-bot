@@ -5,11 +5,13 @@ import math
 import random
 import zlib
 from pathlib import Path
+from typing import NamedTuple
 
 import hikari
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from dragonpaw_bot.plugins.subday.constants import MILESTONE_WEEKS, TOTAL_WEEKS
+from dragonpaw_bot.plugins.subday.models import StarPalette
 
 # ---------------------------------------------------------------------------- #
 #                                   Constants                                   #
@@ -57,7 +59,6 @@ EMPTY_STAR_COLOR = (225, 220, 212)
 GOLD = (255, 215, 0)
 GOLD_DARK = (200, 160, 0)
 GOLD_GLOW = (255, 230, 80, 90)
-HOT_PINK = (255, 20, 100)
 
 STICKER_COLORS = [
     (200, 60, 60),  # muted red
@@ -73,6 +74,91 @@ STICKER_COLORS = [
     (175, 70, 145),  # plum
     (85, 180, 130),  # seafoam
 ]
+
+
+def _stripes(*row_colors: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
+    """One colour per grid row, filling every column of that row."""
+    return tuple(color for color in row_colors for _ in range(COLS))
+
+
+_RED = (220, 30, 40)
+_ORANGE = (245, 135, 30)
+_YELLOW = (250, 210, 40)
+_GREEN = (40, 160, 70)
+_BLUE = (40, 90, 210)
+_INDIGO = (75, 50, 160)
+_VIOLET = (150, 60, 190)
+_TRANS_BLUE = (91, 206, 250)
+_TRANS_PINK = (245, 169, 184)
+# Silver rather than pure white: a white star reads as an empty, unearned one
+# against the cream background.
+_WHITE = (225, 225, 235)
+_BLACK = (25, 25, 30)
+_LEATHER_BLUE = (30, 60, 170)
+_PINKS = (
+    (0xDE, 0xA6, 0xC2),
+    (0xD2, 0x86, 0xAC),  # midpoint
+    (0xC7, 0x66, 0x96),
+    (0xB2, 0x63, 0x9A),  # midpoint
+    (0x9E, 0x61, 0x9E),
+    (0xAF, 0x7D, 0xAF),  # midpoint
+    (0xC1, 0x9A, 0xC1),
+)
+
+
+class Palette(NamedTuple):
+    # None keeps the per-username random shuffle. Otherwise laid over the
+    # 56-cell grid (prize cells included, so a design lines up with what's
+    # drawn) and repeated if shorter: 7 colours paint one per column.
+    label: str
+    stars: tuple[tuple[int, int, int], ...] | None
+    username: tuple[int, int, int]
+
+
+PALETTES: dict[StarPalette, Palette] = {
+    StarPalette.RANDOM: Palette(
+        label="🎲 Random sparkles", stars=None, username=(255, 20, 100)
+    ),
+    StarPalette.RAINBOW: Palette(
+        label="🌈 Rainbow",
+        stars=(_RED, _ORANGE, _YELLOW, _GREEN, _BLUE, _INDIGO, _VIOLET),
+        username=_VIOLET,
+    ),
+    StarPalette.PINK: Palette(label="🩷 Pink", stars=_PINKS, username=_PINKS[2]),
+    StarPalette.TRANS: Palette(
+        label="🏳️‍⚧️ Trans pride flag",
+        stars=_stripes(
+            _TRANS_BLUE,
+            _TRANS_BLUE,
+            _TRANS_PINK,
+            _WHITE,
+            _WHITE,
+            _TRANS_PINK,
+            _TRANS_BLUE,
+            _TRANS_BLUE,
+        ),
+        username=_TRANS_BLUE,
+    ),
+    # The real flag's nine stripes with the last dropped to fit eight rows;
+    # week 1's star is the red heart in the canton.
+    StarPalette.LEATHER: Palette(
+        label="🖤 Leather pride flag",
+        stars=(
+            _RED,
+            *_stripes(
+                _BLACK,
+                _LEATHER_BLUE,
+                _BLACK,
+                _LEATHER_BLUE,
+                _WHITE,
+                _LEATHER_BLUE,
+                _BLACK,
+                _LEATHER_BLUE,
+            )[1:],
+        ),
+        username=_RED,
+    ),
+}
 
 # Section background tints (progressively warmer)
 SECTION_TINTS: list[tuple[int, int, int, int] | None] = [
@@ -334,6 +420,7 @@ def render_star_chart(
     username: str,
     current_week: int,
     week_completed: bool,
+    palette: StarPalette,
 ) -> hikari.Bytes:
     """Generate a star chart image and return as a hikari attachment.
 
@@ -341,13 +428,21 @@ def render_star_chart(
         username: Display name for the chart title.
         current_week: The participant's current week (1-52, or 53 if graduated).
         week_completed: Whether the current week has been completed.
+        palette: Star colours; RANDOM keeps the per-username shuffle.
     """
     # zlib.crc32, not hash(): str hash is salted per process, which would
     # reshuffle everyone's star colors on every bot restart.
     rng = random.Random(zlib.crc32(username.encode()))
 
     # Pre-assign a random color and rotation to each week for consistency
+    # Drawn even when a palette replaces them, so the rotation and jitter
+    # that follow stay the same whichever palette is picked.
     week_colors = [rng.choice(STICKER_COLORS) for _ in range(TOTAL_WEEKS)]
+    colors = PALETTES[palette]
+    if stars := colors.stars:
+        week_colors = [
+            stars[_grid_cell(week) % len(stars)] for week in range(1, TOTAL_WEEKS + 1)
+        ]
     week_rotations = [rng.uniform(-0.20, 0.20) for _ in range(TOTAL_WEEKS)]
     week_jitter_x = [rng.uniform(-3, 3) for _ in range(TOTAL_WEEKS)]
     week_jitter_y = [rng.uniform(-1, 1) for _ in range(TOTAL_WEEKS)]
@@ -369,7 +464,7 @@ def render_star_chart(
         (PADDING + title_w + 12, PADDING - 12),
         username,
         font=username_font,
-        fill=HOT_PINK,
+        fill=colors.username,
     )
 
     # ---- Determine completion ----
@@ -424,6 +519,12 @@ def render_star_chart(
     img.save(buf, format="PNG")
     buf.seek(0)
     return hikari.Bytes(buf, "star_chart.png")
+
+
+def _grid_cell(week: int) -> int:
+    """Grid position of a week, counting each section's prize cell."""
+    section, offset = divmod(week - 1, WEEKS_PER_SECTION)
+    return section * CELLS_PER_SECTION + offset
 
 
 def _draw_week_cell(

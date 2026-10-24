@@ -24,7 +24,11 @@ from dragonpaw_bot.plugins.subday.constants import (
     TOTAL_WEEKS,
     next_milestone,
 )
-from dragonpaw_bot.plugins.subday.models import SubDayGuildConfig, SubDayParticipant
+from dragonpaw_bot.plugins.subday.models import (
+    StarPalette,
+    SubDayGuildConfig,
+    SubDayParticipant,
+)
 
 if TYPE_CHECKING:
     from dragonpaw_bot.bot import DragonpawBot
@@ -33,6 +37,11 @@ logger = structlog.get_logger(__name__)
 loader = lightbulb.Loader()
 
 subday_group = lightbulb.Group("subday", "Where I am Led — 52-week guided journal")
+
+_PALETTE_CHOICES = [
+    lightbulb.Choice(colors.label, palette.value)
+    for palette, colors in chart.PALETTES.items()
+]
 
 
 # ---------------------------------------------------------------------------- #
@@ -52,6 +61,7 @@ async def help_handler(ctx: lightbulb.Context) -> None:
         "`/subday status` — Check your progress (and your subs')",
         "`/subday resend` — Resend your current prompt to your DMs",
         "`/subday owner` — Set or clear your owner",
+        "`/subday palette` — Pick the colours of your stars",
     ]
     if gc.member:
         if gc.has_any_permission(cfg.enroll_role):
@@ -150,6 +160,7 @@ async def _dm_completion(
         dm = await target.user.fetch_dm_channel()
         embed = _regular_completion_embed(target, week)
         embed.set_image(chart_bytes)
+        embed.set_footer("🎨 Pick your star colours any time with /subday palette")
         await dm.send(embed=embed)
         logger.info(
             "Sent completion DM",
@@ -211,12 +222,13 @@ async def _try_post_achievement_embed(
         )
 
 
-async def _post_achievement(
+async def _post_achievement(  # noqa: PLR0913
     gc: GuildContext,
     completer: hikari.Member,
     target: hikari.Member,
     week: int,
     cfg: SubDayGuildConfig,
+    palette: StarPalette,
 ) -> None:
     """Post achievement embed and handle milestone/graduation rewards."""
     logger.debug(
@@ -247,6 +259,7 @@ async def _post_achievement(
         username=target.display_name,
         current_week=week,
         week_completed=True,
+        palette=palette,
     )
 
     await _dm_completion(target, week, chart_bytes, gc.name)
@@ -322,6 +335,7 @@ async def _post_achievement(
 def _do_signup(
     guild_id: hikari.Snowflake,
     user: hikari.User,
+    palette: StarPalette,
 ) -> str | None:
     """Register a user for SubDay. Returns None if already enrolled, or a
     response message. Caller must respond first, then call _do_signup_async().
@@ -340,6 +354,7 @@ def _do_signup(
     participant = SubDayParticipant(
         user_id=user_id,
         signup_date=datetime.datetime.now(tz=datetime.UTC),
+        palette=palette,
     )
     guild_state.participants[user_id] = participant
     state.save(guild_state)
@@ -379,6 +394,8 @@ async def _do_signup_async(
             f"📋 **Instructions:**\n{rules_text}\n\n"
             "Each Sunday you'll receive a new prompt right here in your DMs. "
             "Take your time — there are no deadlines! 💜\n\n"
+            "🎨 Every week you finish earns a star on your chart. Want them in "
+            "rainbow or pride-flag colours? Use `/subday palette` any time~\n\n"
             "Here's your first week's prompt below. Good luck! ✨"
         ),
         color=SOLARIZED_CYAN,
@@ -474,7 +491,7 @@ async def handle_signup_interaction(interaction: hikari.ComponentInteraction) ->
         )
         return
 
-    msg = _do_signup(guild_id, interaction.user)
+    msg = _do_signup(guild_id, interaction.user, StarPalette.RANDOM)
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
         content=msg
@@ -678,6 +695,7 @@ def _own_progress_embed(
             username=display_name,
             current_week=p.current_week,
             week_completed=p.week_completed,
+            palette=p.palette,
         )
         embed = hikari.Embed(
             title="Where I am Led — Graduated!",
@@ -723,6 +741,7 @@ def _own_progress_embed(
         username=display_name,
         current_week=p.current_week,
         week_completed=p.week_completed,
+        palette=p.palette,
     )
 
     status_text += _progress_footer(p)
@@ -1135,6 +1154,13 @@ class SubDaySignup(
     name="signup",
     description="Sign up for the Where I am Led program",
 ):
+    palette = lightbulb.string(
+        "palette",
+        "Colours for the stars on your chart (change later with /subday palette)",
+        choices=_PALETTE_CHOICES,
+        default=StarPalette.RANDOM.value,
+    )
+
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id and ctx.member
@@ -1146,10 +1172,11 @@ class SubDaySignup(
         if not await gc.check_permission(ctx, cfg.enroll_role, "signup"):
             return
 
-        msg = _do_signup(ctx.guild_id, ctx.user)
+        msg = _do_signup(ctx.guild_id, ctx.user, StarPalette(self.palette))
         if msg is None:
             await ctx.respond(
-                "You're already signed up, silly! 🐉 Use `/subday status` to check your progress~",
+                "You're already signed up, silly! 🐉 Use `/subday status` to check "
+                "your progress, or `/subday palette` to repaint your stars~",
                 flags=hikari.MessageFlag.EPHEMERAL,
             )
             return
@@ -1324,7 +1351,7 @@ class SubDayComplete(
 
         await ctx.respond(response, flags=hikari.MessageFlag.EPHEMERAL)
 
-        await _post_achievement(gc, ctx.member, target, week, cfg)
+        await _post_achievement(gc, ctx.member, target, week, cfg, participant.palette)
 
         # Log completion (milestones are already logged by _post_achievement,
         # so only send for regular completions/backfills)
@@ -1582,6 +1609,83 @@ class SubDayResend(
         )
 
 
+class SubDayPalette(
+    lightbulb.SlashCommand,
+    name="palette",
+    description="Pick the colours of the stars on your chart",
+):
+    palette = lightbulb.string(
+        "palette", "Colours for your stars", choices=_PALETTE_CHOICES
+    )
+
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        assert ctx.guild_id and ctx.member
+        guild_state = state.load(int(ctx.guild_id))
+        log = logger.bind(guild=guild_state.guild_name, user=ctx.member.display_name)
+        participant = guild_state.participants.get(int(ctx.user.id))
+
+        if participant is None:
+            await ctx.respond(
+                "🐉 You're not signed up for **Where I am Led** yet! "
+                "Use `/subday signup` to start your journey~ 🐾",
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
+            return
+
+        palette = StarPalette(self.palette)
+        changed = palette != participant.palette
+        if changed:
+            participant.palette = palette
+            state.save(guild_state)
+            log.info("Changed SubDay star palette", palette=palette.value)
+
+        chart_bytes = chart.render_star_chart(
+            username=ctx.member.display_name,
+            current_week=participant.current_week,
+            week_completed=participant.week_completed,
+            palette=participant.palette,
+        )
+        embed = hikari.Embed(
+            title="🎨 Fresh paint!",
+            description=(
+                f"*dips tail in paint* Your stars are now "
+                f"**{chart.PALETTES[palette].label}**! Here's how they look~ 🐉"
+            ),
+            color=SOLARIZED_VIOLET,
+        )
+        embed.set_image(chart_bytes)
+        await ctx.respond(embed=embed, flags=hikari.MessageFlag.EPHEMERAL)
+
+        last_completed = (
+            participant.current_week
+            if participant.week_completed
+            else participant.current_week - 1
+        )
+        channel_name = guild_state.config.achievements_channel
+        # Re-picking the same palette just shows the preview, so it can't be
+        # used to flood the achievements channel with identical cards.
+        if not changed or last_completed == 0 or channel_name is None:
+            return
+        channel = await utils.guild_channel_by_name(
+            GuildContext.from_ctx(ctx), channel_name
+        )
+        if channel is None:
+            log.warning(
+                "Achievements channel not found, skipping palette re-post",
+                channel=channel_name,
+            )
+            return
+        # Always the regular card, even on a milestone week: re-posting a
+        # milestone card would re-announce a prize that was already handed out.
+        await _try_post_achievement_embed(
+            channel,
+            _regular_completion_embed(ctx.member, last_completed),
+            chart_bytes,
+            channel_name,
+        )
+
+
 @subday_group.register
 class SubDayHelp(
     lightbulb.SlashCommand,
@@ -1601,4 +1705,5 @@ subday_group.register(SubDayComplete)
 subday_group.register(SubDayList)
 subday_group.register(SubDayRemove)
 subday_group.register(SubDayResend)
+subday_group.register(SubDayPalette)
 loader.command(subday_group)

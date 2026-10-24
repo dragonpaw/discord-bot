@@ -19,7 +19,8 @@ Notifications (completions, milestones, signups, removals, owner accept/deny, co
 - **status** — Shows the user's own progress: current week, completion status, next milestone, signup date. If the user is an owner, also shows compact status embeds (cyan) for each of their subs.
 - **resend** — Self-service. Resends the caller's own current-week prompt to their DMs (a short resend greeting + the prompt embed via `prompts.build_resend_dm_embeds`). No role gate; only acts if the caller is signed up. No-ops with a friendly message if not signed up or already graduated. Does not copy the owner or post to the staff log.
 - **owner [@user]** — Sets or clears the user's owner. See Owner Feature below.
-- **signup** — Requires `enroll_role`. Registers user, DMs week 1 prompt + rules, and posts a public praise embed (violet, pings the member) to `achievements_channel` (skipped when unconfigured). Handles DM failures gracefully.
+- **palette \<choice\>** — Self-service, signed-up participants only. Sets the star chart palette (see Star Chart Image) and replies ephemerally with a preview of their chart in the new colours. Then re-posts their latest completion card (the regular one, even for a milestone week, so prizes aren't re-announced) with the recoloured chart to `achievements_channel`. Skipped if the palette didn't actually change, if no week is completed yet or the channel is unconfigured or missing. The old post is left in place, since achievement message IDs aren't stored.
+- **signup [palette:\<choice\>]** — Requires `enroll_role`. Optional `palette` sets the star palette up front (default random). The Sign Up buttons always use random. Registers user, DMs week 1 prompt + rules, and posts a public praise embed (violet, pings the member) to `achievements_channel` (skipped when unconfigured). Handles DM failures gracefully.
 - **complete @user [week:\<n\>] [sent:\<bool\>]** — Requires `complete_role`. Marks the user's current week done. Cannot complete yourself. DMs a completion embed with star chart. Posts to `achievements_channel` if set. At milestones: assigns role, logs prize info. With optional `week` parameter: requires `backfill_role` (explicit week always = backfill), sets the participant to that week and marks it complete. Auto-enrolls the user if not signed up. With `sent:True` alongside `week`: after marking complete, advances the participant to the next week without DMing (the Sunday cron only sends a prompt at the moment it advances someone itself, so nothing is re-sent — use when the next prompt was already DM'd manually).
 - **list** — Requires `complete_role`. Shows all participants + progress with status icons.
 - **remove @user** — Requires `complete_role`. Removes a participant.
@@ -83,12 +84,14 @@ Controlled by `achievements_channel`. When `None` (default), channel posts are s
 
 Achievement embeds and `/subday status` include a Pillow-generated star chart PNG (`hikari.Bytes`) that mirrors the physical "Subday Journals" tracking card:
 
-- **Title bar**: "Subday Journals:" in DaxCondensed-Bold + username in hot pink Caveat handwriting font
+- **Title bar**: "Subday Journals:" in DaxCondensed-Bold + username in Caveat handwriting font, coloured by the palette
 - **Grid layout**: 7 columns × 8 rows, divided into 4 sections of 14 cells (13 weeks + 1 prize cell)
-- **Completed weeks**: Filled 5-point star in a random bright color with slight rotation/position jitter
+- **Completed weeks**: Filled 5-point star with slight rotation/position jitter, coloured by the participant's `palette` (`StarPalette` on `SubDayParticipant`, default `random`)
 - **Future weeks** (including the in-progress current week): Light gray outlined star
 - **Prize cells** (cell 14 per section): Gold star when milestone reached, empty outline otherwise
-- Colors and rotations are seeded by username (CRC32, stable across restarts) for consistency across renders
+- Colors and rotations are seeded by username (CRC32, stable across restarts) for consistency across renders. The random colours are drawn even when a palette overrides them, so changing palette never moves the stars.
+- **Palettes** (`PALETTES` in `chart.py`): each `Palette` has star colours and a username colour. Usernames: random → hot pink, rainbow → violet, trans → trans blue, leather → the heart's red, pink → the third pink (#C76696). Star colours are `None` for random, otherwise laid over the 56-cell grid by position, prize cells included, repeating if shorter. A 7-colour palette (`rainbow`, `pink`) gives one colour per column. `pink` is four chosen pinks with a blended midpoint between each pair. Flag designs (`trans`, `leather`) list all 56 cells; leather puts the red heart on week 1. "White" in flags is a pale silver so earned stars don't look like empty ones. To add a palette: add a `StarPalette` member, a `Palette` in `PALETTES`, with its label (the slash-command choices are built from `PALETTES`).
+- Participants learn about palettes from the welcome DM, `/subday help`, and a footer on every completion DM.
 - Fonts in the repo-root `fonts/` directory: DaxCondensed Bold + Light, Caveat-Bold. Prize-cell icons in `icons/` next to `chart.py`.
 
 ### Button Channel Card

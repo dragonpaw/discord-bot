@@ -1,9 +1,18 @@
 import datetime
+import enum
 
 import pydantic
 
 from dragonpaw_bot.plugins.subday.constants import TOTAL_WEEKS
 from dragonpaw_bot.state_store import GuildStateBase
+
+
+class StarPalette(enum.StrEnum):
+    RANDOM = "random"
+    RAINBOW = "rainbow"
+    TRANS = "trans"
+    LEATHER = "leather"
+    PINK = "pink"
 
 
 class SubDayParticipant(pydantic.BaseModel):
@@ -15,6 +24,7 @@ class SubDayParticipant(pydantic.BaseModel):
     reminder_sent: bool = False
     owner_id: int | None = None
     pending_owner_id: int | None = None
+    palette: StarPalette = StarPalette.RANDOM
 
     @property
     def graduated(self) -> bool:
