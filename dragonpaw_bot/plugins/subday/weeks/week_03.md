@@ -4,7 +4,7 @@ Really good service takes a lot of patience. Focus on what's happening right now
 
 ## Thought 1
 
-Consent is not something to be given lightly. By giving consent to any activity — whether done by the submissive or to the submissive — the submissive is making a pledge to the Owner. The RACK principle (Risk-Aware Consensual Kink: everyone understands the risks and agrees to them) is important, and as a submissive you are equally responsible for the risks of any scene you agree to.
+Consent is not something to be given lightly. By giving consent to any activity — whether done by the submissive or to the submissive — the submissive is making a pledge to the Owner. The RACK principle is important, and as a submissive you are equally responsible for the risks of any scene you agree to.
 
 ## Thought 2
 
