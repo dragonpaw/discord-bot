@@ -141,11 +141,7 @@ Reason: the body is very jargon-heavy. (It replaced the original "If you were a 
 
 ## Week 19 — Real Role Models
 
-**Current:** Who is your real life role model as a slave and why?
-
-**Proposed:** Who is a real person (not a fictional character) that you look up to as a slave or submissive? They can be someone you know, someone in your community, or a creator or writer you follow online. What about them do you want to be more like?
-
-Reason: "role model as a slave" is ambiguous — it can be read as "a role model who is a slave" or "your role model, in your role as a slave."
+*Done 2026-10-26* — rewritten to ask for a real person you look up to as a slave or submissive, someone you know or follow online.
 
 ## Week 20 — In-depth Exploration: Vulnerability
 

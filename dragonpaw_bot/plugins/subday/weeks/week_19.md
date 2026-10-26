@@ -12,4 +12,4 @@ I have often heard slaves try to justify their rudeness to others by stating, â€
 
 ## Writing Assignment: Real Role Models
 
-Who is your real life role model as a slave and why?
+Who is a real person (not a fictional character) that you look up to as a slave or submissive? They can be someone you know, someone in your community, or a creator or writer you follow online. What about them do you want to be more like?
