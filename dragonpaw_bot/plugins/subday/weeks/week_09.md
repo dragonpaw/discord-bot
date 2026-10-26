@@ -4,12 +4,12 @@ Pride is like food — too much or too little is unhealthy but the right amount 
 
 ## Thought 1
 
-Make an effort to reach out to other slaves, even if it is from the safe anonymity of your computer. You will find that sharing experiences will help you learn from the mistakes of others. Also, the reassurance that others share similar thoughts and perspectives will help you to feel more at ease with your own choice to serve.
+Connect with other submissives — here on the server, in other Discord groups, at munches, wherever feels safe. Hearing about other people's experiences helps you learn from their mistakes. Knowing others feel the way you do makes your own choice to serve feel less strange and less lonely.
 
 ## Thought 2
 
-The time and attention your Owner chooses to give you is a privilege, not a right. This privilege needs to be earned, and once received, cherished.
+The time and attention your Owner chooses to give you is a privilege, not a right. This privilege needs to be earned, and once received, cherished. (This is about extra time and attention. Basic care, communication, and respect are always part of the deal.)
 
 ## Writing Assignment: Self-Improvement
 
-What is your greatest weakness as a slave? What are you doing to help improve that?
+What's one thing about how you serve that you'd like to get better at? What are you doing about it (or what could you try)?

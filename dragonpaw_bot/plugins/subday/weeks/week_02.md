@@ -8,8 +8,8 @@ Never assume that something is allowed just because it is not expressly forbidde
 
 ## Thought 2
 
-It is often said that slaves should never be proud. This does not mean that slaves should not gain self-esteem and satisfaction from the progress they have made and their accomplishments. The danger of self-pride in a slave is complacency. By remaining humble, a slave will continue to strive for further growth
+People sometimes say submissives should never be proud. That's not quite right: you should feel good about your progress and what you've achieved. The risk is getting comfortable and deciding there's nothing left to learn. Staying humble just means staying curious about how you can keep growing.
 
 ## Writing Assignment: Most Valuable Asset
 
-What do you feel is the most valuable asset you have to offer your Owner? Explain why.
+What's the best thing you bring to your Owner (or would bring to a future Owner)? It can be a skill, a personality trait, something you do for them — anything. Why do you think it matters most?

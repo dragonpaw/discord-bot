@@ -1,14 +1,14 @@
 ## Guidepost: Purpose
 
-Serving without purpose is like eating cookies for breakfast.
+Service without a purpose is like eating cookies for breakfast: nice in the moment, but it won't keep you going. Know *why* you serve.
 
 ## Thought 1
 
-One problem slaves face is the conflict between giving up control and maintaining personal responsibility for one’s actions. Just because you are ordered to do something does not mean you are not responsible for the consequences of your actions. A slave who is given an order to do something that the slave feels is morally wrong faces an ethical dilemma. To disobey the order, the slave has to violate the commitment made to obey the Owner. To obey the order, the slave has to violate his/her personal values. If that situation arises, discuss your concerns with your Owner. There is no right or wrong answer to the dilemma; it is simply a matter of deciding which path you feel most comfortable taking.
+Giving up control doesn't mean giving up responsibility. If you're ordered to do something, you're still responsible for what happens. So what if your Owner orders you to do something you believe is wrong? Disobeying breaks your commitment to obey, and obeying breaks your own values. Talk it through with your Owner. Know this, too: you always have the right to refuse an order that's illegal, unsafe, or against your core values, because consent can be withdrawn at any time. If you ever feel pressured, reach out to staff.
 
 ## Thought 2
 
-When words fail you, let go and let your spirit speak for you.
+When you can't find the right words, it's okay to stop trying so hard. Writing it down, sending a text, or showing how you feel through actions all count.
 
 ## Writing Assignment: Rebellion
 

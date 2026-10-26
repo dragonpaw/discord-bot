@@ -1,6 +1,6 @@
 ## Guidepost: Acceptance
 
-Embrace whatever you receive rather than mourning that which does not exist.
+Appreciate what you actually have, instead of being sad about what you don't have.
 
 ## Thought 1
 
@@ -8,8 +8,8 @@ Most of us did not grow up in a consensual service relationship household so we 
 
 ## Thought 2
 
-If you do not show respect for the commitments made by others, then you diminish the significance of the commitment you have made to your owner.
+If you don't take other people's commitments seriously — their relationships, their collars, their promises — you make your own commitment to your Owner look less meaningful too.
 
 ## Writing Assignment: Self-Image
 
-I feel sexiest when…. (fill in the blank and try to be descriptive)
+Finish this sentence: "I feel sexiest when…". Then describe it in detail — where you are, what you're wearing or doing, who's around, what you're feeling.

@@ -1,6 +1,6 @@
 ## Guidepost: Change
 
-I can’t go back to yesterday … because I was a different person then. –Lewis Carroll
+I can't go back to yesterday … because I was a different person then. — Lewis Carroll
 
 ## Thought 1
 
@@ -8,8 +8,8 @@ I have found that my ability to trust someone else is directly related to my sel
 
 ## Thought 2
 
-Try to keep a proper perspective on everything your Owner asks you to do. Some tasks are fun, some are chores, and some are vitally important. Life can be stressful enough without adding unnecessary burdens.
+Not everything your Owner asks of you is equally important. Some tasks are for fun, some are everyday chores, and a few really matter. Don't stress over the small stuff as if it were the big stuff.
 
 ## Writing Assignment: Taking a Stand
 
-Describe an incident where you stood up for your beliefs. What happened?
+Describe a time you stood up for what you believe in — in person, online, at work, wherever. What happened, and how did you feel afterwards?

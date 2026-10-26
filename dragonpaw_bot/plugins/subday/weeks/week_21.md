@@ -1,15 +1,17 @@
 ## Guidepost: Kindness
 
-Kindness in words creates confidence. Kindness in thinking creates profundity. Kindness in giving creates love. –Lao-Tzu
+Kindness in words creates confidence. Kindness in thinking creates profundity. Kindness in giving creates love. — Lao Tzu
+
+*In other words: speaking kindly helps people feel confident, thinking kindly makes you wiser, and giving kindly creates love.*
 
 ## Thought 1
 
-Wouldn’t it be nice if your car could tell you when it needs routine maintenance? What if your car could tell you what needs to be fixed when it is not running properly? You would probably get a lifetime of use and pleasure from a properly maintained car. Your Owner has agreed to take care of you and be responsible for your needs. This responsibility will become impossible to fulfill if you cannot or will not communicate what those needs are. The more adept you are at identifying and communicating those needs, the less of a burden you place on your owner.
+Your Owner has agreed to look after you, but they can't do that if you don't tell them what you need, because nobody can read minds. The better you get at noticing your needs and saying them out loud, the easier it is for your Owner to take care of you.
 
 ## Thought 2
 
-Serving with quiet grace and dignity will do more to demonstrate the trust and respect you have for your owner than grand pronouncements of eternal slavery
+Serving with quiet grace and dignity will do more to demonstrate the trust and respect you have for your Owner than grand pronouncements of eternal devotion.
 
-## Writing Assignment: In-Depth Exploration—Honor
+## Writing Assignment: In-depth Exploration — Honor
 
-Go to the dictionary and find the definition of “honor”. Pretend you are trying to explain “honor” to someone who has never heard the word and write your own definition.
+Look up the definition of "honor". Then explain it in your own words, as if to someone who's never heard the word. Give at least one example of what honor looks like in a D/s dynamic.

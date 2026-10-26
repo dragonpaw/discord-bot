@@ -12,4 +12,4 @@ Service is a gift that you offer. To have that gift accepted is an honor and a p
 
 ## Writing Assignment: Peace
 
-I feel at peace when… (be as descriptive as possible)
+Finish this sentence: "I feel at peace when…". Then describe it in detail — where you are, what you're doing, what you can see, hear, and feel.

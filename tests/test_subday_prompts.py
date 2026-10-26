@@ -9,7 +9,7 @@ def test_load_week_1():
     assert p.guidepost_title == "Determination"
     assert "Determination can often" in p.guidepost_body
     assert "giving up control" in p.thought_1
-    assert "strong power" in p.thought_2
+    assert "feel strong" in p.thought_2
     assert p.assignment_title == "Role Models"
     assert "fictional characters" in p.assignment_body
 
@@ -39,6 +39,13 @@ def test_load_all_52_weeks():
         assert p.thought_1, f"Week {n}: missing thought 1"
         assert p.thought_2, f"Week {n}: missing thought 2"
         assert p.assignment_title, f"Week {n}: missing assignment title"
+
+
+def test_prompt_fields_fit_discord_limit():
+    for n in range(1, 53):
+        embed = prompts.build_prompt_embed(prompts.load_week(n))
+        for field in embed.fields:
+            assert len(field.value) <= 1024, f"Week {n}: {field.name} too long"
 
 
 def test_build_prompt_embed():

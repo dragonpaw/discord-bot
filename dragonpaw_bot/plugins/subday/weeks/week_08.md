@@ -1,6 +1,6 @@
 ## Guidepost: Contentment
 
-When you are content to be simply yourself and don’t compare or compete, everyone will respect you. –-Lao Tzu
+When you are content to be simply yourself and don't compare or compete, everyone will respect you. — Lao Tzu
 
 ## Thought 1
 
@@ -8,7 +8,7 @@ Make an effort to understand each order and rule you are given. Why is the rule 
 
 ## Thought 2
 
-There is a time and place for everything. If you want to amuse your Owner by a display of “spunk” or “bratty” behavior, do so privately. There is a vast difference between public disrespect and private amusement.
+Bratty or cheeky behavior can be fun for your Owner, but keep it private unless they've told you otherwise. At home it's play; in public, it can look like disrespect.
 
 ## Writing Assignment: Personal Fantasy
 

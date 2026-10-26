@@ -8,7 +8,7 @@ Accept the decisions made by your Owner with grace. If you have additional infor
 
 ## Thought 2
 
-Just about anyone can be taught how to cook, clean a house, and provide physical service. It is a very special person, however, who can provide service for the heart and the soul
+Just about anyone can be taught how to cook, clean a house, and provide physical service. It is a very special person, however, who can provide service for the heart and the soul.
 
 ## Writing Assignment: Receiving Compliments
 

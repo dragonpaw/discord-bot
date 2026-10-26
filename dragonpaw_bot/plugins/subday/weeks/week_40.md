@@ -4,7 +4,7 @@ Serving others reminds me of my gratitude for the gifts I have to offer others.
 
 ## Thought 1
 
-There is a very good reason why service relationships are referred to as “power exchange relationships” rather than “power drain relationships”. If you do not feel empowered by your relationship, you need to examine the reasons why you feel this way and work with your Owner to correct the situation.
+There is a very good reason why service relationships are referred to as "power exchange relationships" rather than "power drain relationships". If you do not feel empowered by your relationship, you need to examine the reasons why you feel this way and work with your Owner to correct the situation.
 
 ## Thought 2
 

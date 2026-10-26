@@ -8,20 +8,20 @@ Surrendering to your Owner is not an admission of defeat or personal inadequacy.
 
 ## Thought 2
 
-A Slave’s Creed
-(alter as necessary to fit your own beliefs)
+**An Owned Submissive's Creed**
+Read through this creed. Which lines fit you? Which would you change, and how?
 - I am independent.
 - I am intelligent.
 - I am capable of running my own life — and I am responsible for running those parts of my life that my Owner does not wish to run.
 - I find my greatest personal satisfaction comes from service.
-- I do not choose to serve simply because I “couldn’t cut it as a Top”.
+- I don't serve because I failed at anything else. I serve because I choose to.
 - I feel empowered by service.
 - I can withdraw my consent to my relationship with my Owner at any time but I choose to honor my commitments.
-- I do not have a victim complex and I find being used or abused unacceptable — but I need to feel useful.
-- I do not like being told what to do — I take pride in knowing what needs to be done without being told.
-- My Owner does recognize my ownership of certain property, but there is nothing that I own that my heart would deny him if he desired it.
-- I am my Owner’s most prized possession
+- I won't accept abuse — but I need to feel useful.
+- I don't need to be told what to do — I take pride in knowing what needs to be done without being told.
+- My Owner does recognize my ownership of certain property, but there is nothing that I own that my heart would deny them if they desired it.
+- I am my Owner's most prized possession.
 
 ## Writing Assignment: Looking Back
 
-Look over the writing assignments you’ve completed. How many did you enjoy doing? What made an assignment easy or difficult for you?
+Look back over all the assignments you've written this year. Which ones did you enjoy most, and which were hardest? What made them easy or hard? What's changed about you since week 1?

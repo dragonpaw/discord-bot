@@ -4,12 +4,12 @@ Your actions are a reflection of your beliefs. Integrity comes when what you do 
 
 ## Thought 1
 
-Remember when you were a child and tried to get something by claiming that “all the other parents let their kids”? Well, it probably didn’t work then and you shouldn’t try it now with your Owner. Service relationships are based on the personal preferences of the parties involved and do not follow a pre-ordained, universal standard. You have unique needs, wants and desires. Therefore, you should respect the unique standards and guidelines that your Owner imposes upon you.
+Every dynamic is different, and there's no universal rulebook. So "but other submissives get to do X" isn't a good argument to make to your Owner. You have your own needs and wants, and your Owner's rules for you are built around your dynamic, not anyone else's.
 
 ## Thought 2
 
-In “vanilla” society, people are often judged by the company they keep — and this is even more prevalent in the Master/slave community. Your actions are a direct reflection on your Owner, the quality of training you have received, and the standards of behavior that have been set for you. It is up to you whether you are an asset or a liability to your owner.
+People are often judged by the company they keep, and that's even more true in the kink community. How you act reflects on your Owner and on how you've been trained. Try to be someone who makes your Owner look good.
 
 ## Writing Assignment: A Song in Your Heart
 
-Name one song that you would sing to your Owner that would describe your relationship and explain why you have chosen that song. (If you are not in a relationship, what song describes how you would like to feel about your Owner.)
+Pick one song that describes your relationship with your Owner, and explain which parts of it fit and why. Lyrics, mood, or just the vibe all count. (No Owner right now? Pick a song for how you'd want to feel about one.)

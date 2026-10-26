@@ -10,6 +10,8 @@ One of the most valuable services you can do for your Owner is to be an interest
 
 Self-confidence gives me the ability to relinquish control.
 
+*In other words: I need to feel secure in myself before I can hand control to someone else.*
+
 ## Writing Assignment: A Different Perspective
 
-If your bed could talk, what would it say about you?
+Imagine your bed could talk. What would it say about you? This is a fun way of asking: what are your habits around sleep, rest, comfort, and sex? Write it in your bed's voice if that's fun for you, or just describe those habits directly.

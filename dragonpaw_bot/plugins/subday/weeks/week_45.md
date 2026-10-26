@@ -1,6 +1,6 @@
 ## Guidepost: Perfection
 
-If you can see perfection within others, then know that they can see it within you.
+If you can see the good in other people, trust that they can see the good in you too.
 
 ## Thought 1
 
@@ -8,8 +8,8 @@ There will be times when you are not able to directly serve your Owner, but you 
 
 ## Thought 2
 
-There are people in this world whose souls are moved by experiencing devoted service. Cherish those people whether they are known as Masters, as slaves, or any other label.
+There are people in this world whose souls are moved by experiencing devoted service. Cherish those people whether they are known as Owners, as submissives, or any other label.
 
 ## Writing Assignment: The Gift of Giving
 
-Describe a special gift someone gave you. What made it special for you?
+Describe a special gift someone gave you. It doesn't have to be a thing — time, a favor, or a kind gesture count too. What made it special?

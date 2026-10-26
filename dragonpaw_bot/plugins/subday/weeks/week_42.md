@@ -1,6 +1,8 @@
 ## Guidepost: Empowerment
 
-Give light, and the darkness will disappear of itself. –Desiderus Erasmus
+Give light, and the darkness will disappear of itself. — Desiderius Erasmus
+
+*In other words: put your energy into spreading good things like kindness, honesty, and knowledge, and a lot of the bad stuff fades away by itself.*
 
 ## Thought 1
 
@@ -8,8 +10,8 @@ Impatience stems from a fear of the unknown. Trust and faith in your Owner are t
 
 ## Thought 2
 
-I do not serve my Owner because he is unwilling or unable to take care of himself. I serve my Owner in order to free his time to accomplish his goals. I share his vision of what the world should be. By serving him, I am serving our goals.
+I do not serve my Owner because they are unwilling or unable to take care of themselves. I serve my Owner in order to free their time to accomplish their goals. I share their vision of what the world should be. By serving them, I am serving our goals.
 
 ## Writing Assignment: Submission and Surrender
 
-In your opinion, what is the difference between submission and surrender?
+What do the words "submission" and "surrender" mean to you? Are they different, or the same thing? If they're different, give an example of each — something that would feel like submission to you, and something that would feel like surrender.

@@ -1,15 +1,15 @@
 ## Guidepost: Commitment
 
-A person’s life is limited but serving the people is limitless. I want to devote my limited life to serving the people limitlessly
+Commitment means choosing to keep showing up, even on days when it's hard. Your time is limited, so choose carefully what you give it to.
 
 ## Thought 1
 
-Pointing out the mistakes and shortcomings of others will not make you appear to be a better slave or worthy of respect by contrast. However, a tolerant and understanding slave will be praised and valued.
+Pointing out the mistakes and shortcomings of others will not make you appear to be a better submissive or worthy of respect by contrast. However, a tolerant and understanding submissive will be praised and valued.
 
 ## Thought 2
 
-Showing respect to your Owner includes respecting his or her personal space. One example of this is a commonly practiced protocol that requires a slave to ask permission to touch his or her Owner. Whatever your protocols, you will take greater pleasure in being the presence of you Owner when you consider that it is a privilege that you have been granted because you have earned it.
+Showing respect to your Owner includes respecting their personal space. One example of this is a commonly practiced protocol that requires a submissive to ask permission to touch their Owner. Whatever your protocols, you will take greater pleasure in being in the presence of your Owner when you consider that it is a privilege that you have been granted because you have earned it.
 
 ## Writing Assignment: More Fantasy Exploration
 
-Describe one of your fantasies that you have fulfilled.
+Describe a fantasy you've actually gotten to live out. How did the real thing compare to what you'd imagined? (If you haven't fulfilled one yet, describe the one you're closest to trying.)
