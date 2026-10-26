@@ -139,7 +139,7 @@ concrete and genuinely useful, so it stays.
 ### ✍️ Writing Assignment: Overcoming a Limit
 > Name one limit that you have consensually overcome. Why was it a limit and what enabled you to overcome it?
 
-**Proposed:** A limit is something you used to say no to. Name one limit you've moved past, by your own choice. Why was it a limit in the first place? What changed that made it okay for you? If you haven't moved past any limits (which is completely fine), write about a limit you have and why it's important to you.
+**Proposed:** A limit is something you used to say no to. Name one limit you've moved past, by your own choice. Why was it a limit in the first place? What changed that made it okay for you? If you haven't moved past any limits yet (which is completely fine), write about a limit you'd *like* to move past instead. Why do you want to, and what do you think might help you get there?
 
 ## Week 4
 
