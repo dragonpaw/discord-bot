@@ -35,6 +35,12 @@ complaints", "keep your mouth closed", "read your Owner's facial expressions",
 - **Short poetic one-liners get the same treatment:** keep the line, add
   "In other words:".
 - **Longer passages that are metaphorical, dated, or harmful get rewritten.**
+- **"Slave" becomes "submissive".** Use "Owned submissive" only where the
+  text is about being Owned in particular rather than submission in general
+  (e.g. the week 52 creed). "Slavery" becomes "submission" or "service",
+  whichever fits the sentence; "Master/slave community" becomes "kink
+  community". This applies to every prompt, including those marked
+  *keep as-is*, and the proposed text below already uses it.
 - **Owners are "they", not "he".** Use "Owner" with a capital O throughout.
 - **Typos are fixed** wherever they appear, even in prompts marked
   *keep as-is*.
@@ -85,7 +91,7 @@ instead of in every prompt.
 ### ✍️ Writing Assignment: Role Models
 > Name three fictional characters who would be good role models for an aspiring slave and explain why.
 
-**Proposed:** Pick three fictional characters — from books, shows, anime, games, movies, fanfic, anything — who you think would be good role models for a slave. For each one, say what they do or what they're like that you'd want to copy.
+**Proposed:** Pick three fictional characters — from books, shows, anime, games, movies, fanfic, anything — who you think would be good role models for a submissive. For each one, say what they do or what they're like that you'd want to copy.
 
 ## Week 2
 
@@ -102,7 +108,7 @@ instead of in every prompt.
 ### 💭 Thought 2
 > It is often said that slaves should never be proud. This does not mean that slaves should not gain self-esteem and satisfaction from the progress they have made and their accomplishments. The danger of self-pride in a slave is complacency. By remaining humble, a slave will continue to strive for further growth
 
-**Proposed:** People sometimes say slaves should never be proud. That's not quite right: you should feel good about your progress and what you've achieved. The risk is getting comfortable and deciding there's nothing left to learn. Staying humble just means staying curious about how you can keep growing.
+**Proposed:** People sometimes say submissives should never be proud. That's not quite right: you should feel good about your progress and what you've achieved. The risk is getting comfortable and deciding there's nothing left to learn. Staying humble just means staying curious about how you can keep growing.
 
 *Why:* "complacency" and the double negative are hard to parse, and the old
 wording sits awkwardly next to week 9's Guidepost, which is about pride in a
@@ -201,7 +207,7 @@ isolation pattern abusers rely on.
 ### 💭 Thought 1
 > A valuable talend for a slave to have is the ability to aniticpate and fulfill an Owner's needs, wants and desires. This "talent" is actually a learned skill that is acquired by remaining focused on your Owner and observant of even the slightest factial expression. Watching you Owner interact with others can be especially enlightening. What traints does your Owner find pleasing in others? What topics of conversation facinate your Owner? Are these things you can incorporate into your service?
 
-**Proposed:** A great skill for a slave is anticipating what your Owner needs or wants before they ask. It isn't magic; you learn it by paying attention. Notice what your Owner enjoys, which topics they get excited about, and what they like in other people. If reading faces or body language is hard for you, that's okay. Asking directly ("Would you like X?") or keeping notes on their preferences works just as well. How could you use what you notice in your service?
+**Proposed:** A great skill for a submissive is anticipating what your Owner needs or wants before they ask. It isn't magic; you learn it by paying attention. Notice what your Owner enjoys, which topics they get excited about, and what they like in other people. If reading faces or body language is hard for you, that's okay. Asking directly ("Would you like X?") or keeping notes on their preferences works just as well. How could you use what you notice in your service?
 
 *Why:* seven typos, and "watch for the slightest facial expression" is
 exactly the skill many autistic people don't have. Offering other ways to
@@ -227,7 +233,7 @@ learn the same things fixes that.
 ### 💭 Thought 1
 > A slave should not seek to be punished. However, when mistakes are made, a slave should seek to earn the privilege of being punished and forgiven. This privilege is earned by consenting to the punishment deemed appropriate by the Owner, demonstrating genuine remorse for the shortcoming, and making a sincere effort not to repeat the mistake in the future.
 
-**Proposed:** A slave shouldn't go looking for punishment. When you do make a mistake, the way through is to accept the consequence your Owner chooses, be genuinely sorry, and really try not to do it again. That's how you get forgiven and move on. (Punishment only ever happens within limits you've both agreed to.)
+**Proposed:** A submissive shouldn't go looking for punishment. When you do make a mistake, the way through is to accept the consequence your Owner chooses, be genuinely sorry, and really try not to do it again. That's how you get forgiven and move on. (Punishment only ever happens within limits you've both agreed to.)
 
 *Why:* "earn the privilege of being punished" is a paradox that literal
 readers can't do much with.
@@ -275,7 +281,7 @@ ask *why* a rule exists.)
 ### 💭 Thought 1
 > Make an effort to reach out to other slaves, even if it is from the safe anonymity of your computer. You will find that sharing experiences will help you learn from the mistakes of others. Also, the reassurance that others share similar thoughts and perspectives will help you to feel more at ease with your own choice to serve.
 
-**Proposed:** Connect with other slaves and submissives — here on the server, in other Discord groups, at munches, wherever feels safe. Hearing about other people's experiences helps you learn from their mistakes. Knowing others feel the way you do makes your own choice to serve feel less strange and less lonely.
+**Proposed:** Connect with other submissives — here on the server, in other Discord groups, at munches, wherever feels safe. Hearing about other people's experiences helps you learn from their mistakes. Knowing others feel the way you do makes your own choice to serve feel less strange and less lonely.
 
 ### 💭 Thought 2
 > The time and attention your Owner chooses to give you is a privilege, not a right. This privilege needs to be earned, and once received, cherished.
@@ -314,7 +320,7 @@ final period).
 ### ✍️ Writing Assignment: Reality Check
 > The reality of being a slave is very different than the fantasy. What are some of the things about being a slave that are different from what you imagined they would be.
 
-**Proposed:** Being a slave in real life is usually different from how it looks in fantasy, porn, or fiction. What has turned out differently from what you expected? If you haven't been in a dynamic yet, what have you learned from others that surprised you?
+**Proposed:** Being a submissive in real life is usually different from how it looks in fantasy, porn, or fiction. What has turned out differently from what you expected? If you haven't been in a dynamic yet, what have you learned from others that surprised you?
 
 ## Week 11
 
@@ -326,7 +332,7 @@ final period).
 ### 💭 Thought 1
 > Remember when you were a child and tried to get something by claiming that "all the other parents let their kids"? Well, it probably didn't work then and you shouldn't try it now with your Owner. Service relationships are based on the personal preferences of the parties involved and do not follow a pre-ordained, universal standard. You have unique needs, wants and desires. Therefore, you should respect the unique standards and guidelines that your Owner imposes upon you.
 
-**Proposed:** Every dynamic is different, and there's no universal rulebook. So "but other slaves get to do X" isn't a good argument to make to your Owner. You have your own needs and wants, and your Owner's rules for you are built around your dynamic, not anyone else's.
+**Proposed:** Every dynamic is different, and there's no universal rulebook. So "but other submissives get to do X" isn't a good argument to make to your Owner. You have your own needs and wants, and your Owner's rules for you are built around your dynamic, not anyone else's.
 
 *Why:* the comparison to a child arguing with a parent is condescending, and
 the point stands without it.
@@ -348,18 +354,18 @@ the point stands without it.
 
 **Proposed — replace:** Duty means doing what you've committed to, fully and every time, even when nobody is checking. You can't do more than your duty, and you shouldn't want to do less.
 
-*Why:* quoting a Confederate general in a program about slavery is a very bad
+*Why:* quoting a Confederate general in a program about ownership and service is a very bad
 look. The quote is also a known 19th-century forgery that Lee never wrote.
 
 ### 💭 Thought 1
 > There is no such thing as "just" as slave.
 
-**Proposed:** Fix to "just" **a** slave, and add: *In other words: being a slave is never "just" anything. It's a real role that takes skill and effort, and it deserves respect, including from you.*
+**Proposed:** Fix to "just" **a** submissive, and add: *In other words: being a submissive is never "just" anything. It's a real role that takes skill and effort, and it deserves respect, including from you.*
 
 ### 💭 Thought 2
 > While it is not true that slaves should be seen and not heard, a quiet demeanor can be very beneficial to you. Remember, you cannot put your foot in your mouth if it remains closed.
 
-**Proposed:** Slaves aren't meant to be silent, but sometimes staying quiet is the smart move: you can't say something you regret if you don't say it. Use your judgement, and never stay quiet about your needs, your safety, or your limits.
+**Proposed:** Submissives aren't meant to be silent, but sometimes staying quiet is the smart move: you can't say something you regret if you don't say it. Use your judgement, and never stay quiet about your needs, your safety, or your limits.
 
 *Why:* "put your foot in your mouth" is an idiom, and "keep your mouth
 closed" is risky advice to give people who already mask.
@@ -458,7 +464,7 @@ of your Owner"; "his or her" → "their").
 ### 💭 Thought 2
 > Many slaves make the mistake of thinking that they need to "act up" in order to gain the attention of their Owner. Even if this does gain you the attention you seek, it will not last long. The squeaky wheel may get the grease, but it will also be replaced at the first opportunity by one that works properly.
 
-**Proposed:** Some slaves act up or misbehave to get their Owner's attention. Even when it works, the attention doesn't last, and it can wear out your Owner's patience. If you need more attention, it's much better to just say so.
+**Proposed:** Some submissives act up or misbehave to get their Owner's attention. Even when it works, the attention doesn't last, and it can wear out your Owner's patience. If you need more attention, it's much better to just say so.
 
 *Why:* "the squeaky wheel… will be replaced" is an idiom, and it reads as a
 threat of being thrown away.
@@ -530,7 +536,7 @@ threat of being thrown away.
 *Keep as-is* ("he or she" → "they"; capitalize "Owner").
 
 ### ✍️ Writing Assignment: Real Role Models
-**Current (applied 2026-10-26):** Who is a real person (not a fictional character) that you look up to as a slave or submissive? They can be someone you know, someone in your community, or a creator or writer you follow online. What about them do you want to be more like?
+**Current (applied 2026-10-26):** Who is a real person (not a fictional character) that you look up to as a submissive? They can be someone you know, someone in your community, or a creator or writer you follow online. What about them do you want to be more like?
 
 *Previously:* Who is your real life role model as a slave and why?
 
@@ -568,7 +574,7 @@ threat of being thrown away.
 
 **Proposed:** Your Owner has agreed to look after you, but they can't do that if you don't tell them what you need, because nobody can read minds. The better you get at noticing your needs and saying them out loud, the easier it is for your Owner to take care of you.
 
-*Why:* another car analogy, and it compares the slave to a machine. The
+*Why:* another car analogy, and it compares the submissive to a machine. The
 "burden" framing is dropped as well.
 
 ### 💭 Thought 2
@@ -596,7 +602,7 @@ threat of being thrown away.
 ### 💭 Thought 2
 > Ignorance is unattractive in anyone — including slaves. Constantly strive to learn and increase your awareness.
 
-**Proposed:** Keep learning. Staying curious and building your knowledge makes you a better slave, and a more interesting person.
+**Proposed:** Keep learning. Staying curious and building your knowledge makes you a better submissive, and a more interesting person.
 
 *Why:* "ignorance is unattractive" is a put-down. The positive version makes
 the same point.
@@ -941,7 +947,7 @@ questions.)
 ### 💭 Thought 2
 > There is a common misconception that slavery requires giving up personal power. Unfortunately, a powerless slave is not very useful. However, a slave who has a sense of his or her own personal power is like a turbocharged power tool — turbo-charged, but still under the control of their Owner.
 
-**Proposed:** Some people think a slave has to give up all their personal power. But a powerless slave can't do much. A slave who knows their own strengths and chooses to use them under their Owner's direction is far more useful.
+**Proposed:** Some people think a submissive has to give up all their personal power. But a powerless submissive can't do much. A submissive who knows their own strengths and chooses to use them under their Owner's direction is far more useful.
 
 ### ✍️ Writing Assignment: Respect
 > Go to the dictionary and find the definition of "respect". Pretend you are trying to explain "respect" to someone who has never heard the word and write your own definition.
@@ -1038,7 +1044,7 @@ questions.)
 ### ✍️ Writing Assignment: Civil Disobedience?
 > Is it ever acceptable for a slave to disobey orders? Why or why not?
 
-**Proposed:** Is it ever okay for a slave to disobey an order? If yes, when? If no, why not? Think about safety, consent, limits, and situations where following an order would hurt someone.
+**Proposed:** Is it ever okay for a submissive to disobey an order? If yes, when? If no, why not? Think about safety, consent, limits, and situations where following an order would hurt someone.
 
 ## Week 42
 
@@ -1190,7 +1196,7 @@ literal reader can't tell apart.
 ### 💭 Thought 1
 > Try not to fall into the trap of having an "I'm not that kind of slave" attitude. This attitude is usually a sign that you are uncertain about your ability to succeed in a particular area. If you demonstrate a willingness to try, your efforts will be appreciated whether you are successful or not.
 
-**Proposed:** Keep, and add: *(This is about skills and tasks you're unsure of, not your limits. "I'm not that kind of slave" is a perfectly good answer when it's about a hard limit.)*
+**Proposed:** Keep, and add: *(This is about skills and tasks you're unsure of, not your limits. "I'm not that kind of submissive" is a perfectly good answer when it's about a hard limit.)*
 
 *Why:* without the note, this can be read as pressure to drop limits.
 
@@ -1317,9 +1323,10 @@ talk in the moment.
 
 **Proposed:** Keep the creed, with these changes:
 
+- Retitle it "An Owned Submissive's Creed".
 - Change the intro to: "Read through this creed. Which lines fit you? Which would you change, and how?" That gives the reader something definite to write.
 - Change "I do not choose to serve simply because I 'couldn't cut it as a Top'" to "I don't serve because I failed at anything else. I serve because I choose to."
-- Change "I do not have a victim complex and I find being used or abused unacceptable" to "I won't accept abuse — but I need to feel useful." ("Used" is something many slaves consent to and enjoy, so lumping it in with abuse confuses the line.)
+- Change "I do not have a victim complex and I find being used or abused unacceptable" to "I won't accept abuse — but I need to feel useful." ("Used" is something many submissives consent to and enjoy, so lumping it in with abuse confuses the line.)
 - Change "I do not like being told what to do" to "I don't need to be told what to do". The old line contradicts week 49's question "Do you like being told what to do?"
 - Change "him / he" to "them / they".
 
