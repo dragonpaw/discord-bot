@@ -11,6 +11,6 @@ There is no such thing as “just” as slave.
 
 While it is not true that slaves should be seen and not heard, a quiet demeanor can be very beneficial to you. Remember, you cannot put your foot in your mouth if it remains closed.
 
-## Writing Assignment: The Infamous Car Analogy Question
+## Writing Assignment: What Makes You Work Well
 
 In what practical ways do your specific tendencies, defined limits, and need for clear communication actively enhance the stability and daily function of your dynamic with your Owner?
