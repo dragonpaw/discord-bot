@@ -12,4 +12,4 @@ Pushing your limits can be a way to show trust, but only go as far and as fast a
 
 ## Writing Assignment: Indirect Service
 
-Indirect service means doing something for your Owner when they aren't there or you aren't talking to them — like tidying a shared space, prepping their coffee, sorting their calendar, or keeping a promise they'll never check on. List ten ways you could serve your Owner (or a future Owner) like this.
+Indirect service means doing something for your Owner when they aren't there or you aren't talking to them. List ten ways you could serve your Owner (or a future Owner) like this.
