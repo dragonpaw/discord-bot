@@ -1,6 +1,6 @@
 ## Guidepost: Patience
 
-Really good service takes a lot of patience. Focus on what's happening right now instead of worrying about what comes next. The rest tends to sort itself out.
+Exceptional service requires exceptional patience. Take service one step at a time and focus on completing the current task well, rather than worrying about the next one.
 
 ## Thought 1
 
@@ -8,8 +8,10 @@ Consent is not something to be given lightly. By giving consent to any activity 
 
 ## Thought 2
 
-You don't need to raise every small annoyance with your Owner, but you also shouldn't bottle things up. A useful test is to ask yourself: "Will this still bother me tomorrow?" If not, you can probably let it go. If it will, bring it up with your Owner soon, because unspoken resentment slowly wears away trust. Needs aren't complaints. Sensory overload, health, being overwhelmed, and safety are always worth saying out loud.
+Some people believe submissives should strive to be "low maintenance". It's true that not every small annoyance needs to be raised with your Owner, but it's essential to voice concerns rather than bottle them up. A useful test is to ask yourself: "Will this still bother me tomorrow?" If it will — or if it's about your safety, your physical or mental health, or feeling overwhelmed (including sensory overload) — bring it up with your Owner soon. Unspoken problems lead to harm, resentment, and lost trust. Advocating for your needs is not complaining.
 
 ## Writing Assignment: Overcoming a Limit
 
-A limit is something you used to say no to. Name one limit you've moved past, by your own choice. Why was it a limit in the first place? What changed that made it okay for you? If you haven't moved past any limits yet (which is completely fine), write about a limit you'd *like* to move past instead. Why do you want to, and what do you think might help you get there?
+A limit is something you used to say no to. Name one limit you've moved past, by your own choice. Why was it a limit in the first place? What changed that made it okay for you?
+
+If you haven't moved past any limits yet (which is completely fine), write about a limit you'd *like* to move past instead. Why is it a limit, why do you want to move past it, and what do you think might help you get there?
