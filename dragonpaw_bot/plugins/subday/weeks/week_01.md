@@ -4,7 +4,7 @@ Determination can often turn a failure into a success. There are many ways to ac
 
 ## Thought 1
 
-Many people make the mistake of assuming that giving up control also means giving up responsibility. No matter what the situation, a submissive shares equal responsibility for any consequences, either good or bad, that occur as a result of consensual activities.
+Many people make the mistake of assuming that giving up control also means giving up responsibility. No matter what the situation, a submissive shares equal responsibility for any consequences, either good or bad, that occur as a result of consensual activities. This links to the principles of RACK (Risk-Aware Consensual Kink) and PRICK (Personal Responsibility Informed Consensual Kink).
 
 ## Thought 2
 
@@ -12,4 +12,4 @@ Giving up control can make you feel strong, not weak. This isn't about getting y
 
 ## Writing Assignment: Role Models
 
-Pick three fictional characters — from books, shows, anime, games, movies, fanfic, anything — who you think would be good role models for a submissive. For each one, say what they do or what they're like that you'd want to copy.
+Pick three fictional characters — from books, shows, anime, games, movies, fanfic, anything — who you think would be good role models for a submissive. For each, explain why they would be a good role model — what do they do? What characteristics do they have?
