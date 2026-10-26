@@ -10,7 +10,7 @@ A good skill to have is the ability to keep your focus centered on your Owner wh
 
 ## Thought 2
 
-An old self-improvement trick is to "act as if": decide what kind of person you want to be, then practise behaving that way until it starts to feel natural. This is about growing toward who you want to be. It isn't about hiding who you are or pretending to be someone else.
+An old self-improvement trick is to "act as if": decide what kind of person you want to be, then practice behaving that way until it starts to feel natural. This is about growing toward who you want to be. It isn't about hiding who you are or pretending to be someone else.
 
 ## Writing Assignment: How You Take In Stories
 

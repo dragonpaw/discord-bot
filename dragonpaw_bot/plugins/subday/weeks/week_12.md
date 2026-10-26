@@ -10,7 +10,7 @@ There is no such thing as "just" a submissive.
 
 ## Thought 2
 
-Submissives aren't meant to be silent, but sometimes staying quiet is the smart move: you can't say something you regret if you don't say it. Use your judgement, and never stay quiet about your needs, your safety, or your limits.
+Submissives aren't meant to be silent, but sometimes staying quiet is the smart move: you can't say something you regret if you don't say it. Use your judgment, and never stay quiet about your needs, your safety, or your limits.
 
 ## Writing Assignment: What Makes You Work Well
 

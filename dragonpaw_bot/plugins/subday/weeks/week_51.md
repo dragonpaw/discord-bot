@@ -4,7 +4,7 @@ Service without a purpose is like eating cookies for breakfast: nice in the mome
 
 ## Thought 1
 
-Giving up control doesn't mean giving up responsibility. If you're ordered to do something, you're still responsible for what happens. So what if your Owner orders you to do something you believe is wrong? Disobeying breaks your commitment to obey, and obeying breaks your own values. Talk it through with your Owner. Know this, too: you always have the right to refuse an order that's illegal, unsafe, or against your core values, because consent can be withdrawn at any time. If you ever feel pressured, reach out to staff.
+Giving up control doesn't mean giving up responsibility. If you're ordered to do something, you're still responsible for what happens. So what if your Owner orders you to do something you believe is wrong? It can feel like a choice between your commitment to obey and your own values, but it isn't really: you always have the right to refuse an order that's illegal, unsafe, or against your core values, because consent can be withdrawn at any time. Talk it through with your Owner. If you ever feel pressured, reach out to staff.
 
 ## Thought 2
 

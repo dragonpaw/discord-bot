@@ -17,11 +17,11 @@ Read through this creed. Which lines fit you? Which would you change, and how?
 - I don't serve because I failed at anything else. I serve because I choose to.
 - I feel empowered by service.
 - I can withdraw my consent to my relationship with my Owner at any time but I choose to honor my commitments.
-- I won't accept abuse — but I need to feel useful.
+- I won't accept abuse, and I do need to feel useful.
 - I don't need to be told what to do — I take pride in knowing what needs to be done without being told.
 - My Owner does recognize my ownership of certain property, but there is nothing that I own that my heart would deny them if they desired it.
 - I am my Owner's most prized possession.
 
 ## Writing Assignment: Looking Back
 
-Look back over all the assignments you've written this year. Which ones did you enjoy most, and which were hardest? What made them easy or hard? What's changed about you since week 1?
+Look back over all the assignments you've written during this program. Which ones did you enjoy most, and which were hardest? What made them easy or hard? What's changed about you since week 1?

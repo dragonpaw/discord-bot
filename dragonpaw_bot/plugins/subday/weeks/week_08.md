@@ -8,7 +8,7 @@ Make an effort to understand each order and rule you are given. Why is the rule 
 
 ## Thought 2
 
-Bratty or cheeky behavior can be fun for your Owner, but keep it private unless they've told you otherwise. At home it's play; in public, it can look like disrespect.
+Bratty or cheeky behavior can be fun for your Owner, but keep it private unless they've told you otherwise. In private it's play; in public, it can look like disrespect.
 
 ## Writing Assignment: Personal Fantasy
 
