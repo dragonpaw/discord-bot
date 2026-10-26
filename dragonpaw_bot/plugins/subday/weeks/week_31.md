@@ -11,6 +11,6 @@ One cannot truly serve, no matter how skillfully tutored, without doing so out o
 
 Take responsibility for your mistakes — even if you are the only one who would ever know about them. A lie by omission is still a lie and demonstrates a lack of faith in your Owner’s ability to forgive.
 
-## Writing Assignment: Writing Assignment
+## Writing Assignment: Something New About Me
 
 Describe something you have learned about yourself within the past two months.

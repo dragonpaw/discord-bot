@@ -213,13 +213,11 @@ Reason: "role model as a slave" is ambiguous — it can be read as "a role model
 
 **Proposed:** Who is a teacher or mentor who mattered to you? This could be a school teacher, a coach, a boss, a community elder, or someone who taught you something online. What made them special?
 
-## Week 31 — Writing Assignment
+## Week 31 — Something New About Me
 
 **Current:** Describe something you have learned about yourself within the past two months.
 
-**Proposed — retitle to "Something New About Me":** body *keep as-is*.
-
-Reason: the title is literally "Writing Assignment", which renders as "Writing Assignment: Writing Assignment".
+*Keep as-is.* (Title fixed 2026-10-26; it used to read "Writing Assignment: Writing Assignment".)
 
 ## Week 32 — Dream Job
 
