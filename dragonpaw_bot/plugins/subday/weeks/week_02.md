@@ -8,8 +8,8 @@ Never assume that something is allowed just because it is not expressly forbidde
 
 ## Thought 2
 
-People sometimes say submissives should never be proud. That's not quite right: you should feel good about your progress and what you've achieved. The risk is getting comfortable and deciding there's nothing left to learn. Staying humble just means staying curious about how you can keep growing.
+People sometimes say submissives should never be proud. That's not quite right: it's important to acknowledge your progress and celebrate what you've achieved, in submission and in the rest of your life. The hidden danger of pride is complacency — getting comfortable and deciding there's nothing left to learn. Staying humble just means staying curious about how you can keep growing.
 
 ## Writing Assignment: Most Valuable Asset
 
-What's the best thing you bring to your Owner (or would bring to a future Owner)? It can be a skill, a personality trait, something you do for them — anything. Why do you think it matters most?
+What do you feel is the most valuable asset you have to offer your Owner? It could be a skill, a personality trait, a form of service, or something else. Why do you think it matters most?
