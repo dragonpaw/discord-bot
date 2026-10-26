@@ -202,7 +202,7 @@ isolation pattern abusers rely on.
 ### 🧭 Guidepost: Understanting
 > One of the greatest gifts you can give another person is the gift of understanding. To give this gift you must look beneath the surface of the truth that lies within.
 
-**Proposed — fix title to "Understanding":** Understanding someone is one of the best gifts you can give. That means looking past what a person says or does on the surface, and trying to work out what they really feel or mean.
+**Proposed — fix title to "Understanding":** Keep, and add: *In other words: understanding someone is one of the best gifts you can give. That means looking past what a person says or does on the surface, and trying to work out what they really feel or mean.*
 
 ### 💭 Thought 1
 > A valuable talend for a slave to have is the ability to aniticpate and fulfill an Owner's needs, wants and desires. This "talent" is actually a learned skill that is acquired by remaining focused on your Owner and observant of even the slightest factial expression. Watching you Owner interact with others can be especially enlightening. What traints does your Owner find pleasing in others? What topics of conversation facinate your Owner? Are these things you can incorporate into your service?
