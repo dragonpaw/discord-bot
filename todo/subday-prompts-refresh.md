@@ -178,7 +178,7 @@ isolation pattern abusers rely on.
 > It is the people who can do nothing who can find nothing to do, and the secret of happiness in this world is not only to be useful, but to be forever elevating one's usefulness. -Sandra Orne Jewett
 
 **Proposed:** Keep the quote, fix the name to **Sarah** Orne Jewett, and add:
-*In other words: people who think they can't do anything never go looking for something to do. Happiness comes from being useful, and from always finding ways to be more useful.*
+*In other words: if you're bored, that's a sign to go learn something new. Happiness comes from being useful, and from always finding ways to be more useful. Taking a cooking class, picking up a craft, or learning a skill your Owner would appreciate all count.*
 
 ### 💭 Thought 1
 > When I think about the awesome responsibility that accepting control of another human being entails, I am humbled. To know that someone believes that this burden is worth shouldering in order to have my submission is a precious gift. It is that state of humility that urges me to continue to improve the quality of my service so that I might ease the burden of Ownership.
