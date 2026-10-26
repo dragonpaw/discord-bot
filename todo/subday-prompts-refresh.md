@@ -185,7 +185,7 @@ isolation pattern abusers rely on.
 
 **Proposed:** Being responsible for another person is a big deal. Knowing that my Owner thinks I'm worth that effort makes me feel humble and grateful. It makes me want to keep getting better at serving, so I'm easier to look after.
 
-*Why:* "awesome" now mostly means "cool", so the sentence reads wrong.
+*Why:* "awesome" here is the old sense, "huge, awe-inspiring", but most readers today hear "cool", which makes the sentence read wrong. The rewrite says "a big deal" instead.
 
 ### 💭 Thought 2
 > By surrender of my body, my spirit is set free.
