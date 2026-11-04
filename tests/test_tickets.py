@@ -947,3 +947,51 @@ async def test_topic_modal_on_behalf_target_left_reports_it(tmp_path, monkeypatc
     assert (
         "can't find" in interaction.edit_initial_response.await_args.kwargs["content"]
     )
+
+
+async def test_open_button_guild_owner_gets_member_picker(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _button_interaction(role_ids=[])
+    interaction.member.id = USER_ID
+    interaction.member.get_guild.return_value.owner_id = USER_ID
+
+    await handle_ticket_open_button(interaction)
+
+    interaction.create_modal_response.assert_not_awaited()
+    interaction.app.rest.build_message_action_row.return_value.add_select_menu.assert_called_once()
+
+
+async def test_topic_modal_on_behalf_from_guild_owner_opens_for_target(
+    tmp_path, monkeypatch
+):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _on_behalf_interaction()
+    interaction.member.role_ids = []
+    interaction.member.get_guild.return_value.owner_id = USER_ID
+
+    await handle_topic_modal(interaction)
+
+    st = tickets_state.load(int(GUILD_ID))
+    assert [t.user_id for t in st.open_tickets] == [int(TARGET_ID)]
+
+
+async def test_open_button_uncached_guild_falls_back_to_role_check(
+    tmp_path, monkeypatch
+):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _button_interaction(role_ids=[])
+    interaction.member.get_guild.return_value = None
+
+    await handle_ticket_open_button(interaction)
+
+    interaction.create_initial_response.assert_not_awaited()
+    interaction.create_modal_response.assert_awaited_once()

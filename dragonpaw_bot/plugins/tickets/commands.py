@@ -69,6 +69,10 @@ def _sanitize_channel_name(display_name: str) -> str:
 
 
 def _is_staff(st: TicketGuildState, member: hikari.Member) -> bool:
+    """Holds the staff role, or owns the guild. Cache-only, so safe before a modal."""
+    guild = member.get_guild()
+    if guild is not None and guild.owner_id == member.id:
+        return True
     return (
         st.staff_role_id is not None
         and hikari.Snowflake(st.staff_role_id) in member.role_ids
@@ -233,7 +237,7 @@ async def _ticket_owner(
 ) -> hikari.Member | None:
     """The member a staff-opened modal is for, or None when the opener is the owner.
 
-    Re-checks the staff role rather than trusting the target id in the custom_id.
+    Re-checks `_is_staff` rather than trusting the target id in the custom_id.
     """
     custom_id = interaction.custom_id
     target_id = custom_id.removeprefix(f"{TOPIC_MODAL_ID}:")
