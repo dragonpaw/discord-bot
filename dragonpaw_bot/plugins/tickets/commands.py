@@ -68,12 +68,19 @@ def _sanitize_channel_name(display_name: str) -> str:
     return f"help-{name}"[:100]
 
 
+def _is_staff(st: TicketGuildState, member: hikari.Member) -> bool:
+    return (
+        st.staff_role_id is not None
+        and hikari.Snowflake(st.staff_role_id) in member.role_ids
+    )
+
+
 def _ticket_block_reason(
     st: TicketGuildState, member: hikari.Member, user_id: hikari.Snowflake
 ) -> str | None:
     """Why this member can't open a ticket right now, phrased for them. None means go ahead.
 
-    Reads only the cached member payload — no REST. Both callers must show a
+    Reads only the cached member payload — no REST. Both callers may show a
     modal as their initial response, and a modal can't follow a deferred
     response, so they are bound by Discord's 3-second deadline.
     """
@@ -148,10 +155,7 @@ async def handle_ticket_open_button(interaction: hikari.ComponentInteraction) ->
 
     st = tickets_state.load(int(interaction.guild_id))
 
-    if (
-        st.staff_role_id
-        and hikari.Snowflake(st.staff_role_id) in interaction.member.role_ids
-    ):
+    if _is_staff(st, interaction.member):
         select_row = interaction.app.rest.build_message_action_row()
         select_row.add_select_menu(
             hikari.ComponentType.USER_SELECT_MENU,
@@ -189,10 +193,19 @@ async def handle_ticket_for_select(interaction: hikari.ComponentInteraction) -> 
     The required-role gate is skipped on purpose: staff opening a ticket for a
     member who hasn't got that role yet is a main reason this path exists.
     """
-    if not interaction.guild_id or not interaction.values:
+    if not interaction.guild_id or not interaction.member or not interaction.values:
         return
 
     st = tickets_state.load(int(interaction.guild_id))
+    if not _is_staff(st, interaction.member):
+        logger.warning("Ticket member picker used by non-staff")
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="*snorts smoke* Only the staff team can open tickets for other folks! 🐉",
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
     target_id = hikari.Snowflake(interaction.values[0])
 
     existing = _find_open_ticket(st, target_id)
@@ -216,15 +229,38 @@ async def handle_ticket_for_select(interaction: hikari.ComponentInteraction) -> 
 
 
 async def _ticket_owner(
-    bot: DragonpawBot, guild_id: hikari.Snowflake, custom_id: str
+    bot: DragonpawBot, st: TicketGuildState, interaction: hikari.ModalInteraction
 ) -> hikari.Member | None:
-    """The member a staff-opened modal is for, or None when the opener is the owner."""
+    """The member a staff-opened modal is for, or None when the opener is the owner.
+
+    Re-checks the staff role rather than trusting the target id in the custom_id.
+    """
+    custom_id = interaction.custom_id
     target_id = custom_id.removeprefix(f"{TOPIC_MODAL_ID}:")
     if target_id == custom_id:
         return None
-    return bot.cache.get_member(
-        guild_id, int(target_id)
-    ) or await bot.rest.fetch_member(guild_id, int(target_id))
+    if not interaction.member or not _is_staff(st, interaction.member):
+        logger.warning(
+            "On-behalf ticket modal submitted by non-staff", target=target_id
+        )
+        return None
+    guild_id = st.guild_id
+    user_id = int(target_id)
+    return bot.cache.get_member(guild_id, user_id) or await bot.rest.fetch_member(
+        guild_id, user_id
+    )
+
+
+def _modal_topic(interaction: hikari.ModalInteraction) -> str | None:
+    return next(
+        (
+            component.value
+            for row in interaction.components
+            for component in row.components
+            if component.custom_id == TOPIC_INPUT_ID
+        ),
+        None,
+    )
 
 
 async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
@@ -236,16 +272,11 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
     gc = GuildContext.from_interaction(interaction)  # type: ignore[arg-type]
     st = tickets_state.load(int(interaction.guild_id))
 
-    # Extract topic from modal
-    topic: str | None = None
-    for row in interaction.components:
-        for component in row.components:
-            if component.custom_id == TOPIC_INPUT_ID:
-                topic = component.value
+    topic = _modal_topic(interaction)
     if not topic:
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
-            content="*confused head tilt* I didn't catch a topic — please try `/ticket` again! 🐉",
+            content="*confused head tilt* I didn't catch a topic — please try `/adultier-adult` again! 🐉",
             flags=hikari.MessageFlag.EPHEMERAL,
         )
         return
@@ -257,8 +288,13 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
     )
 
     opener = interaction.member
-    owner = await _ticket_owner(bot, interaction.guild_id, interaction.custom_id)
-    owner = owner or opener
+    try:
+        owner = await _ticket_owner(bot, st, interaction) or opener
+    except hikari.NotFoundError:
+        await interaction.edit_initial_response(
+            content="*confused head tilt* I can't find that member anymore — maybe they wandered off? 🐾"
+        )
+        return
     on_behalf = owner.id != opener.id
 
     # Race guard: check again after defer

@@ -712,9 +712,14 @@ async def test_open_button_member_gets_modal(tmp_path, monkeypatch):
     )
 
 
-def _for_select_interaction(target_id: hikari.Snowflake) -> MagicMock:
+def _for_select_interaction(
+    target_id: hikari.Snowflake, *, role_ids: list[int] | None = None
+) -> MagicMock:
     interaction = MagicMock()
     interaction.guild_id = GUILD_ID
+    interaction.member = _member(
+        role_ids=[STAFF_ROLE_ID] if role_ids is None else role_ids
+    )
     interaction.user.id = USER_ID
     interaction.values = [str(target_id)]
     interaction.create_initial_response = AsyncMock()
@@ -724,7 +729,9 @@ def _for_select_interaction(target_id: hikari.Snowflake) -> MagicMock:
 
 async def test_for_select_shows_modal_carrying_target(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
     interaction = _for_select_interaction(TARGET_ID)
 
     await handle_ticket_for_select(interaction)
@@ -740,6 +747,7 @@ async def test_for_select_target_with_open_ticket_points_at_it(tmp_path, monkeyp
     tickets_state.save(
         TicketGuildState(
             guild_id=int(GUILD_ID),
+            staff_role_id=STAFF_ROLE_ID,
             open_tickets=[
                 OpenTicket(user_id=int(TARGET_ID), channel_id=20, topic="halp")
             ],
@@ -795,7 +803,9 @@ async def test_topic_modal_on_behalf_opens_ticket_for_target(tmp_path, monkeypat
 
 async def test_topic_modal_on_behalf_journals_against_target(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
     interaction = _on_behalf_interaction()
     recorded = MagicMock()
     monkeypatch.setattr("dragonpaw_bot.journal.record", recorded)
@@ -804,3 +814,136 @@ async def test_topic_modal_on_behalf_journals_against_target(tmp_path, monkeypat
 
     assert recorded.call_args.kwargs["user_id"] == int(TARGET_ID)
     assert "Staffy" in recorded.call_args.kwargs["summary"]
+
+
+async def test_for_select_non_staff_denied(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _for_select_interaction(TARGET_ID, role_ids=[])
+
+    await handle_ticket_for_select(interaction)
+
+    interaction.create_modal_response.assert_not_awaited()
+    interaction.create_initial_response.assert_awaited_once()
+
+
+async def test_topic_modal_on_behalf_from_non_staff_opens_for_self(
+    tmp_path, monkeypatch
+):
+    """A target id in the custom_id is ignored unless the submitter is staff."""
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _on_behalf_interaction()
+    interaction.member.role_ids = []
+
+    await handle_topic_modal(interaction)
+
+    st = tickets_state.load(int(GUILD_ID))
+    assert [t.user_id for t in st.open_tickets] == [int(USER_ID)]
+
+
+async def test_for_select_on_behalf_modal_warns_topic_is_visible(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _for_select_interaction(TARGET_ID)
+
+    await handle_ticket_for_select(interaction)
+
+    rows = interaction.create_modal_response.await_args.kwargs["components"]
+    text_input = rows[0].components[0]
+    assert text_input.label == "What do they need help with?"
+    assert "They'll see this" in text_input.placeholder
+
+
+async def test_for_select_picking_self_shows_ordinary_modal(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _for_select_interaction(USER_ID)
+
+    await handle_ticket_for_select(interaction)
+
+    rows = interaction.create_modal_response.await_args.kwargs["components"]
+    assert rows[0].components[0].label == "What do you need help with today?"
+
+
+async def test_topic_modal_staff_picking_self_opens_ordinary_ticket(
+    tmp_path, monkeypatch
+):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _modal_interaction(custom_id=f"{TOPIC_MODAL_ID}:{USER_ID}")
+    interaction.member.role_ids = [hikari.Snowflake(STAFF_ROLE_ID)]
+    interaction.app.cache.get_member = MagicMock(
+        side_effect=lambda guild_id, user_id: (
+            interaction.member if user_id == USER_ID else MagicMock(role_ids=[])
+        )
+    )
+
+    await handle_topic_modal(interaction)
+
+    st = tickets_state.load(int(GUILD_ID))
+    assert [t.user_id for t in st.open_tickets] == [int(USER_ID)]
+    post = next(
+        c
+        for c in interaction.app.rest.create_message.await_args_list
+        if c.kwargs.get("channel") == NEW_CHANNEL_ID
+    )
+    assert "needs help with" in post.kwargs["content"]
+
+
+async def test_topic_modal_on_behalf_fetches_uncached_target(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _on_behalf_interaction()
+    target = interaction.app.cache.get_member(GUILD_ID, TARGET_ID)
+    interaction.app.cache.get_member = MagicMock(
+        side_effect=lambda guild_id, user_id: (
+            None if user_id == TARGET_ID else MagicMock(role_ids=[])
+        )
+    )
+    interaction.app.rest.fetch_member = AsyncMock(return_value=target)
+
+    await handle_topic_modal(interaction)
+
+    interaction.app.rest.fetch_member.assert_awaited_once_with(
+        int(GUILD_ID), int(TARGET_ID)
+    )
+    st = tickets_state.load(int(GUILD_ID))
+    assert [t.user_id for t in st.open_tickets] == [int(TARGET_ID)]
+
+
+async def test_topic_modal_on_behalf_target_left_reports_it(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _on_behalf_interaction()
+    interaction.app.cache.get_member = MagicMock(
+        side_effect=lambda guild_id, user_id: (
+            None if user_id == TARGET_ID else MagicMock(role_ids=[])
+        )
+    )
+    interaction.app.rest.fetch_member = AsyncMock(
+        side_effect=hikari.NotFoundError(
+            url="", headers={}, raw_body="", message="Unknown Member"
+        )
+    )
+
+    await handle_topic_modal(interaction)
+
+    interaction.app.rest.create_guild_text_channel.assert_not_awaited()
+    assert (
+        "can't find" in interaction.edit_initial_response.await_args.kwargs["content"]
+    )
