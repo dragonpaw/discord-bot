@@ -5,11 +5,13 @@ from typing import TYPE_CHECKING
 from dragonpaw_bot.colors import SOLARIZED_ORANGE
 from dragonpaw_bot.plugins.tickets import state as tickets_state
 from dragonpaw_bot.plugins.tickets.commands import (
+    TICKET_FOR_SELECT_ID,
     TICKET_OPEN_ID,
     handle_ticket_add_person,
     handle_ticket_add_person_select,
     handle_ticket_close,
     handle_ticket_close_confirm,
+    handle_ticket_for_select,
     handle_ticket_open_button,
     handle_topic_modal,
 )
@@ -24,10 +26,11 @@ INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     "ticket_add_person_select": handle_ticket_add_person_select,
     "ticket_add_person": handle_ticket_add_person,
     TICKET_OPEN_ID: handle_ticket_open_button,
+    TICKET_FOR_SELECT_ID: handle_ticket_for_select,
 }
 
 MODAL_HANDLERS: dict[str, ModalHandler] = {
-    "ticket_topic_modal": handle_topic_modal,
+    "ticket_topic_modal": handle_topic_modal,  # prefix match — may carry target user_id
 }
 
 

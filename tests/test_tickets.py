@@ -5,12 +5,16 @@ import hikari
 
 from dragonpaw_bot.plugins.tickets import state as tickets_state
 from dragonpaw_bot.plugins.tickets.commands import (
+    TICKET_FOR_SELECT_ID,
     TOPIC_INPUT_ID,
+    TOPIC_MODAL_ID,
     _find_open_ticket,
     _sanitize_channel_name,
     _ticket_block_reason,
     handle_ticket_add_person_select,
     handle_ticket_close_confirm,
+    handle_ticket_for_select,
+    handle_ticket_open_button,
     handle_topic_modal,
 )
 from dragonpaw_bot.plugins.tickets.models import OpenTicket, TicketGuildState
@@ -317,13 +321,18 @@ def _modal_bot(*, admin: bool = True, calls: list[str] | None = None) -> MagicMo
 
 
 def _modal_interaction(
-    *, topic: str | None = "broken roles", calls: list[str] | None = None
+    *,
+    topic: str | None = "broken roles",
+    calls: list[str] | None = None,
+    custom_id: str = TOPIC_MODAL_ID,
 ) -> MagicMock:
     record = calls if calls is not None else []
     interaction = MagicMock()
     interaction.app = _modal_bot(calls=record)
     interaction.guild_id = GUILD_ID
+    interaction.custom_id = custom_id
     interaction.member = _member()
+    interaction.member.id = USER_ID
     interaction.user.id = USER_ID
 
     component = MagicMock()
@@ -628,3 +637,170 @@ async def test_close_confirm_untracked_channel_still_deletes(tmp_path, monkeypat
         if c.kwargs.get("channel") == LOG_CHANNEL_ID
     ]
     assert "someone" in logged[0].kwargs["content"]
+
+
+async def test_topic_modal_ping_allows_only_owner_and_staff_role(tmp_path, monkeypatch):
+    """hikari suppresses pings unless allowed, and the topic must not ping anyone else."""
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _modal_interaction()
+
+    await handle_topic_modal(interaction)
+
+    post = next(
+        c
+        for c in interaction.app.rest.create_message.await_args_list
+        if c.kwargs.get("channel") == NEW_CHANNEL_ID
+    )
+    assert post.kwargs["user_mentions"] == [USER_ID]
+    assert post.kwargs["role_mentions"] == [STAFF_ROLE_ID]
+
+
+# ---------------------------------------------------------------------------- #
+#                        Staff opening on someone's behalf                      #
+# ---------------------------------------------------------------------------- #
+
+TARGET_ID = hikari.Snowflake(4242)
+
+
+def _button_interaction(*, role_ids: list[int]) -> MagicMock:
+    interaction = MagicMock()
+    interaction.guild_id = GUILD_ID
+    interaction.member = _member(role_ids=role_ids)
+    interaction.user.id = USER_ID
+    interaction.create_initial_response = AsyncMock()
+    interaction.create_modal_response = AsyncMock()
+    return interaction
+
+
+async def test_open_button_staff_gets_member_picker(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _button_interaction(role_ids=[STAFF_ROLE_ID])
+
+    await handle_ticket_open_button(interaction)
+
+    interaction.create_modal_response.assert_not_awaited()
+    interaction.app.rest.build_message_action_row.return_value.add_select_menu.assert_called_once_with(
+        hikari.ComponentType.USER_SELECT_MENU,
+        TICKET_FOR_SELECT_ID,
+        placeholder="Pick a member (or yourself)",
+    )
+    assert (
+        interaction.create_initial_response.await_args.kwargs["flags"]
+        == hikari.MessageFlag.EPHEMERAL
+    )
+
+
+async def test_open_button_member_gets_modal(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
+    )
+    interaction = _button_interaction(role_ids=[])
+
+    await handle_ticket_open_button(interaction)
+
+    interaction.create_initial_response.assert_not_awaited()
+    assert (
+        interaction.create_modal_response.await_args.kwargs["custom_id"]
+        == TOPIC_MODAL_ID
+    )
+
+
+def _for_select_interaction(target_id: hikari.Snowflake) -> MagicMock:
+    interaction = MagicMock()
+    interaction.guild_id = GUILD_ID
+    interaction.user.id = USER_ID
+    interaction.values = [str(target_id)]
+    interaction.create_initial_response = AsyncMock()
+    interaction.create_modal_response = AsyncMock()
+    return interaction
+
+
+async def test_for_select_shows_modal_carrying_target(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
+    interaction = _for_select_interaction(TARGET_ID)
+
+    await handle_ticket_for_select(interaction)
+
+    assert (
+        interaction.create_modal_response.await_args.kwargs["custom_id"]
+        == f"{TOPIC_MODAL_ID}:{TARGET_ID}"
+    )
+
+
+async def test_for_select_target_with_open_ticket_points_at_it(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(
+            guild_id=int(GUILD_ID),
+            open_tickets=[
+                OpenTicket(user_id=int(TARGET_ID), channel_id=20, topic="halp")
+            ],
+        )
+    )
+    interaction = _for_select_interaction(TARGET_ID)
+
+    await handle_ticket_for_select(interaction)
+
+    interaction.create_modal_response.assert_not_awaited()
+    assert "<#20>" in interaction.create_initial_response.await_args.kwargs["content"]
+
+
+def _on_behalf_interaction() -> MagicMock:
+    interaction = _modal_interaction(custom_id=f"{TOPIC_MODAL_ID}:{TARGET_ID}")
+    interaction.member = _member(role_ids=[STAFF_ROLE_ID], display_name="Staffy")
+    interaction.member.id = USER_ID
+    target = _member(display_name="Bob")
+    target.id = TARGET_ID
+    interaction.app.cache.get_member = MagicMock(
+        side_effect=lambda guild_id, user_id: (
+            target if user_id == TARGET_ID else MagicMock(role_ids=[])
+        )
+    )
+    return interaction
+
+
+async def test_topic_modal_on_behalf_opens_ticket_for_target(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(
+        TicketGuildState(
+            guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID, required_role_id=700
+        )
+    )
+    interaction = _on_behalf_interaction()
+
+    await handle_topic_modal(interaction)
+
+    kwargs = interaction.app.rest.create_guild_text_channel.await_args.kwargs
+    assert kwargs["name"] == "help-bob"
+    st = tickets_state.load(int(GUILD_ID))
+    assert [t.user_id for t in st.open_tickets] == [int(TARGET_ID)]
+
+    post = next(
+        c
+        for c in interaction.app.rest.create_message.await_args_list
+        if c.kwargs.get("channel") == NEW_CHANNEL_ID
+    )
+    assert f"<@{TARGET_ID}>" in post.kwargs["content"]
+    assert "Staffy" in post.kwargs["content"]
+    assert post.kwargs["user_mentions"] == [TARGET_ID]
+
+
+async def test_topic_modal_on_behalf_journals_against_target(tmp_path, monkeypatch):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
+    interaction = _on_behalf_interaction()
+    recorded = MagicMock()
+    monkeypatch.setattr("dragonpaw_bot.journal.record", recorded)
+
+    await handle_topic_modal(interaction)
+
+    assert recorded.call_args.kwargs["user_id"] == int(TARGET_ID)
+    assert "Staffy" in recorded.call_args.kwargs["summary"]

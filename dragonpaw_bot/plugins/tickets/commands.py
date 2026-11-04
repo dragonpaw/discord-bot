@@ -29,6 +29,7 @@ TOPIC_MODAL_ID = "ticket_topic_modal"
 TOPIC_INPUT_ID = "ticket_topic_input"
 TOPIC_MODAL_TITLE = "*flaps wings* What's the snack? 🐉"
 TICKET_OPEN_ID = "ticket_open"
+TICKET_FOR_SELECT_ID = "ticket_for_select"
 
 TICKET_CREATE_PERMS: dict[hikari.Permissions, str] = {
     hikari.Permissions.MANAGE_CHANNELS: "Manage Channels",
@@ -92,12 +93,20 @@ def _ticket_block_reason(
     return None
 
 
-def _topic_modal_rows() -> list[hikari.impl.ModalActionRowBuilder]:
+def _topic_modal_rows(
+    *, on_behalf: bool = False
+) -> list[hikari.impl.ModalActionRowBuilder]:
+    if on_behalf:
+        label = "What do they need help with?"
+        placeholder = "They'll see this in the ticket, so be kind~ 🐾"
+    else:
+        label = "What do you need help with today?"
+        placeholder = "Tell me what's going on and I'll chomp right on it~ 🐾"
     topic_row = hikari.impl.ModalActionRowBuilder()
     topic_row.add_text_input(
         TOPIC_INPUT_ID,
-        "What do you need help with today?",
-        placeholder="Tell me what's going on and I'll chomp right on it~ 🐾",
+        label,
+        placeholder=placeholder,
         required=True,
         min_length=1,
         max_length=200,
@@ -139,6 +148,24 @@ async def handle_ticket_open_button(interaction: hikari.ComponentInteraction) ->
 
     st = tickets_state.load(int(interaction.guild_id))
 
+    if (
+        st.staff_role_id
+        and hikari.Snowflake(st.staff_role_id) in interaction.member.role_ids
+    ):
+        select_row = interaction.app.rest.build_message_action_row()
+        select_row.add_select_menu(
+            hikari.ComponentType.USER_SELECT_MENU,
+            TICKET_FOR_SELECT_ID,
+            placeholder="Pick a member (or yourself)",
+        )
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content="*perks up ears* Who should I dig this den out for? 🐉",
+            flags=hikari.MessageFlag.EPHEMERAL,
+            component=select_row,
+        )
+        return
+
     reason = _ticket_block_reason(st, interaction.member, interaction.user.id)
     if reason:
         logger.info("Ticket open button denied")
@@ -154,6 +181,50 @@ async def handle_ticket_open_button(interaction: hikari.ComponentInteraction) ->
         custom_id=TOPIC_MODAL_ID,
         components=_topic_modal_rows(),
     )
+
+
+async def handle_ticket_for_select(interaction: hikari.ComponentInteraction) -> None:
+    """Staff picked who the ticket is for — show the topic modal for them.
+
+    The required-role gate is skipped on purpose: staff opening a ticket for a
+    member who hasn't got that role yet is a main reason this path exists.
+    """
+    if not interaction.guild_id or not interaction.values:
+        return
+
+    st = tickets_state.load(int(interaction.guild_id))
+    target_id = hikari.Snowflake(interaction.values[0])
+
+    existing = _find_open_ticket(st, target_id)
+    if existing:
+        logger.info("Ticket for member denied — already has one")
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_CREATE,
+            content=(
+                f"*happy tail wag* <@{target_id}> already has a ticket open over in "
+                f"<#{existing.channel_id}>! 🐾"
+            ),
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+        return
+
+    await interaction.create_modal_response(
+        title=TOPIC_MODAL_TITLE,
+        custom_id=f"{TOPIC_MODAL_ID}:{target_id}",
+        components=_topic_modal_rows(on_behalf=target_id != interaction.user.id),
+    )
+
+
+async def _ticket_owner(
+    bot: DragonpawBot, guild_id: hikari.Snowflake, custom_id: str
+) -> hikari.Member | None:
+    """The member a staff-opened modal is for, or None when the opener is the owner."""
+    target_id = custom_id.removeprefix(f"{TOPIC_MODAL_ID}:")
+    if target_id == custom_id:
+        return None
+    return bot.cache.get_member(
+        guild_id, int(target_id)
+    ) or await bot.rest.fetch_member(guild_id, int(target_id))
 
 
 async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
@@ -185,11 +256,16 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         flags=hikari.MessageFlag.EPHEMERAL,
     )
 
+    opener = interaction.member
+    owner = await _ticket_owner(bot, interaction.guild_id, interaction.custom_id)
+    owner = owner or opener
+    on_behalf = owner.id != opener.id
+
     # Race guard: check again after defer
-    existing = _find_open_ticket(st, interaction.user.id)
+    existing = _find_open_ticket(st, owner.id)
     if existing:
         await interaction.edit_initial_response(
-            content=f"*happy tail wag* Looks like your ticket just got opened: <#{existing.channel_id}>! 🐾"
+            content=f"*happy tail wag* Looks like that ticket just got opened: <#{existing.channel_id}>! 🐾"
         )
         return
 
@@ -203,7 +279,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
             missing=missing,
         )
         await gc.log(
-            f"🤯 *snorts smoke* I tried to open a ticket for **{interaction.member.display_name}** "
+            f"🤯 *snorts smoke* I tried to open a ticket for **{owner.display_name}** "
             f"but I'm missing {missing_str} in {scope}! Please check my permissions there. 🐉"
         )
         await interaction.edit_initial_response(
@@ -211,12 +287,12 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         )
         return
 
-    channel_name = _sanitize_channel_name(interaction.member.display_name)
+    channel_name = _sanitize_channel_name(owner.display_name)
 
     try:
         channel = await gc.create_private_channel(
             channel_name,
-            user_ids=[interaction.user.id],
+            user_ids=[owner.id],
             extra_roles=[st.staff_role_id] if st.staff_role_id else [],
             category_id=st.category_id,
         )
@@ -230,7 +306,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
     st = tickets_state.load(int(interaction.guild_id))
     st.open_tickets.append(
         OpenTicket(
-            user_id=int(interaction.user.id),
+            user_id=int(owner.id),
             channel_id=int(channel.id),
             topic=topic,
         )
@@ -247,28 +323,58 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         hikari.ButtonStyle.SECONDARY, "ticket_add_person", label="Add Person 👤"
     )
 
-    await bot.rest.create_message(
-        channel=channel.id,
-        content=(
+    if on_behalf:
+        welcome = (
+            f"*flaps wings excitedly* Hi <@{owner.id}>! **{opener.display_name}** "
+            f"dug out this cozy little den so you can talk with the staff team. 🎫\n\n"
+            f"{staff_ping}\n\n"
+            f"Topic: **{topic}**"
+        )
+        reply = f"*happy tail wag* I've opened a ticket for **{owner.display_name}**: <#{channel.id}> 🐉"
+        log_line = (
+            f"🎫 *happy flap* **{opener.display_name}** asked me to open a cozy little "
+            f'ticket for **{owner.display_name}** about: "{topic}" 🐾'
+        )
+        summary = (
+            f"Ticket opened for them by {journal.escape_markdown(opener.display_name)}: "
+            f'"{journal.escape_markdown(topic)}"'
+        )
+    else:
+        welcome = (
             f"*flaps wings excitedly* A new ticket has landed! 🎫\n\n"
             f"{staff_ping}\n\n"
-            f"**{interaction.member.display_name}** needs help with: **{topic}**"
-        ),
+            f"**{owner.display_name}** needs help with: **{topic}**"
+        )
+        reply = f"*happy tail wag* I've opened a cozy little ticket channel for you: <#{channel.id}> — hop on in! 🐉"
+        log_line = (
+            f"🎫 *happy flap* I just opened a cozy little ticket for "
+            f'**{owner.display_name}**! They need help with: "{topic}" 🐾'
+        )
+        summary = f'Opened a ticket: "{journal.escape_markdown(topic)}"'
+
+    await bot.rest.create_message(
+        channel=channel.id,
+        content=welcome,
         components=[buttons_row],
+        # Explicit allow-lists: hikari suppresses pings by default, and the
+        # member-written topic must not be able to ping anyone else.
+        user_mentions=[owner.id],
+        role_mentions=[st.staff_role_id] if st.staff_role_id else False,
     )
 
-    await interaction.edit_initial_response(
-        content=f"*happy tail wag* I've opened a cozy little ticket channel for you: <#{channel.id}> — hop on in! 🐉"
-    )
+    await interaction.edit_initial_response(content=reply)
 
-    gc.logger.info("Opened ticket", channel=channel_name, topic=topic)
+    gc.logger.info(
+        "Opened ticket",
+        channel=channel_name,
+        topic=topic,
+        owner=owner.display_name,
+    )
     await gc.log(
-        f"🎫 *happy flap* I just opened a cozy little ticket for "
-        f"**{interaction.member.display_name}**! "
-        f'They need help with: "{topic}" 🐾',
+        log_line,
         journal_kind="ticket_opened",
-        journal_user=interaction.member,
-        journal_summary=f'Opened a ticket: "{journal.escape_markdown(topic)}"',
+        journal_user=owner,
+        journal_summary=summary,
     )
 
 

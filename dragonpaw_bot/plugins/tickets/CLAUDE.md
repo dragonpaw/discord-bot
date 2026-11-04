@@ -12,6 +12,10 @@ Declared as `BUTTON_ENTRY` in `__init__.py` (orange, 🆘 "Ask an Adultier Adult
 
 The button and the slash command share `_ticket_block_reason()` (required-role gate + duplicate-ticket guard) and `_topic_modal_rows()`, then both show the same topic modal. Both read only the cached member payload: a modal can't follow a deferred response, so both are bound by Discord's 3-second deadline.
 
+**Staff opening on someone's behalf:** when the clicker holds `staff_role_id`, the button shows an ephemeral user picker (`ticket_for_select` → `handle_ticket_for_select`) instead of the modal. Picking a member shows the topic modal with custom_id `ticket_topic_modal:{user_id}` (prefix-routed), with wording reminding staff the member will see the topic. Picking themselves opens an ordinary ticket. The ticket belongs to the picked member — channel name, `OpenTicket.user_id`, duplicate guard, and journal entry all use them. The required-role gate is skipped (reaching unvalidated members is a main use), but the one-ticket-per-member guard still applies. The welcome message @-mentions the member and names the staff opener; the log line and journal summary name the staff opener too. The `/adultier-adult` slash command has no on-behalf path.
+
+The welcome message passes explicit `user_mentions`/`role_mentions` allow-lists: hikari suppresses pings by default, and the topic is free text that must not ping other roles.
+
 ### Configuration
 
 Managed via `/config tickets` (admin only: MANAGE_GUILD or ADMINISTRATOR):
@@ -24,9 +28,9 @@ State is persisted to `state/tickets_{guild_id}.yaml`.
 
 ### Ticket Lifecycle
 
-1. User runs `/adultier-adult` → modal appears → submits topic
+1. User runs `/adultier-adult` or clicks the card → modal appears → submits topic (staff clicking the card pick a member first)
 2. Bot creates `help-{username}` channel under configured category with `PRIVATE_CHANNEL_USER_PERMS` granted to the opener and the configured staff role
-3. Bot posts staff ping + topic + Close/Add Person buttons in channel
+3. Bot posts staff ping (plus a mention of the member, if staff opened it for them) + topic + Close/Add Person buttons in channel
 4. User receives ephemeral link to channel
 5. Anyone in channel clicks **Close Ticket 🔒** → confirmation → channel deleted, state cleaned up
 6. Anyone in channel clicks **Add Person 👤** → user select → selected user granted `PRIVATE_CHANNEL_USER_PERMS` (including `ATTACH_FILES`)
