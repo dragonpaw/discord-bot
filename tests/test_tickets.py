@@ -11,6 +11,7 @@ from dragonpaw_bot.plugins.tickets.commands import (
     _find_open_ticket,
     _sanitize_channel_name,
     _ticket_block_reason,
+    handle_ticket_add_person,
     handle_ticket_add_person_select,
     handle_ticket_close_confirm,
     handle_ticket_for_select,
@@ -689,6 +690,7 @@ async def test_open_button_staff_gets_member_picker(tmp_path, monkeypatch):
         hikari.ComponentType.USER_SELECT_MENU,
         TICKET_FOR_SELECT_ID,
         placeholder="Pick a member (or yourself)",
+        min_values=1,
     )
     assert (
         interaction.create_initial_response.await_args.kwargs["flags"]
@@ -995,3 +997,16 @@ async def test_open_button_uncached_guild_falls_back_to_role_check(
 
     interaction.create_initial_response.assert_not_awaited()
     interaction.create_modal_response.assert_awaited_once()
+
+
+async def test_add_person_picker_requires_one_selection():
+    interaction = MagicMock()
+    interaction.create_initial_response = AsyncMock()
+
+    await handle_ticket_add_person(interaction)
+
+    interaction.app.rest.build_message_action_row.return_value.add_select_menu.assert_called_once_with(
+        hikari.ComponentType.USER_SELECT_MENU,
+        "ticket_add_person_select",
+        min_values=1,
+    )

@@ -165,6 +165,7 @@ async def handle_ticket_open_button(interaction: hikari.ComponentInteraction) ->
             hikari.ComponentType.USER_SELECT_MENU,
             TICKET_FOR_SELECT_ID,
             placeholder="Pick a member (or yourself)",
+            min_values=1,
         )
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
@@ -487,6 +488,7 @@ async def handle_ticket_add_person(interaction: hikari.ComponentInteraction) -> 
     select_row.add_select_menu(
         hikari.ComponentType.USER_SELECT_MENU,
         "ticket_add_person_select",
+        min_values=1,
     )
     await interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
