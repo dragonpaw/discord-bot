@@ -11,6 +11,7 @@ import lightbulb
 import structlog
 
 from dragonpaw_bot.context import GuildContext
+from dragonpaw_bot.plugins.activity import purge
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     ACTIVITY_FLOOR,
@@ -91,6 +92,8 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
             )
         else:
             await _sync_lurker_role(gc, meta, members, now, int(guild.owner_id))
+        now_dt = datetime.datetime.fromtimestamp(now, tz=datetime.UTC)
+        await purge.purge_daily_step(gc, meta, members.values(), now_dt)
 
 
 async def _prune_state(
