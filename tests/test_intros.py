@@ -339,7 +339,7 @@ async def test_cleanup_deletes_departed_members_post():
     departed = _message(2, display_name="Gone")
     bot = _bot()
 
-    await _cleanup_messages(_gc(bot), [], [departed])
+    await _cleanup_messages(_gc(bot), _state(), [], [departed])
 
     departed.delete.assert_awaited_once()
     assert "Gone" in _logged(bot)[0]
@@ -352,7 +352,7 @@ async def test_cleanup_keeps_post_when_rest_confirms_member_present():
     bot = _bot()
     bot.rest.fetch_member = AsyncMock(return_value=_member(2))
 
-    await _cleanup_messages(_gc(bot), [], [msg])
+    await _cleanup_messages(_gc(bot), _state(), [], [msg])
 
     msg.delete.assert_not_awaited()
     bot.rest.create_message.assert_not_awaited()
@@ -362,7 +362,7 @@ async def test_cleanup_confirms_each_departed_author_only_once():
     first, second = _message(2), _message(2)
     bot = _bot()
 
-    await _cleanup_messages(_gc(bot), [], [first, second])
+    await _cleanup_messages(_gc(bot), _state(), [], [first, second])
 
     assert bot.rest.fetch_member.await_count == 1
     first.delete.assert_awaited_once()
@@ -375,7 +375,7 @@ async def test_cleanup_deletes_older_duplicate_keeps_newest():
     member = _member(2)
     bot = _bot(members=(member,))
 
-    await _cleanup_messages(_gc(bot), [member], [newest, oldest])
+    await _cleanup_messages(_gc(bot), _state(), [member], [newest, oldest])
 
     newest.delete.assert_not_awaited()
     oldest.delete.assert_awaited_once()
@@ -386,7 +386,7 @@ async def test_cleanup_skips_pinned_messages():
     pinned = _message(2, pinned=True)
     bot = _bot()
 
-    await _cleanup_messages(_gc(bot), [], [pinned])
+    await _cleanup_messages(_gc(bot), _state(), [], [pinned])
 
     pinned.delete.assert_not_awaited()
     bot.rest.create_message.assert_not_awaited()
@@ -397,7 +397,7 @@ async def test_cleanup_reports_nothing_when_delete_is_forbidden():
     departed.delete.side_effect = _forbidden()
     bot = _bot()
 
-    await _cleanup_messages(_gc(bot), [], [departed])
+    await _cleanup_messages(_gc(bot), _state(), [], [departed])
 
     bot.rest.create_message.assert_not_awaited()
 
@@ -552,3 +552,68 @@ def test_load_returns_unconfigured_state_when_no_file(tmp_path, monkeypatch):
     assert loaded.guild_id == 999
     assert loaded.channel_id is None
     assert loaded.missing_role_id is None
+
+
+async def test_cleanup_names_departed_member_by_remembered_alias():
+    departed = _message(2, display_name="discord_username")
+    st = _state(aliases={2: "Server Alias"})
+    bot = _bot()
+
+    await _cleanup_messages(_gc(bot), st, [], [departed])
+
+    assert "Server Alias" in _logged(bot)[0]
+    assert "discord_username" not in _logged(bot)[0]
+    assert 2 not in st.aliases
+
+
+async def test_cleanup_falls_back_to_username_without_alias():
+    departed = _message(2, display_name="discord_username")
+    bot = _bot()
+
+    await _cleanup_messages(_gc(bot), _state(), [], [departed])
+
+    assert "discord_username" in _logged(bot)[0]
+
+
+async def test_cleanup_remembers_present_authors_alias():
+    member = _member(2)
+    st = _state(aliases={2: "old nick"})
+    bot = _bot(members=(member,))
+
+    await _cleanup_messages(_gc(bot), st, [member], [_message(2)])
+
+    assert st.aliases == {2: "user2"}
+
+
+async def test_cleanup_keeps_alias_for_every_post_of_a_departed_member():
+    first, second = _message(2, display_name="u"), _message(2, display_name="u")
+    st = _state(aliases={2: "Server Alias"})
+    bot = _bot()
+
+    await _cleanup_messages(_gc(bot), st, [], [first, second])
+
+    assert _logged(bot)[0].count("Server Alias") == 2
+
+
+async def test_cleanup_keeps_alias_when_delete_fails():
+    departed = _message(2)
+    departed.delete.side_effect = _forbidden()
+    st = _state(aliases={2: "Server Alias"})
+
+    await _cleanup_messages(_gc(_bot()), st, [], [departed])
+
+    assert st.aliases == {2: "Server Alias"}
+
+
+async def test_daily_guild_persists_remembered_aliases(tmp_path, monkeypatch):
+    monkeypatch.setattr(intros_state.store, "state_dir", tmp_path)
+    intros_state.store.cache.clear()
+    intros_state.save(_state())
+    monkeypatch.setattr(intros_cron, "check_channel_perms", AsyncMock(return_value=[]))
+
+    poster = _member(2)
+    bot = _bot(members=(poster,), messages=(_message(2),))
+    await _daily_guild(bot, _guild())
+
+    intros_state.store.cache.clear()
+    assert intros_state.load(GUILD_ID).aliases == {2: "user2"}

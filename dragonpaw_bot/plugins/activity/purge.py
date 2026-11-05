@@ -257,8 +257,10 @@ async def handle_spare(interaction: hikari.ComponentInteraction) -> None:
     guild = interaction.get_guild()
     meta = activity_state.load_config(int(interaction.guild_id))
     member = interaction.member
-    staff_role_id = GuildContext.from_interaction(interaction).staff_role_id
-    if guild is None or not is_purge_staff(staff_role_id, member, int(guild.owner_id)):
+    gc = GuildContext.from_interaction(interaction)
+    if guild is None or not is_purge_staff(
+        gc.staff_role_id, member, int(guild.owner_id)
+    ):
         logger.warning("Lurker purge spare attempted by non-staff")
         await _reply(
             interaction,
@@ -299,6 +301,14 @@ async def handle_spare(interaction: hikari.ComponentInteraction) -> None:
     await interaction.create_initial_response(
         hikari.ResponseType.MESSAGE_UPDATE, embed=embed, components=components
     )
+    if spared:
+        names = ", ".join(
+            f"**{journal.escape_markdown(c.display_name)}**" for c in spared
+        )
+        await gc.log(
+            f"💝 *soft tail curl* **{staff}** spared {names} from the lurker purge"
+            " — they get to stay in the hoard! 🐾"
+        )
 
 
 GOODBYE_DM = (

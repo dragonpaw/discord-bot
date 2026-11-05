@@ -231,7 +231,10 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
     members = await guild_members(bot, guild.id)
     messages = [m async for m in bot.rest.fetch_messages(st.channel_id)]
 
-    await _cleanup_messages(gc, members, messages)
+    aliases_before = dict(st.aliases)
+    await _cleanup_messages(gc, st, members, messages)
+    if st.aliases != aliases_before:
+        intros_state.save(st)
 
     if st.missing_role_id is not None:
         posted_ids = {
@@ -244,48 +247,56 @@ async def _daily_guild(bot: DragonpawBot, guild: hikari.Guild) -> None:
 
 async def _cleanup_messages(
     gc: GuildContext,
+    st: IntrosGuildState,
     members: list[hikari.Member],
     messages: list[hikari.Message],
 ) -> None:
     """Delete intro posts from departed members and older duplicate posts.
 
     `messages` is newest-first, so the first occurrence per author is their keeper.
+    Records each present author's server alias in `st.aliases` so a later removal
+    can name them the way staff knew them; the caller saves `st`.
     """
-    member_ids = {int(m.id) for m in members}
+    # Cache misses are confirmed via REST once each: the member list can be
+    # incomplete mid-chunk, and we must never delete a present member's post.
+    known: dict[int, hikari.Member | None] = {int(m.id): m for m in members}
     removed_departed: list[str] = []
     removed_dupes: list[str] = []
     seen_authors: set[int] = set()
-    # Cache misses are confirmed via REST once each: the member list can be
-    # incomplete mid-chunk, and we must never delete a present member's post.
-    presence: dict[int, bool] = {}
+    gone_ids: set[int] = set()
 
     for message in messages:
         if message.is_pinned:
             continue
 
         author_id = int(message.author.id)
-        author_name = str(message.author.display_name or message.author.id)
+        if author_id not in known:
+            known[author_id] = await guild_member(gc.bot, gc.guild_id, author_id)
+        member = known[author_id]
 
-        present = author_id in member_ids
-        if not present:
-            if author_id not in presence:
-                presence[author_id] = (
-                    await guild_member(gc.bot, gc.guild_id, author_id) is not None
-                )
-            present = presence[author_id]
-
-        if not present:
+        if member is None:
+            author_name = st.aliases.get(author_id) or str(
+                message.author.display_name or message.author.id
+            )
             if await _try_delete(message, "intro message", gc.name):
+                gone_ids.add(author_id)
                 removed_departed.append(author_name)
                 logger.info(
                     "Removed departed member's intro", guild=gc.name, user=author_name
                 )
-        elif author_id in seen_authors:
+            continue
+
+        author_name = member.display_name
+        st.aliases[author_id] = author_name
+        if author_id in seen_authors:
             if await _try_delete(message, "duplicate intro", gc.name):
                 removed_dupes.append(author_name)
                 logger.info("Removed duplicate intro", guild=gc.name, user=author_name)
         else:
             seen_authors.add(author_id)
+
+    for author_id in gone_ids:
+        st.aliases.pop(author_id, None)
 
     if removed_departed:
         names = ", ".join(f"**{n}**" for n in removed_departed)

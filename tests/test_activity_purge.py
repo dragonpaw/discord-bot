@@ -397,11 +397,8 @@ STAFF_ROLE = 77
 def _spare_setup(monkeypatch, *, purge=None, roles=(STAFF_ROLE,), message_id=555):
     meta = ActivityGuildMeta(guild_id=1, purge=purge)
     monkeypatch.setattr(activity_state, "load_config", lambda _gid: meta)
-    monkeypatch.setattr(
-        purge_module.GuildContext,
-        "from_interaction",
-        lambda _i: SimpleNamespace(staff_role_id=STAFF_ROLE),
-    )
+    gc = SimpleNamespace(staff_role_id=STAFF_ROLE, log=AsyncMock())
+    monkeypatch.setattr(purge_module.GuildContext, "from_interaction", lambda _i: gc)
     monkeypatch.setattr(activity_state, "save_config", lambda _m: None)
     record = MagicMock()
     monkeypatch.setattr(journal, "record", record)
@@ -413,6 +410,7 @@ def _spare_setup(monkeypatch, *, purge=None, roles=(STAFF_ROLE,), message_id=555
         values=["1"],
         get_guild=lambda: SimpleNamespace(owner_id=OWNER),
         create_initial_response=AsyncMock(),
+        gc=gc,
     )
     return meta, interaction, record
 
@@ -913,3 +911,22 @@ async def test_lurker_config_summary_shows_shared_staff_role(monkeypatch, tmp_pa
     gc.staff_role_id = 77
     await _lurker_cmd().invoke(ctx)
     assert "<@&77>" in ctx.respond.await_args.args[0]
+
+
+async def test_spare_logs_to_log_channel(monkeypatch):
+    purge = _many(2)
+    purge.message_id = 555
+    _, interaction, _ = _spare_setup(monkeypatch, purge=purge)
+    await handle_spare(interaction)
+    message = interaction.gc.log.await_args.args[0]
+    assert message.startswith("💝")
+    assert "**Staffer**" in message
+    assert "**c1**" in message
+
+
+async def test_spare_of_already_spared_member_logs_nothing(monkeypatch):
+    purge = _many(2, spared=1)
+    purge.message_id = 555
+    _, interaction, _ = _spare_setup(monkeypatch, purge=purge)
+    await handle_spare(interaction)
+    interaction.gc.log.assert_not_awaited()
