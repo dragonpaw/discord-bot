@@ -286,6 +286,8 @@ async def on_message_create(event: hikari.GuildMessageCreateEvent) -> None:
                     f"their verification photos! Do these look legit?"
                 ),
                 components=[approve_row],
+                user_mentions=[member_entry.user_id],
+                role_mentions=[gc.staff_role_id] if gc.staff_role_id else False,
             )
         except hikari.HTTPError:
             logger.warning("Failed to post staff ping", channel_id=event.channel_id)
@@ -724,7 +726,7 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
         # the intros plugin owns the intros channel fact
         intros_ref = _channel_ref(intros_st.channel_id, "#introductions")
         events_ref = _channel_ref(st.events_channel_id, "#classes-and-events")
-        chat_ref = _channel_ref(general_channel_id, "#general-often-lewd")
+        chat_ref = f"<#{general_channel_id}>"
         try:
             await bot.rest.create_message(
                 channel=general_channel_id,

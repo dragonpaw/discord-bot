@@ -1363,7 +1363,6 @@ async def test_approve_modal_announcement_links_general_channel_for_chat(
         if c.kwargs.get("channel") == hikari.Snowflake(123)
     )
     assert "comments over in <#123>" in announcement.kwargs["content"]
-    assert "#general-often-lewd" not in announcement.kwargs["content"]
 
 
 async def test_approve_modal_unknown_channel_does_nothing(tmp_path, monkeypatch):
@@ -1554,6 +1553,40 @@ async def test_photo_counting_two_photos_pings_staff(tmp_path, monkeypatch):
     button_args = bot.rest.build_message_action_row.return_value.add_interactive_button
     button_args.assert_called_once()
     assert button_args.call_args.args[1] == f"{APPROVE_BUTTON_PREFIX}55"
+
+
+async def test_photo_ping_allows_only_member_and_staff_role(tmp_path, monkeypatch):
+    """hikari suppresses pings unless allowed, so the staff role must be allow-listed."""
+    _use_tmp_state(tmp_path, monkeypatch)
+    validation_state.save(_photos_state())
+
+    bot = _make_handler_bot()
+    event = _make_message_event(
+        bot, channel_id=55, author_id=42, media_types=("image/png", "image/jpeg")
+    )
+
+    await on_message_create(event)
+
+    ping_kwargs = bot.rest.create_message.call_args.kwargs
+    assert ping_kwargs["user_mentions"] == [42]
+    assert ping_kwargs["role_mentions"] == [400]
+
+
+async def test_photo_ping_without_staff_role_mentions_no_role(tmp_path, monkeypatch):
+    _use_tmp_state(tmp_path, monkeypatch)
+    validation_state.save(_photos_state())
+
+    bot = _make_handler_bot()
+    bot.state.return_value.staff_role_id = None
+    event = _make_message_event(
+        bot, channel_id=55, author_id=42, media_types=("image/png", "image/jpeg")
+    )
+
+    await on_message_create(event)
+
+    ping_kwargs = bot.rest.create_message.call_args.kwargs
+    assert "Hey staff!" in ping_kwargs["content"]
+    assert ping_kwargs["role_mentions"] is False
 
 
 async def test_photo_counting_accumulates_across_messages(tmp_path, monkeypatch):

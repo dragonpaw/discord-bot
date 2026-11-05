@@ -317,9 +317,9 @@ async def handle_boot(interaction: hikari.ComponentInteraction) -> None:
     meta = activity_state.load_config(int(interaction.guild_id))
     staff = interaction.member.display_name
     staff_md = journal.escape_markdown(staff)
-    staff_role_id = GuildContext.from_interaction(interaction).staff_role_id
+    gc = GuildContext.from_interaction(interaction)
     if guild is None or not is_purge_staff(
-        staff_role_id, interaction.member, int(guild.owner_id)
+        gc.staff_role_id, interaction.member, int(guild.owner_id)
     ):
         logger.warning("Lurker purge Boot attempted by non-staff")
         await _reply(
@@ -366,9 +366,7 @@ async def handle_boot(interaction: hikari.ComponentInteraction) -> None:
             outcome = await _boot_one(bot, meta, guild.name, c, staff)
             outcomes[outcome].append(journal.escape_markdown(c.display_name))
     logger.info("Lurker purge finished", **{k: len(v) for k, v in outcomes.items()})
-    await _log_boot_summary(
-        GuildContext.from_interaction(interaction), staff_md, outcomes
-    )
+    await _log_boot_summary(gc, staff_md, outcomes)
 
 
 async def _boot_one(

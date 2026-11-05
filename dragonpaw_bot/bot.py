@@ -16,9 +16,11 @@ import yaml
 import dragonpaw_bot.plugins as _plugins
 from dragonpaw_bot import buttons, structs
 from dragonpaw_bot.context import (
+    CHANNEL_POST_PERMS,
     GuildContext,
     NotAuthorized,
     actor_name,
+    check_channel_perms,
     guild_owner_only,
 )
 from dragonpaw_bot.logging import configure_logging
@@ -459,6 +461,16 @@ class ConfigCommon(
             object_id = getattr(state, f"{key}_id")
             shown = _common_mention(key, object_id) if object_id else "_not set_"
             lines.append(f"{label}: {shown}")
+        if self.staff_channel is not None:
+            missing = await check_channel_perms(
+                gc.bot, ctx.guild_id, self.staff_channel.id, CHANNEL_POST_PERMS
+            )
+            if missing:
+                lines.append(
+                    f"⚠️ *worried tail flick* I'm missing **{', '.join(missing)}**"
+                    f" in <#{self.staff_channel.id}>, so I can't post staff"
+                    " announcements there until that's fixed! 🐉"
+                )
         await ctx.respond("\n".join(lines), flags=hikari.MessageFlag.EPHEMERAL)
 
         if changes:

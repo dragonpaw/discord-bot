@@ -314,6 +314,7 @@ def _common_setup(monkeypatch, state: GuildState):
     monkeypatch.setattr(bot_module.GuildContext, "from_ctx", Mock(return_value=gc))
     update = Mock()
     monkeypatch.setattr(bot_module.bot, "state_update", update)
+    monkeypatch.setattr(bot_module, "check_channel_perms", AsyncMock(return_value=[]))
     ctx = Mock()
     ctx.guild_id = hikari.Snowflake(99)
     ctx.respond = AsyncMock()
@@ -330,6 +331,30 @@ async def test_config_common_sets_only_given_options(monkeypatch):
     assert state.log_channel_id == 1
     update.assert_called_once_with(state)
     gc.log.assert_awaited_once()
+
+
+async def test_config_common_warns_about_staff_channel_perms_but_saves(
+    monkeypatch,
+):
+    state = _sample_state()
+    ctx, _, update = _common_setup(monkeypatch, state)
+    check = AsyncMock(return_value=["Send Messages"])
+    monkeypatch.setattr(bot_module, "check_channel_perms", check)
+    await _common_cmd(staff_channel=_snowflake_obj(3)).invoke(ctx)
+    assert state.staff_channel_id == 3
+    update.assert_called_once_with(state)
+    assert check.await_args.args[2] == 3
+    assert "Send Messages" in ctx.respond.await_args.args[0]
+
+
+async def test_config_common_no_perm_check_without_staff_channel(monkeypatch):
+    state = _sample_state()
+    ctx, _, _ = _common_setup(monkeypatch, state)
+    check = AsyncMock(return_value=["Send Messages"])
+    monkeypatch.setattr(bot_module, "check_channel_perms", check)
+    await _common_cmd(log_channel=_snowflake_obj(1)).invoke(ctx)
+    check.assert_not_awaited()
+    assert "Send Messages" not in ctx.respond.await_args.args[0]
 
 
 async def test_config_common_sets_staff_role(monkeypatch):
