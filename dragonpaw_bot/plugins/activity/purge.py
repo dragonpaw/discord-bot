@@ -17,6 +17,7 @@ from dragonpaw_bot.plugins.activity.models import (
     LurkerPurge,
     PurgeCandidate,
     add_months,
+    is_newcomer,
 )
 from dragonpaw_bot.utils import guild_member
 
@@ -31,17 +32,24 @@ SPARE_ID = "activity_purge_spare"
 BOOT_ID = "activity_purge_boot"
 MAX_MENU_OPTIONS = 25
 MAX_DESCRIPTION = 4096
+MAX_MESSAGE = 2000
 
 PurgeAction = Literal["start", "remind", "final", "expire"]
+BootOutcome = Literal["kicked", "left", "failed"]
 
 
 def select_candidates(
-    members: Iterable[hikari.Member], lurker_role_id: int
+    members: Iterable[hikari.Member],
+    lurker_role_id: int,
+    now: datetime.datetime,
+    interval_months: int,
 ) -> list[PurgeCandidate]:
     candidates = [
         PurgeCandidate(user_id=m.id, display_name=m.display_name)
         for m in members
-        if not m.is_bot and lurker_role_id in m.role_ids
+        if not m.is_bot
+        and lurker_role_id in m.role_ids
+        and not is_newcomer(m.joined_at, now, interval_months)
     ]
     return sorted(candidates, key=lambda c: c.display_name.casefold())
 
@@ -86,10 +94,11 @@ def build_purge_post(
     else:
         days_left = grace_days - purge.day + 1
         title = f"🍽️ Lurker purge — {days_left} day(s) left to spare someone"
+    esc = journal.escape_markdown
     lines = [
-        f"~~{c.display_name}~~ — spared by {c.spared_by} 💜"
+        f"~~{esc(c.display_name)}~~ — spared by {esc(c.spared_by)} 💜"
         if c.spared_by
-        else c.display_name
+        else esc(c.display_name)
         for c in purge.candidates
     ]
     embed = hikari.Embed(title=title, description=_fit_lines(lines))
@@ -119,12 +128,11 @@ def build_purge_post(
 async def _strip_components(
     gc: GuildContext, meta: ActivityGuildMeta, purge: LurkerPurge
 ) -> None:
-    if purge.message_id is None or gc.log_channel_id is None:
+    channel_id = purge.channel_id or gc.log_channel_id
+    if purge.message_id is None or channel_id is None:
         return
     try:
-        await gc.bot.rest.edit_message(
-            gc.log_channel_id, purge.message_id, components=[]
-        )
+        await gc.bot.rest.edit_message(channel_id, purge.message_id, components=[])
     except hikari.NotFoundError:
         logger.debug("Old purge post already gone", guild=meta.guild_name)
 
@@ -139,6 +147,7 @@ async def _post(gc: GuildContext, meta: ActivityGuildMeta, purge: LurkerPurge) -
         gc.log_channel_id, embed=embed, components=components
     )
     purge.message_id = int(message.id)
+    purge.channel_id = gc.log_channel_id
 
 
 async def start_purge(
@@ -146,28 +155,31 @@ async def start_purge(
     meta: ActivityGuildMeta,
     members: Iterable[hikari.Member],
     now: datetime.datetime,
-) -> None:
-    meta.last_purge_started = now
-    candidates = select_candidates(members, meta.config.lurker_role_id or 0)
+) -> bool:
+    """Start a purge; False (nothing changed) when nobody is on the list."""
+    config = meta.config
+    candidates = select_candidates(
+        members, config.lurker_role_id or 0, now, config.purge_interval_months
+    )
     if not candidates:
-        await gc.log(
-            "🌟 *happy tail wag* It's purge time, but there are no lurkers to sweep"
-            " up — everyone's been lovely and active! 🐉"
-        )
-        return
+        logger.debug("No lurkers to purge yet", guild=meta.guild_name)
+        return False
+    meta.last_purge_started = now
     purge = LurkerPurge(started_at=now, candidates=candidates)
     meta.purge = purge
     logger.info("Lurker purge started", guild=meta.guild_name, count=len(candidates))
     await _post(gc, meta, purge)
+    return True
 
 
 async def cancel_purge(gc: GuildContext, meta: ActivityGuildMeta) -> None:
     purge = meta.purge
     if purge is None:
         return
-    await _strip_components(gc, meta, purge)
     meta.purge = None
+    activity_state.save_config(meta)
     logger.info("Lurker purge cancelled", guild=meta.guild_name)
+    await _strip_components(gc, meta, purge)
     await gc.log(
         "🕊️ *tucks my tail* I've called off the lurker purge — nobody is getting"
         " booted. 🐾"
@@ -183,7 +195,8 @@ async def purge_daily_step(
     action = next_action(meta, now)
     purge = meta.purge
     if action == "start":
-        await start_purge(gc, meta, members, now)
+        if not await start_purge(gc, meta, members, now):
+            return
     elif action in ("remind", "final") and purge is not None:
         if action == "remind":
             purge.day += 1
@@ -191,9 +204,10 @@ async def purge_daily_step(
             purge.boot_posted_at = now
         await _post(gc, meta, purge)
     elif action == "expire" and purge is not None:
-        await _strip_components(gc, meta, purge)
         meta.purge = None
+        activity_state.save_config(meta)
         logger.info("Lurker purge expired", guild=meta.guild_name)
+        await _strip_components(gc, meta, purge)
         await gc.log(
             "⌛ *yawns* Nobody pressed Boot, so this lurker purge has lapsed and"
             " nobody was kicked. I'll be back with the next one on schedule! 🐉"
@@ -251,13 +265,7 @@ async def handle_spare(interaction: hikari.ComponentInteraction) -> None:
         c.spared_by = member.display_name
     activity_state.save_config(meta)
     logger.info("Members spared from lurker purge", count=len(spared))
-
-    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
-    embed, components = build_purge_post(bot, purge, meta.config.purge_grace_days)
-    await interaction.create_initial_response(
-        hikari.ResponseType.MESSAGE_UPDATE, embed=embed, components=components
-    )
-
+    staff = journal.escape_markdown(member.display_name)
     for c in spared:
         journal.record(
             meta.guild_id,
@@ -265,8 +273,14 @@ async def handle_spare(interaction: hikari.ComponentInteraction) -> None:
             user_id=c.user_id,
             user_name=c.display_name,
             kind="lurker_spared",
-            summary=f"🛡️ Spared from the lurker purge by {member.display_name}",
+            summary=f"Spared from the lurker purge by {staff}",
         )
+
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    embed, components = build_purge_post(bot, purge, meta.config.purge_grace_days)
+    await interaction.create_initial_response(
+        hikari.ResponseType.MESSAGE_UPDATE, embed=embed, components=components
+    )
 
 
 GOODBYE_DM = (
@@ -284,6 +298,7 @@ async def handle_boot(interaction: hikari.ComponentInteraction) -> None:
     guild = interaction.get_guild()
     meta = activity_state.load_config(int(interaction.guild_id))
     staff = interaction.member.display_name
+    staff_md = journal.escape_markdown(staff)
     if guild is None or not is_purge_staff(
         meta, interaction.member, int(guild.owner_id)
     ):
@@ -295,7 +310,11 @@ async def handle_boot(interaction: hikari.ComponentInteraction) -> None:
         return
 
     purge = meta.purge
-    if purge is None or purge.boot_posted_at is None:
+    if (
+        purge is None
+        or purge.boot_posted_at is None
+        or interaction.message.id != purge.message_id
+    ):
         await _reply(
             interaction,
             "*tilts head* There's no final list waiting for a Boot right now —"
@@ -310,64 +329,113 @@ async def handle_boot(interaction: hikari.ComponentInteraction) -> None:
 
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
     embed, _ = build_purge_post(bot, purge, meta.config.purge_grace_days)
-    await interaction.create_initial_response(
-        hikari.ResponseType.MESSAGE_UPDATE,
-        f"👢 {staff} pressed Boot — booting…",
-        embed=embed,
-        components=[],
-    )
+    try:
+        await interaction.create_initial_response(
+            hikari.ResponseType.MESSAGE_UPDATE,
+            f"👢 {staff_md} pressed Boot — booting…",
+            embed=embed,
+            components=[],
+        )
+    except Exception:
+        meta.purge = purge
+        activity_state.save_config(meta)
+        raise
 
-    kicked: list[str] = []
-    left: list[str] = []
-    failed: list[str] = []
+    outcomes: dict[BootOutcome, list[str]] = {"kicked": [], "left": [], "failed": []}
     for c in purge.candidates:
-        if c.spared_by is not None:
-            continue
-        member = await guild_member(bot, meta.guild_id, c.user_id)
-        if member is None:
-            left.append(c.display_name)
-            continue
-        try:
-            await member.send(GOODBYE_DM.format(guild=guild.name))
-        except hikari.HTTPError as exc:
-            logger.warning(
-                "Could not DM lurker purge goodbye",
-                member=c.display_name,
-                error=str(exc),
-            )
-        try:
-            await bot.rest.kick_user(
-                meta.guild_id, c.user_id, reason=f"Lurker purge — booted by {staff}"
-            )
-        except hikari.HTTPError as exc:
-            logger.warning(
-                "Lurker purge kick failed", member=c.display_name, error=str(exc)
-            )
-            failed.append(c.display_name)
-            continue
-        kicked.append(c.display_name)
-        journal.record(
-            meta.guild_id,
-            meta.guild_name,
-            user_id=c.user_id,
-            user_name=c.display_name,
-            kind="lurker_kicked",
-            summary=f"Booted in the lurker purge by {staff}",
-        )
-    logger.info(
-        "Lurker purge finished", kicked=len(kicked), left=len(left), failed=len(failed)
+        if c.spared_by is None:
+            outcome = await _boot_one(bot, meta, guild.name, c, staff)
+            outcomes[outcome].append(journal.escape_markdown(c.display_name))
+    logger.info("Lurker purge finished", **{k: len(v) for k, v in outcomes.items()})
+    await _log_boot_summary(
+        GuildContext.from_interaction(interaction), staff_md, outcomes
     )
 
-    lines = [
-        f"💨 *happy crunch* {staff} pressed Boot and the lurker purge is all done! 🐉",
-        f"👢 Booted: {', '.join(kicked) or 'nobody'}",
-    ]
-    if left:
-        lines.append(f"🚪 Had already left: {', '.join(left)}")
-    if failed:
-        lines.append(
-            f"⚠️ I couldn't kick: {', '.join(failed)} — please check my **Kick"
-            " Members** permission and that my role sits above theirs, then kick"
-            " them by hand. 🐾"
+
+async def _boot_one(
+    bot: DragonpawBot,
+    meta: ActivityGuildMeta,
+    guild_name: str,
+    c: PurgeCandidate,
+    staff: str,
+) -> BootOutcome:
+    try:
+        member = await guild_member(bot, meta.guild_id, c.user_id)
+    except hikari.HTTPError as exc:
+        logger.warning(
+            "Lurker purge member lookup failed", member=c.display_name, error=str(exc)
         )
-    await GuildContext.from_interaction(interaction).log("\n".join(lines))
+        return "failed"
+    if member is None:
+        return "left"
+    try:
+        await member.send(GOODBYE_DM.format(guild=guild_name))
+    except hikari.HTTPError as exc:
+        logger.warning(
+            "Could not DM lurker purge goodbye", member=c.display_name, error=str(exc)
+        )
+    try:
+        await bot.rest.kick_user(
+            meta.guild_id, c.user_id, reason=f"Lurker purge — booted by {staff}"
+        )
+    except hikari.NotFoundError:
+        return "left"
+    except hikari.HTTPError as exc:
+        logger.warning(
+            "Lurker purge kick failed", member=c.display_name, error=str(exc)
+        )
+        return "failed"
+    journal.record(
+        meta.guild_id,
+        meta.guild_name,
+        user_id=c.user_id,
+        user_name=c.display_name,
+        kind="lurker_kicked",
+        summary=f"Booted in the lurker purge by {journal.escape_markdown(staff)}",
+    )
+    return "kicked"
+
+
+async def _log_boot_summary(
+    gc: GuildContext, staff_md: str, outcomes: dict[BootOutcome, list[str]]
+) -> None:
+    sections: list[tuple[str, list[str]]] = []
+    if outcomes["failed"]:
+        sections += [
+            ("⚠️ I couldn't kick:", outcomes["failed"]),
+            (
+                "🔧 Please check my **Kick Members** permission and that my role"
+                " sits above theirs, then kick them by hand. 🐾",
+                [],
+            ),
+        ]
+    sections.append(("👢 Booted:", outcomes["kicked"] or ["nobody"]))
+    if outcomes["left"]:
+        sections.append(("🚪 Had already left:", outcomes["left"]))
+    header = (
+        f"💨 *happy crunch* {staff_md} pressed Boot and the lurker purge is all"
+        " done! 🐉"
+    )
+    for message in _summary_messages(header, sections):
+        await gc.log(message)
+
+
+def _summary_messages(header: str, sections: list[tuple[str, list[str]]]) -> list[str]:
+    """Pack labelled name lists into messages under Discord's length cap.
+
+    A name is never split; a list that overflows carries on in a new message
+    that repeats its label.
+    """
+    messages = [header]
+
+    def add(text: str, sep: str, restart: str) -> None:
+        if len(messages[-1]) + len(sep) + len(text) > MAX_MESSAGE:
+            messages.append(restart + text)
+        else:
+            messages[-1] += sep + text
+
+    for label, names in sections:
+        add(label, "\n", "")
+        for i, name in enumerate(names):
+            add(name, ", " if i else " ", f"{label} ")
+    return messages

@@ -87,8 +87,9 @@ A direct subcommand of `/config` (registered in `bot.py` as `activity_config.Lur
 | `frequency`  | int, 1-12   | Months between purges (default 4). Also the newcomer window.       |
 | `grace`      | int, 1-14   | Days staff have to spare members (default 5).                      |
 | `staff_role` | role        | Role allowed to spare and Boot, in addition to the guild owner.    |
+| `clear_role` | boolean     | Forget the lurker role; also turns purges off (cancelling any run). |
 
-Only the options given are changed. Enabling is **refused** (old value kept, a friendly note says why) if there is no lurker role (counting one set in the same call) or no log channel (`/config channels log`). If the bot lacks `KICK_MEMBERS` the command still saves but warns. Turning purges on starts a purge immediately; turning them off while one is running cancels it. Changes are logged with ⚙️.
+Only the options given are changed. Enabling is **refused** (old value kept, a friendly note says why) if there is no lurker role (counting one set in the same call) or no log channel (`/config channels log`). If the bot lacks `KICK_MEMBERS` the command still saves but warns. The config is saved before any purge is started. Turning purges on starts a purge immediately; if nobody is on the list the response says so and the next daily check tries again. Turning them off (with `enabled:false` or `clear_role:true`) while one is running cancels it. Changes are logged with ⚙️.
 
 ### Lurker purges
 
@@ -101,19 +102,19 @@ An opt-in, staff-supervised sweep of everyone who holds the lurker role. Nobody 
 - Running, grace over, Boot not yet posted -> `final`: sets `boot_posted_at` and reposts with the Boot button.
 - Boot posted `PURGE_BOOT_EXPIRY_DAYS = 14` days ago, unpressed -> `expire`: components stripped, purge cleared, nobody kicked, a log line says so.
 
-`start_purge` stamps `last_purge_started`, freezes the candidate list and posts it; with no lurkers it just logs a cheerful "nobody to sweep up". Enabling via `/config lurker` calls it right away.
+`start_purge` stamps `last_purge_started`, freezes the candidate list, posts it and returns `True`. With no candidates it changes nothing — no post, no `last_purge_started`, no purge — and returns `False`, so the next daily cron simply tries again after a fresh lurker sync. Enabling via `/config lurker` calls it right away.
 
-**The list is frozen at start.** Candidates are the non-bot members holding the lurker role at that moment (`select_candidates`, sorted by display name). Later lurkers are never added, and activity never removes anyone — a spared or newly active member stays on the list until staff act. `LurkerPurge.candidates` holds `PurgeCandidate(user_id, display_name, spared_by)`.
+**The list is frozen at start.** Candidates are the non-bot members holding the lurker role at that moment who are not newcomers (`select_candidates(members, role_id, now, interval_months)`, sorted by display name; the same `models.is_newcomer` rule as the lurker sync, so a member who still holds a stale lurker role after joining recently is left off). Later lurkers are never added, and activity never removes anyone — a spared or newly active member stays on the list until staff act. `LurkerPurge.candidates` holds `PurgeCandidate(user_id, display_name, spared_by)`.
 
-**The post.** One embed in the staff log channel (`build_purge_post`) listing candidates, spared ones struck through with "spared by X". Description is capped at 4096 chars with an "...and N more" tail. A select menu (`activity_purge_spare`, max 25 options of the not-yet-spared) lets staff spare members; after the final step a danger **Boot** button (`activity_purge_boot`) appears. Each repost first strips the components from the previous message (`message_id` is tracked). If no log channel is configured the post is skipped with a warning.
+**The post.** One embed in the staff log channel (`build_purge_post`) listing candidates, spared ones struck through with "spared by X". Description is capped at 4096 chars with an "...and N more" tail. A select menu (`activity_purge_spare`, max 25 options of the not-yet-spared) lets staff spare members; after the final step a danger **Boot** button (`activity_purge_boot`) appears. Each repost first strips the components from the previous message (`message_id` and `channel_id` are tracked, so the strip reaches the old post even if the log channel has since changed; a `None` `channel_id` falls back to the current log channel). Member and staff display names are passed through `journal.escape_markdown` wherever they land in Discord-rendered text (embed lines, the booting line, summaries, journal summaries) — but not in select-menu labels or the kick audit reason, which don't render markdown. If no log channel is configured the post is skipped with a warning.
 
 **Staff.** `is_purge_staff`: the guild owner, or a member with `purge_staff_role_id`. Anyone else clicking gets an in-voice refusal. Both handlers also reject clicks on a stale message (not the current `message_id`).
 
-**Spare** (`handle_spare`): marks the chosen candidates `spared_by` the clicker's display name, saves, and updates the post in place. Spares are one-way — no un-spare and no reason prompt. Each spare writes a `lurker_spared` journal entry.
+**Spare** (`handle_spare`): marks the chosen candidates `spared_by` the clicker's display name, saves, writes a `lurker_spared` journal entry per spare (before responding, so a failed response can't lose the record), then updates the post in place. Spares are one-way — no un-spare and no reason prompt.
 
-**Boot** (`handle_boot`): claims the purge (`meta.purge = None`, saved) before any await so a second press is turned away, updates the post to "booting...", then for each unspared candidate: skip if they have left (REST 404), DM a gentle goodbye (failure is only warned), kick with reason `Lurker purge — booted by <staff>`. A failed kick is collected and reported, and the loop carries on. Each kick writes a `lurker_kicked` journal entry. A final summary (Booted / Had already left / couldn't kick, with a hint to check Kick Members and role hierarchy) goes to the log channel.
+**Boot** (`handle_boot`): claims the purge (`meta.purge = None`, saved) before any await so a second press is turned away, then updates the post to "booting...". If that response fails, the purge is restored and saved and the error re-raised — nobody is kicked. Then for each unspared candidate: count them as left if they're gone (REST 404 on lookup, or a 404 from the kick), DM a gentle goodbye (failure is only warned), kick with reason `Lurker purge — booted by <staff>`. Any other lookup or kick error is collected as failed and the loop carries on. Each kick writes a `lurker_kicked` journal entry. The summary goes to the log channel in order: header, couldn't kick (+ a 🔧 hint to check Kick Members and role hierarchy), Booted, Had already left. `_summary_messages` packs it into as many messages as needed, each ≤ 2000 chars, never splitting a name; a list that overflows repeats its label in the next message.
 
-**Cancel.** `cancel_purge` strips the components, clears the purge and logs; it does not save — the caller does (`/config lurker` saves after calling it).
+**Cancel and expire.** `cancel_purge` and the `expire` step clear the purge and save *before* awaiting anything, then strip the components and log — so a Boot click landing mid-await sees no purge.
 
 **Custom IDs** (registered in `INTERACTION_HANDLERS`): `activity_purge_spare` -> `handle_spare`, `activity_purge_boot` -> `handle_boot`.
 
@@ -140,7 +141,7 @@ The button always shows the clicker their own score, so it skips the viewer-role
   1. **Prune:** Per-user contribution-based bucket pruning (see above). Remove departed users.
   2. **Lurker sync:** For each non-bot, non-owner member with at least one role, decide whether they should be a lurker. The decision short-circuits in this order:
      - **Immune** (`has_ignored_role`) → never lurker. If they currently have it, remove it with reason `gained immunity`.
-     - **Newcomer** — joined within the last `purge_interval_months` (`joined_at > add_months(now, -interval)`) -> never lurker. If they currently have it, remove it with reason `still new`. This stops fresh joiners being tagged, and so purged, before they have had a fair chance to be active.
+     - **Newcomer** — joined within the last `purge_interval_months` (`models.is_newcomer`: `joined_at > add_months(now, -interval)`; an unknown `joined_at` counts as not new) -> never lurker. If they currently have it, remove it with reason `still new`. This stops fresh joiners being tagged, and so purged, before they have had a fair chance to be active.
      - **Activity** `score < ACTIVITY_FLOOR` → lurker with reason `no longer active`.
      - Otherwise → not a lurker; if they currently have it, remove it with reason `now active`.
 
@@ -153,7 +154,7 @@ The button always shows the clicker their own score, so it skips the viewer-role
 
 Split across two file types per guild:
 
-- **`state/activity_config_{guild_id}.yaml`** — `ActivityGuildMeta`: guild_id, guild_name, config (ActivityGuildConfig with role_configs, channel_configs, lurker_role_id/name, viewer_role_id/name, `purge_enabled` (default off), `purge_interval_months` (4), `purge_grace_days` (5), `purge_staff_role_id`), `purge` (`LurkerPurge | None`: `started_at`, `day`, `boot_posted_at`, `message_id`, `candidates`), `last_purge_started`
+- **`state/activity_config_{guild_id}.yaml`** — `ActivityGuildMeta`: guild_id, guild_name, config (ActivityGuildConfig with role_configs, channel_configs, lurker_role_id/name, viewer_role_id/name, `purge_enabled` (default off), `purge_interval_months` (4), `purge_grace_days` (5), `purge_staff_role_id`), `purge` (`LurkerPurge | None`: `started_at`, `day`, `boot_posted_at`, `message_id`, `channel_id`, `candidates`), `last_purge_started`
 - **`state/activity_user_{guild_id}_{user_id}.yaml`** — `UserActivity`: user_id, list of ContributionBuckets
 
 

@@ -40,6 +40,13 @@ def add_months(dt: datetime.datetime, months: int) -> datetime.datetime:
     return dt.replace(year=year, month=month, day=day)
 
 
+def is_newcomer(
+    joined_at: datetime.datetime | None, now: datetime.datetime, months: int
+) -> bool:
+    """Joined within the last `months`; an unknown join date counts as not new."""
+    return joined_at is not None and joined_at > add_months(now, -months)
+
+
 class ContributionBucket(pydantic.BaseModel):
     """Hourly aggregate of contributions of the same kind."""
 
@@ -101,6 +108,7 @@ class LurkerPurge(pydantic.BaseModel):
     day: int = 1
     boot_posted_at: datetime.datetime | None = None
     message_id: int | None = None
+    channel_id: int | None = None
     candidates: list[PurgeCandidate]
 
 

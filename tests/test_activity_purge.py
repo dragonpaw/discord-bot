@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import hikari
 import hikari.impl
+import pytest
 
 from dragonpaw_bot import journal
 from dragonpaw_bot.plugins.activity import config as activity_config
@@ -25,15 +26,29 @@ from dragonpaw_bot.plugins.activity.purge import (
     next_action,
     purge_daily_step,
     select_candidates,
+    start_purge,
 )
 
 NOW = datetime.datetime(2026, 11, 4, 12, 0, tzinfo=datetime.UTC)
 ROLE = 99
 
 
-def _member(name: str, *, roles: tuple[int, ...] = (ROLE,), bot: bool = False):
+OLD_JOIN = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+
+
+def _member(
+    name: str,
+    *,
+    roles: tuple[int, ...] = (ROLE,),
+    bot: bool = False,
+    joined_at: datetime.datetime | None = OLD_JOIN,
+):
     return SimpleNamespace(
-        id=hash(name) % 10_000, display_name=name, role_ids=roles, is_bot=bot
+        id=hash(name) % 10_000,
+        display_name=name,
+        role_ids=roles,
+        is_bot=bot,
+        joined_at=joined_at,
     )
 
 
@@ -58,9 +73,21 @@ def test_select_candidates_only_role_holders_sorted():
         _member("carol", roles=()),
         _member("robot", bot=True),
     ]
-    assert [c.display_name for c in select_candidates(members, ROLE)] == [
+    assert [c.display_name for c in select_candidates(members, ROLE, NOW, 4)] == [
         "Alice",
         "bob",
+    ]
+
+
+def test_select_candidates_skips_newcomers():
+    members = [
+        _member("fresh", joined_at=NOW - datetime.timedelta(days=30)),
+        _member("unknown", joined_at=None),
+        _member("old"),
+    ]
+    assert [c.display_name for c in select_candidates(members, ROLE, NOW, 4)] == [
+        "old",
+        "unknown",
     ]
 
 
@@ -147,6 +174,15 @@ def test_build_post_menu_lists_only_unspared():
     assert "~~c1~~ — spared by Staff 💜" in embed.description
 
 
+def test_build_post_escapes_names():
+    purge = _many(2, spared=1)
+    purge.candidates[0].spared_by = "*sneaky*"
+    purge.candidates[1].display_name = "__bold__"
+    embed, _ = build_purge_post(_bot(), purge, 5)
+    assert "spared by \\*sneaky\\*" in embed.description
+    assert "\\_\\_bold\\_\\_" in embed.description
+
+
 def test_build_post_menu_caps_at_25():
     _, components = build_purge_post(_bot(), _many(30), 5)
     _, values = _menu_options(components)
@@ -185,16 +221,33 @@ async def test_daily_step_start_posts_and_freezes_list(monkeypatch):
     gc.bot.rest.create_message.assert_awaited_once()
 
 
-async def test_daily_step_start_with_no_lurkers_sets_anchor_only(monkeypatch):
+async def test_daily_step_start_with_no_lurkers_changes_nothing(monkeypatch):
     monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
     gc = _gc()
     meta = _meta()
     meta.config.lurker_role_id = ROLE
     await purge_daily_step(gc, meta, [_member("x", roles=())], NOW)
     assert meta.purge is None
-    assert meta.last_purge_started == NOW
-    gc.log.assert_awaited_once()
+    assert meta.last_purge_started is None
+    gc.log.assert_not_awaited()
     gc.bot.rest.create_message.assert_not_awaited()
+
+
+async def test_start_purge_reports_whether_it_started(monkeypatch):
+    gc = _gc()
+    meta = _meta()
+    meta.config.lurker_role_id = ROLE
+    assert await start_purge(gc, meta, [], NOW) is False
+    assert await start_purge(gc, meta, [_member("bob")], NOW) is True
+    assert meta.purge.channel_id == 7
+
+
+async def test_strip_uses_channel_purge_was_posted_in(monkeypatch):
+    monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
+    gc = _gc()
+    meta = _meta(purge=_purge(message_id=123, channel_id=42))
+    await purge_daily_step(gc, meta, [], NOW)
+    gc.bot.rest.edit_message.assert_awaited_once_with(42, 123, components=[])
 
 
 async def test_daily_step_remind_strips_previous_components(monkeypatch):
@@ -234,13 +287,41 @@ async def test_list_frozen_new_lurker_not_added(monkeypatch):
     assert [c.user_id for c in meta.purge.candidates] == [1]
 
 
-async def test_cancel_purge_clears_state():
+async def test_cancel_purge_clears_state(monkeypatch):
+    monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
     gc = _gc()
     meta = _meta(purge=_purge(message_id=123))
     await cancel_purge(gc, meta)
     assert meta.purge is None
     gc.bot.rest.edit_message.assert_awaited_once_with(7, 123, components=[])
     gc.log.assert_awaited_once()
+
+
+def _save_before_strip(monkeypatch, gc):
+    events = []
+    monkeypatch.setattr(
+        activity_state, "save_config", lambda meta: events.append(("save", meta.purge))
+    )
+    gc.bot.rest.edit_message = AsyncMock(
+        side_effect=lambda *a, **k: events.append(("strip", None))
+    )
+    return events
+
+
+async def test_cancel_purge_saves_cleared_state_before_awaiting(monkeypatch):
+    gc = _gc()
+    events = _save_before_strip(monkeypatch, gc)
+    await cancel_purge(gc, _meta(purge=_purge(message_id=123)))
+    assert events[:2] == [("save", None), ("strip", None)]
+
+
+async def test_expire_saves_cleared_state_before_awaiting(monkeypatch):
+    gc = _gc()
+    events = _save_before_strip(monkeypatch, gc)
+    posted = NOW - datetime.timedelta(days=14)
+    meta = _meta(purge=_purge(day=5, boot_posted_at=posted, message_id=123))
+    await purge_daily_step(gc, meta, [], NOW)
+    assert events[:2] == [("save", None), ("strip", None)]
 
 
 def test_build_post_caps_description_at_4096():
@@ -338,7 +419,27 @@ async def test_spare_writes_journal_entry(monkeypatch):
     kwargs = record.call_args.kwargs
     assert kwargs["kind"] == "lurker_spared"
     assert kwargs["user_id"] == 1
-    assert "Staffer" in kwargs["summary"]
+    assert kwargs["summary"] == "Spared from the lurker purge by Staffer"
+
+
+async def test_spare_journals_before_responding(monkeypatch):
+    purge = _many(2)
+    purge.message_id = 555
+    _, interaction, record = _spare_setup(monkeypatch, purge=purge)
+    interaction.create_initial_response = AsyncMock(
+        side_effect=lambda *a, **k: record.assert_called_once()
+    )
+    await handle_spare(interaction)
+    interaction.create_initial_response.assert_awaited_once()
+
+
+async def test_spare_journal_escapes_staff_name(monkeypatch):
+    purge = _many(2)
+    purge.message_id = 555
+    _, interaction, record = _spare_setup(monkeypatch, purge=purge)
+    interaction.member.display_name = "**Boss**"
+    await handle_spare(interaction)
+    assert record.call_args.kwargs["summary"].endswith("by \\*\\*Boss\\*\\*")
 
 
 async def test_spare_allowed_on_boot_post(monkeypatch):
@@ -486,11 +587,89 @@ async def test_boot_kick_forbidden_continues_and_reports(monkeypatch):
     assert [c.kwargs["user_id"] for c in record.call_args_list] == [2]
     summary = gc.log.await_args.args[0]
     assert summary.startswith("💨")
-    kicked_part, failed_part = summary.split("couldn't")
+    failed_part, kicked_part = summary.split("Booted")
+    assert "c1" in failed_part
+    assert "Kick Members" in failed_part
+    assert "c2" not in failed_part
     assert "c2" in kicked_part
     assert "c1" not in kicked_part
-    assert "c1" in failed_part
-    assert "Kick Members" in summary
+
+
+async def test_boot_kick_404_counts_as_left(monkeypatch):
+    _, interaction, record, gc, _ = _boot_setup(monkeypatch, purge=_boot_purge(1))
+    interaction.app.rest.kick_user = AsyncMock(
+        side_effect=hikari.NotFoundError("u", {}, b"")
+    )
+    await handle_boot(interaction)
+    record.assert_not_called()
+    summary = gc.log.await_args.args[0]
+    assert "couldn't" not in summary
+    assert "c1" in summary.split("left")[1]
+
+
+async def test_boot_member_lookup_error_is_failed_and_continues(monkeypatch):
+    _, interaction, record, gc, calls = _boot_setup(monkeypatch, purge=_boot_purge())
+    real_lookup = purge_module.guild_member
+
+    async def guild_member(bot, guild_id, user_id):
+        if user_id == 1:
+            raise hikari.InternalServerError("u", {}, b"", 500)
+        return await real_lookup(bot, guild_id, user_id)
+
+    monkeypatch.setattr(purge_module, "guild_member", guild_member)
+    await handle_boot(interaction)
+    assert calls == [("dm", 2), ("kick", 2)]
+    assert [c.kwargs["user_id"] for c in record.call_args_list] == [2]
+    summary = gc.log.await_args.args[0]
+    assert "c1" in summary.split("couldn't")[1].split("Booted")[0]
+
+
+async def test_boot_rejected_on_old_message(monkeypatch):
+    purge = _boot_purge()
+    purge.message_id = 556
+    meta, interaction, _, _, calls = _boot_setup(monkeypatch, purge=purge)
+    await handle_boot(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_CREATE
+    assert meta.purge is purge
+    assert calls == []
+
+
+async def test_boot_response_failure_restores_purge(monkeypatch):
+    purge = _boot_purge()
+    meta, interaction, _, _, calls = _boot_setup(monkeypatch, purge=purge)
+    saved = []
+    monkeypatch.setattr(activity_state, "save_config", lambda m: saved.append(m.purge))
+    interaction.create_initial_response = AsyncMock(
+        side_effect=hikari.NotFoundError("u", {}, b"")
+    )
+    with pytest.raises(hikari.NotFoundError):
+        await handle_boot(interaction)
+    assert meta.purge is purge
+    assert saved == [None, purge]
+    assert calls == []
+
+
+async def test_boot_summary_split_under_2000_chars(monkeypatch):
+    purge = _boot_purge(200)
+    for c in purge.candidates:
+        c.display_name = f"{c.user_id:03d}" + "x" * 29
+    departed = tuple(range(1, 41))
+    _, interaction, _, gc, _ = _boot_setup(monkeypatch, purge=purge, departed=departed)
+
+    async def kick_user(_guild_id, user_id, *, reason):
+        if user_id > 160:
+            raise hikari.ForbiddenError("u", {}, b"")
+
+    interaction.app.rest.kick_user = AsyncMock(side_effect=kick_user)
+    await handle_boot(interaction)
+    messages = [c.args[0] for c in gc.log.await_args_list]
+    assert len(messages) > 1
+    assert all(len(m) <= 2000 for m in messages)
+    assert messages[0].startswith("💨")
+    text = "\n".join(messages)
+    for c in purge.candidates:
+        assert c.display_name in text
+    assert text.index("couldn't") < text.index("Booted") < text.index("left")
 
 
 async def test_boot_journal_and_audit_reason(monkeypatch):
@@ -504,9 +683,27 @@ async def test_boot_journal_and_audit_reason(monkeypatch):
     assert kwargs["summary"] == "Booted in the lurker purge by Staffer"
 
 
+async def test_boot_escapes_names_in_rendered_text(monkeypatch):
+    purge = _boot_purge(1)
+    purge.candidates[0].display_name = "*c1*"
+    _, interaction, record, gc, _ = _boot_setup(monkeypatch, purge=purge)
+    interaction.member.display_name = "_Staffer_"
+    await handle_boot(interaction)
+    reason = interaction.app.rest.kick_user.await_args.kwargs["reason"]
+    assert reason == "Lurker purge — booted by _Staffer_"
+    assert record.call_args.kwargs["summary"].endswith("by \\_Staffer\\_")
+    content = interaction.create_initial_response.await_args.args[1]
+    assert "\\_Staffer\\_" in content
+    summary = gc.log.await_args.args[0]
+    assert "\\_Staffer\\_" in summary
+    assert "\\*c1\\*" in summary
+
+
 def _lurker_cmd(**options):
     cmd = activity_config.LurkerConfig()
-    values = dict.fromkeys(("role", "enabled", "frequency", "grace", "staff_role"))
+    values = dict.fromkeys(
+        ("role", "enabled", "frequency", "grace", "staff_role", "clear_role")
+    )
     values.update(options)
     for name, value in values.items():
         setattr(cmd, name, value)
@@ -536,7 +733,7 @@ def _lurker_setup(monkeypatch, tmp_path, *, log_channel=555, **config):
         activity_config, "check_guild_perms", AsyncMock(return_value=[])
     )
     monkeypatch.setattr(activity_config, "guild_members", AsyncMock(return_value=[]))
-    start = AsyncMock()
+    start = AsyncMock(return_value=True)
     cancel = AsyncMock()
     monkeypatch.setattr(activity_config, "start_purge", start)
     monkeypatch.setattr(activity_config, "cancel_purge", cancel)
@@ -616,4 +813,38 @@ async def test_lurker_config_partial_update_keeps_other_fields(monkeypatch, tmp_
     assert config.purge_grace_days == 7
     assert config.purge_interval_months == 6
     assert config.purge_staff_role_id == 77
+    start.assert_not_awaited()
+
+
+async def test_lurker_config_enable_with_no_lurkers_says_so(monkeypatch, tmp_path):
+    ctx, _, start, _ = _lurker_setup(monkeypatch, tmp_path, lurker_role_id=ROLE)
+    start.return_value = False
+    await _lurker_cmd(enabled=True).invoke(ctx)
+    assert activity_state.load_config(1).config.purge_enabled
+    assert "next daily check" in ctx.respond.await_args.args[0]
+
+
+async def test_lurker_config_enable_with_lurkers_no_empty_note(monkeypatch, tmp_path):
+    ctx, _, _, _ = _lurker_setup(monkeypatch, tmp_path, lurker_role_id=ROLE)
+    await _lurker_cmd(enabled=True).invoke(ctx)
+    assert "next daily check" not in ctx.respond.await_args.args[0]
+
+
+async def test_lurker_config_clear_role_turns_purges_off(monkeypatch, tmp_path):
+    ctx, _, start, cancel = _lurker_setup(
+        monkeypatch,
+        tmp_path,
+        lurker_role_id=ROLE,
+        lurker_role_name="Lurker",
+        purge_enabled=True,
+    )
+    meta = activity_state.load_config(1)
+    meta.purge = _purge()
+    activity_state.save_config(meta)
+    await _lurker_cmd(clear_role=True).invoke(ctx)
+    config = activity_state.load_config(1).config
+    assert config.lurker_role_id is None
+    assert config.lurker_role_name == ""
+    assert not config.purge_enabled
+    cancel.assert_awaited_once()
     start.assert_not_awaited()

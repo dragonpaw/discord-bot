@@ -279,29 +279,21 @@ class LurkerConfig(
     staff_role = lightbulb.role(
         "staff_role", "Role allowed to spare members and press Boot", default=None
     )
+    clear_role = lightbulb.boolean(
+        "clear_role", "Forget the lurker role (also turns purges off)", default=None
+    )
 
-    @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:
-        assert ctx.guild_id
-        gc = GuildContext.from_ctx(ctx)
-        meta = activity_state.load_config(int(ctx.guild_id))
-        meta.guild_name = gc.name
-        cfg = meta.config
-
-        options = (self.role, self.enabled, self.frequency, self.grace, self.staff_role)
-        if all(option is None for option in options):
-            await ctx.respond(_lurker_summary(meta), flags=hikari.MessageFlag.EPHEMERAL)
-            return
-
-        was_enabled = cfg.purge_enabled
+    async def _apply_fields(
+        self, gc: GuildContext, guild_id: hikari.Snowflake, cfg: ActivityGuildConfig
+    ) -> tuple[list[str], list[str]]:
+        """Apply the plain setting options; return (changes, notes)."""
         changes: list[str] = []
         notes: list[str] = []
-
         if self.role is not None:
             cfg.lurker_role_id = int(self.role.id)
             cfg.lurker_role_name = self.role.name
             changes.append(f"lurker role **{self.role.name}**")
-            warning = await check_role_manageable(gc.bot, ctx.guild_id, self.role)
+            warning = await check_role_manageable(gc.bot, guild_id, self.role)
             if warning:
                 notes.append(f"⚠️ {warning}")
         if self.frequency is not None:
@@ -313,17 +305,57 @@ class LurkerConfig(
         if self.staff_role is not None:
             cfg.purge_staff_role_id = int(self.staff_role.id)
             changes.append(f"purge staff role **{self.staff_role.name}**")
+        if self.clear_role:
+            cfg.lurker_role_id = None
+            cfg.lurker_role_name = ""
+            changes.append("lurker role **cleared**")
+        return changes, notes
 
-        if self.enabled is False and was_enabled:
+    @lightbulb.invoke
+    async def invoke(self, ctx: lightbulb.Context) -> None:
+        assert ctx.guild_id
+        gc = GuildContext.from_ctx(ctx)
+        meta = activity_state.load_config(int(ctx.guild_id))
+        meta.guild_name = gc.name
+        cfg = meta.config
+
+        options = (
+            self.role,
+            self.enabled,
+            self.frequency,
+            self.grace,
+            self.staff_role,
+            self.clear_role,
+        )
+        if all(option is None for option in options):
+            await ctx.respond(_lurker_summary(meta), flags=hikari.MessageFlag.EPHEMERAL)
+            return
+
+        was_enabled = cfg.purge_enabled
+        changes, notes = await self._apply_fields(gc, ctx.guild_id, cfg)
+
+        if (self.enabled is False or self.clear_role) and cfg.purge_enabled:
             cfg.purge_enabled = False
             changes.append("purges **off**")
-        elif self.enabled and not was_enabled:
+        elif self.enabled and not cfg.purge_enabled:
             problems = await _try_enable(gc, ctx.guild_id, cfg)
             notes.extend(problems)
             if cfg.purge_enabled:
                 changes.append("purges **on**")
 
         activity_state.save_config(meta)
+
+        if cfg.purge_enabled and not was_enabled:
+            members = await guild_members(gc.bot, ctx.guild_id)
+            now = datetime.datetime.now(tz=datetime.UTC)
+            if await start_purge(gc, meta, members, now):
+                activity_state.save_config(meta)
+            else:
+                notes.append(
+                    "🌟 *happy tail wag* Nobody is on the lurker list right now, so"
+                    " there's nothing to sweep up yet! I'll draw the list up at my"
+                    " next daily check. 🐾"
+                )
 
         saved = ", ".join(changes) if changes else "nothing changed"
         await ctx.respond(
@@ -337,13 +369,8 @@ class LurkerConfig(
                 f"⚙️ **{actor}** updated the lurker settings: {', '.join(changes)} 🐉"
             )
 
-        if cfg.purge_enabled and not was_enabled:
-            members = await guild_members(gc.bot, ctx.guild_id)
-            await start_purge(gc, meta, members, datetime.datetime.now(tz=datetime.UTC))
-            activity_state.save_config(meta)
-        elif was_enabled and not cfg.purge_enabled and meta.purge is not None:
+        if was_enabled and not cfg.purge_enabled:
             await cancel_purge(gc, meta)
-            activity_state.save_config(meta)
 
 
 async def _try_enable(

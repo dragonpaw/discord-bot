@@ -18,11 +18,11 @@ from dragonpaw_bot.plugins.activity.models import (
     BASE_HALF_LIFE,
     PRUNE_DAYS_MAX,
     ActivityGuildMeta,
-    add_months,
     best_role_config,
     bucket_is_negligible,
     calculate_score,
     has_ignored_role,
+    is_newcomer,
 )
 from dragonpaw_bot.utils import guild_member, guild_members
 
@@ -169,7 +169,7 @@ def _evaluate_lurker(
     role_ids: list[int],
     score: float,
     meta: ActivityGuildMeta,
-    joined_at: datetime.datetime,
+    joined_at: datetime.datetime | None,
     now: datetime.datetime,
 ) -> tuple[bool, str]:
     """Decide whether the member should hold the lurker role.
@@ -182,7 +182,7 @@ def _evaluate_lurker(
     """
     if has_ignored_role(role_ids, meta.config.role_configs):
         return False, "gained immunity"
-    if joined_at > add_months(now, -meta.config.purge_interval_months):
+    if is_newcomer(joined_at, now, meta.config.purge_interval_months):
         return False, "still new"
     if score < ACTIVITY_FLOOR:
         return True, "no longer active"
@@ -217,7 +217,6 @@ async def _sync_lurker_role(  # noqa: PLR0912
             buckets = []
         else:
             buckets = ua.buckets
-        assert member.joined_at
         score = calculate_score(
             buckets, best_role_config(role_ids, meta.config.role_configs), now=now
         )
