@@ -45,9 +45,11 @@ _EMPTY_NOTE = (
 )
 
 
-def available_entries(guild_id: int) -> list[structs.ButtonEntry]:
+def available_entries(
+    guild_id: int, core: structs.GuildState | None
+) -> list[structs.ButtonEntry]:
     """The entries whose plugins are configured for this guild."""
-    return [entry for entry in _ENTRIES if entry.is_available(guild_id)]
+    return [entry for entry in _ENTRIES if entry.is_available(guild_id, core)]
 
 
 def _build_embed(entry: structs.ButtonEntry) -> hikari.Embed:
@@ -100,7 +102,7 @@ async def post_buttons(gc: GuildContext) -> list[str]:
             "I can't tidy up or post my buttons there until that's sorted."
         ]
 
-    entries = available_entries(int(gc.guild_id))
+    entries = available_entries(int(gc.guild_id), state)
     gc.logger.info(
         "Posting button channel",
         channel=cc.channel_name,
@@ -263,7 +265,7 @@ class ButtonsStatus(
         for entry in _ENTRIES:
             mark = (
                 "✅ showing"
-                if entry.is_available(guild_id)
+                if entry.is_available(guild_id, state)
                 else "➖ hidden (not configured)"
             )
             lines.append(f"{mark} — **{entry.title}**")

@@ -150,7 +150,7 @@ async def _post(
     message = await gc.staff_post(
         embed=embed,
         components=components,
-        ping_role_id=meta.config.purge_staff_role_id if ping else None,
+        ping_role_id=gc.staff_role_id if ping else None,
     )
     if message is None:
         return
@@ -236,11 +236,10 @@ async def purge_daily_step(
 
 
 def is_purge_staff(
-    meta: ActivityGuildMeta, member: hikari.Member, owner_id: int
+    staff_role_id: int | None, member: hikari.Member, owner_id: int
 ) -> bool:
-    role_id = meta.config.purge_staff_role_id
     return member.id == owner_id or (
-        role_id is not None and hikari.Snowflake(role_id) in member.role_ids
+        staff_role_id is not None and staff_role_id in member.role_ids
     )
 
 
@@ -258,7 +257,8 @@ async def handle_spare(interaction: hikari.ComponentInteraction) -> None:
     guild = interaction.get_guild()
     meta = activity_state.load_config(int(interaction.guild_id))
     member = interaction.member
-    if guild is None or not is_purge_staff(meta, member, int(guild.owner_id)):
+    staff_role_id = GuildContext.from_interaction(interaction).staff_role_id
+    if guild is None or not is_purge_staff(staff_role_id, member, int(guild.owner_id)):
         logger.warning("Lurker purge spare attempted by non-staff")
         await _reply(
             interaction,
@@ -317,8 +317,9 @@ async def handle_boot(interaction: hikari.ComponentInteraction) -> None:
     meta = activity_state.load_config(int(interaction.guild_id))
     staff = interaction.member.display_name
     staff_md = journal.escape_markdown(staff)
+    staff_role_id = GuildContext.from_interaction(interaction).staff_role_id
     if guild is None or not is_purge_staff(
-        meta, interaction.member, int(guild.owner_id)
+        staff_role_id, interaction.member, int(guild.owner_id)
     ):
         logger.warning("Lurker purge Boot attempted by non-staff")
         await _reply(

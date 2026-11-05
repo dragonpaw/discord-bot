@@ -122,12 +122,10 @@ def test_created_at_is_timezone_aware(store):
     assert entry.created_at <= datetime.now(UTC)
 
 
-def test_staff_role_persists(store):
-    st = journal.load(1)
-    st.staff_role_id = 555
-    journal.save(st)
-    store.cache.clear()
-    assert journal.load(1).staff_role_id == 555
+def test_state_ignores_stale_staff_role_key():
+    """Old YAML files still carry staff_role_id; it moved to /config common."""
+    st = journal.JournalGuildState.model_validate({"guild_id": 1, "staff_role_id": 5})
+    assert not hasattr(st, "staff_role_id")
 
 
 def _ctx(role_ids=()):
@@ -139,7 +137,7 @@ def _ctx(role_ids=()):
 def test_staff_gate_blocks_when_no_role_configured():
     blocked = journal_commands.staff_blocked(_ctx([555]), None)
     assert blocked is not None
-    assert "config journal set" in blocked
+    assert "config common" in blocked
 
 
 def test_staff_gate_blocks_a_non_staff_member():
@@ -379,8 +377,9 @@ def test_oversized_newest_entry_still_shows_something():
     assert "yyyy" in text, "expected a truncated entry, not just the notice"
 
 
-def _member_update_event(guild_id, old_name, new_name):
+def _member_update_event(guild_id, old_name, new_name, *, staff_role_id=None):
     event = MagicMock()
+    event.app.state.return_value = MagicMock(staff_role_id=staff_role_id)
     event.guild_id = guild_id
     event.old_member = _NamedMember(old_name)
     event.member = MagicMock()
@@ -398,23 +397,26 @@ async def test_name_change_skipped_when_journal_unconfigured(store):
     assert journal.load(1).entries == []
 
 
-async def test_name_change_recorded_when_configured(store):
-    st = journal.load(1)
-    st.staff_role_id = 555
-    journal.save(st)
+async def test_name_change_skipped_without_core_state(store):
+    event = _member_update_event(1, "Old", "New")
+    event.app.state.return_value = None
+    await journal_listeners.on_member_update(event)
+    assert journal.load(1).entries == []
 
-    await journal_listeners.on_member_update(_member_update_event(1, "Old", "New"))
+
+async def test_name_change_recorded_when_configured(store):
+    await journal_listeners.on_member_update(
+        _member_update_event(1, "Old", "New", staff_role_id=555)
+    )
     entries = journal.entries_for(1, 7)
     assert [e.kind for e in entries] == ["name_change"]
     assert "Old" in entries[0].summary and "New" in entries[0].summary
 
 
 async def test_name_change_ignores_non_rename_updates(store):
-    st = journal.load(1)
-    st.staff_role_id = 555
-    journal.save(st)
-
-    await journal_listeners.on_member_update(_member_update_event(1, "Same", "Same"))
+    await journal_listeners.on_member_update(
+        _member_update_event(1, "Same", "Same", staff_role_id=555)
+    )
     assert journal.load(1).entries == []
 
 
@@ -442,12 +444,8 @@ def test_evidence_cannot_forge_attribution(store):
 
 
 async def test_name_change_summary_escapes_nickname(store):
-    st = journal.load(1)
-    st.staff_role_id = 555
-    journal.save(st)
-
     await journal_listeners.on_member_update(
-        _member_update_event(1, "Old", "Evil** *(by Admin)*")
+        _member_update_event(1, "Old", "Evil** *(by Admin)*", staff_role_id=555)
     )
     summary = journal.entries_for(1, 7)[0].summary
     assert "Evil** *(by Admin)*" not in summary

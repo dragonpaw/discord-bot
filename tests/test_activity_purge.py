@@ -152,6 +152,7 @@ def _gc():
     return SimpleNamespace(
         bot=bot,
         staff_channel_id=7,
+        staff_role_id=None,
         log=AsyncMock(),
         logger=MagicMock(),
         staff_post=AsyncMock(side_effect=staff_post),
@@ -285,12 +286,12 @@ def _ping(gc) -> int | None:
     return gc.staff_post.await_args.kwargs["ping_role_id"]
 
 
-async def test_start_pings_purge_staff_role(monkeypatch):
+async def test_start_pings_shared_staff_role(monkeypatch):
     monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
     gc = _gc()
     meta = _meta()
     meta.config.lurker_role_id = ROLE
-    meta.config.purge_staff_role_id = 77
+    gc.staff_role_id = 77
     await purge_daily_step(gc, meta, [_member("bob")], NOW)
     assert _ping(gc) == 77
 
@@ -299,16 +300,16 @@ async def test_reminder_does_not_ping(monkeypatch):
     monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
     gc = _gc()
     meta = _meta(purge=_purge(message_id=123))
-    meta.config.purge_staff_role_id = 77
+    gc.staff_role_id = 77
     await purge_daily_step(gc, meta, [], NOW)
     assert _ping(gc) is None
 
 
-async def test_final_pings_purge_staff_role(monkeypatch):
+async def test_final_pings_shared_staff_role(monkeypatch):
     monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
     gc = _gc()
     meta = _meta(purge=_purge(day=5, message_id=123))
-    meta.config.purge_staff_role_id = 77
+    gc.staff_role_id = 77
     await purge_daily_step(gc, meta, [], NOW)
     assert _ping(gc) == 77
 
@@ -394,12 +395,13 @@ STAFF_ROLE = 77
 
 
 def _spare_setup(monkeypatch, *, purge=None, roles=(STAFF_ROLE,), message_id=555):
-    meta = ActivityGuildMeta(
-        guild_id=1,
-        config=ActivityGuildConfig(purge_staff_role_id=STAFF_ROLE),
-        purge=purge,
-    )
+    meta = ActivityGuildMeta(guild_id=1, purge=purge)
     monkeypatch.setattr(activity_state, "load_config", lambda _gid: meta)
+    monkeypatch.setattr(
+        purge_module.GuildContext,
+        "from_interaction",
+        lambda _i: SimpleNamespace(staff_role_id=STAFF_ROLE),
+    )
     monkeypatch.setattr(activity_state, "save_config", lambda _m: None)
     record = MagicMock()
     monkeypatch.setattr(journal, "record", record)
@@ -537,7 +539,9 @@ def _boot_setup(monkeypatch, *, purge, roles=(STAFF_ROLE,), departed=(), calls=N
         return SimpleNamespace(id=user_id, send=AsyncMock(side_effect=send))
 
     monkeypatch.setattr(purge_module, "guild_member", guild_member)
-    gc = SimpleNamespace(staff_post=AsyncMock(), logger=MagicMock())
+    gc = SimpleNamespace(
+        staff_post=AsyncMock(), logger=MagicMock(), staff_role_id=STAFF_ROLE
+    )
     monkeypatch.setattr(purge_module.GuildContext, "from_interaction", lambda _i: gc)
     return meta, interaction, record, gc, calls
 
@@ -756,9 +760,7 @@ async def test_boot_escapes_names_in_rendered_text(monkeypatch):
 
 def _lurker_cmd(**options):
     cmd = activity_config.LurkerConfig()
-    values = dict.fromkeys(
-        ("role", "enabled", "frequency", "grace", "staff_role", "clear_role")
-    )
+    values = dict.fromkeys(("role", "enabled", "frequency", "grace", "clear_role"))
     values.update(options)
     for name, value in values.items():
         setattr(cmd, name, value)
@@ -777,6 +779,7 @@ def _lurker_setup(monkeypatch, tmp_path, *, staff_channel=555, **config):
     gc.name = "Guild"
     gc.log = AsyncMock()
     gc.staff_channel_id = staff_channel
+    gc.staff_role_id = None
     gc.bot = MagicMock()
     monkeypatch.setattr(
         activity_config.GuildContext, "from_ctx", MagicMock(return_value=gc)
@@ -863,13 +866,11 @@ async def test_lurker_config_partial_update_keeps_other_fields(monkeypatch, tmp_
         tmp_path,
         purge_enabled=True,
         purge_interval_months=6,
-        purge_staff_role_id=77,
     )
     await _lurker_cmd(grace=7).invoke(ctx)
     config = activity_state.load_config(1).config
     assert config.purge_grace_days == 7
     assert config.purge_interval_months == 6
-    assert config.purge_staff_role_id == 77
     start.assert_not_awaited()
 
 
@@ -905,3 +906,10 @@ async def test_lurker_config_clear_role_turns_purges_off(monkeypatch, tmp_path):
     assert not config.purge_enabled
     cancel.assert_awaited_once()
     start.assert_not_awaited()
+
+
+async def test_lurker_config_summary_shows_shared_staff_role(monkeypatch, tmp_path):
+    ctx, gc, _, _ = _lurker_setup(monkeypatch, tmp_path)
+    gc.staff_role_id = 77
+    await _lurker_cmd().invoke(ctx)
+    assert "<@&77>" in ctx.respond.await_args.args[0]

@@ -276,9 +276,6 @@ class LurkerConfig(
         max_value=14,
         default=None,
     )
-    staff_role = lightbulb.role(
-        "staff_role", "Role allowed to spare members and press Boot", default=None
-    )
     clear_role = lightbulb.boolean(
         "clear_role", "Forget the lurker role (also turns purges off)", default=None
     )
@@ -302,9 +299,6 @@ class LurkerConfig(
         if self.grace is not None:
             cfg.purge_grace_days = self.grace
             changes.append(f"**{self.grace}** day(s) to spare")
-        if self.staff_role is not None:
-            cfg.purge_staff_role_id = int(self.staff_role.id)
-            changes.append(f"purge staff role **{self.staff_role.name}**")
         if self.clear_role:
             cfg.lurker_role_id = None
             cfg.lurker_role_name = ""
@@ -324,11 +318,13 @@ class LurkerConfig(
             self.enabled,
             self.frequency,
             self.grace,
-            self.staff_role,
             self.clear_role,
         )
         if all(option is None for option in options):
-            await ctx.respond(_lurker_summary(meta), flags=hikari.MessageFlag.EPHEMERAL)
+            await ctx.respond(
+                _lurker_summary(meta, gc.staff_role_id),
+                flags=hikari.MessageFlag.EPHEMERAL,
+            )
             return
 
         was_enabled = cfg.purge_enabled
@@ -385,7 +381,7 @@ async def _try_enable(
     if not gc.staff_channel_id:
         return [
             "🐉 I can't start purging yet — I post the list in the staff"
-            " channel and I don't have one! Set it with `/config channels staff:`"
+            " channel and I don't have one! Set it with `/config common staff_channel:`"
             " first. 🐾"
         ]
     cfg.purge_enabled = True
@@ -400,19 +396,17 @@ async def _try_enable(
     return []
 
 
-def _lurker_summary(meta: ActivityGuildMeta) -> str:
+def _lurker_summary(meta: ActivityGuildMeta, staff_role_id: int | None) -> str:
     cfg = meta.config
     role = f"<@&{cfg.lurker_role_id}>" if cfg.lurker_role_id else "_not set_"
-    staff = (
-        f"<@&{cfg.purge_staff_role_id}>" if cfg.purge_staff_role_id else "_owner only_"
-    )
+    staff = f"<@&{staff_role_id}>" if staff_role_id else "_owner only_"
     lines = [
         "🐉 **Lurker settings**",
         f"Lurker role: {role}",
         f"Purges: **{'on' if cfg.purge_enabled else 'off'}**,"
         f" every {cfg.purge_interval_months} month(s),"
         f" {cfg.purge_grace_days} day(s) to spare",
-        f"Purge staff role: {staff}",
+        f"Staff role (from `/config common`): {staff}",
     ]
     purge = meta.purge
     if purge is not None:

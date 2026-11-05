@@ -48,11 +48,6 @@ class ValidationSetup(
         "Role assigned to members when they are approved",
         default=None,
     )
-    staff_role = lightbulb.role(
-        "staff_role",
-        "Staff role added to validate channels and pinged on photo submission",
-        default=None,
-    )
     about_channel = lightbulb.channel(
         "about_channel",
         "Channel linked in the welcome message for server info",
@@ -71,15 +66,9 @@ class ValidationSetup(
         default=None,
         channel_types=[hikari.ChannelType.GUILD_TEXT],
     )
-    chat_channel = lightbulb.channel(
-        "chat_channel",
-        "Channel linked in the welcome message for general chat",
-        default=None,
-        channel_types=[hikari.ChannelType.GUILD_TEXT],
-    )
 
     @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912, PLR0915
+    async def invoke(self, ctx: lightbulb.Context) -> None:  # noqa: PLR0912
         if not ctx.guild_id:
             return
         gc = GuildContext.from_ctx(ctx)
@@ -92,16 +81,12 @@ class ValidationSetup(
             st.validate_category_id = int(self.validate_category.id)
         if self.member_role is not None:
             st.member_role_id = int(self.member_role.id)
-        if self.staff_role is not None:
-            st.staff_role_id = int(self.staff_role.id)
         if self.about_channel is not None:
             st.about_channel_id = int(self.about_channel.id)
         if self.roles_channel is not None:
             st.roles_channel_id = int(self.roles_channel.id)
         if self.events_channel is not None:
             st.events_channel_id = int(self.events_channel.id)
-        if self.chat_channel is not None:
-            st.chat_channel_id = int(self.chat_channel.id)
 
         validation_state.save(st)
         gc.logger.info(
@@ -111,7 +96,6 @@ class ValidationSetup(
             if self.validate_category
             else None,
             member_role=self.member_role.name if self.member_role else None,
-            staff_role=self.staff_role.name if self.staff_role else None,
         )
 
         parts = []
@@ -121,16 +105,12 @@ class ValidationSetup(
             parts.append(f"validate category: {self.validate_category.name}")
         if self.member_role:
             parts.append(f"member role: <@&{self.member_role.id}>")
-        if self.staff_role:
-            parts.append(f"staff role: <@&{self.staff_role.id}>")
         if self.about_channel:
             parts.append(f"about: <#{self.about_channel.id}>")
         if self.roles_channel:
             parts.append(f"roles: <#{self.roles_channel.id}>")
         if self.events_channel:
             parts.append(f"events: <#{self.events_channel.id}>")
-        if self.chat_channel:
-            parts.append(f"chat: <#{self.chat_channel.id}>")
 
         summary = ", ".join(parts) if parts else "no changes"
         warnings: list[str] = []
@@ -188,6 +168,7 @@ class ValidationStatus(
         if not ctx.guild_id:
             return
         st = validation_state.load(int(ctx.guild_id))
+        staff_role_id = GuildContext.from_ctx(ctx).staff_role_id
 
         awaiting_rules = sum(
             1 for m in st.members if m.stage == ValidationStage.AWAITING_RULES
@@ -222,7 +203,8 @@ class ValidationStatus(
             f"• Member role: {f'<@&{st.member_role_id}>' if st.member_role_id else 'not set'}"
         )
         lines.append(
-            f"• Staff role: {f'<@&{st.staff_role_id}>' if st.staff_role_id else 'not set'}"
+            f"• Staff role: {f'<@&{staff_role_id}>' if staff_role_id else 'not set'}"
+            " (set with `/config common`)"
         )
         lines.append(
             f"• Validation timeout: {MAX_VALIDATION_DAYS} days from join, "
@@ -236,9 +218,6 @@ class ValidationStatus(
         )
         lines.append(
             f"• Events channel: {f'<#{st.events_channel_id}>' if st.events_channel_id else 'not set'}"
-        )
-        lines.append(
-            f"• Chat channel: {f'<#{st.chat_channel_id}>' if st.chat_channel_id else 'not set'}"
         )
         lines.append(f"• Awaiting rules: {awaiting_rules}")
         lines.append(f"• Awaiting photos: {awaiting_photos}")

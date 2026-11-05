@@ -35,9 +35,6 @@ class TicketsSet(
         default=None,
         channel_types=[hikari.ChannelType.GUILD_CATEGORY],
     )
-    staff_role = lightbulb.role(
-        "staff_role", "Role to ping and grant access to tickets", default=None
-    )
     required_role = lightbulb.role(
         "required_role", "Role a user must have to open a ticket", default=None
     )
@@ -52,8 +49,6 @@ class TicketsSet(
 
         if self.category is not None:
             st.category_id = int(self.category.id)
-        if self.staff_role is not None:
-            st.staff_role_id = int(self.staff_role.id)
         if self.required_role is not None:
             st.required_role_id = int(self.required_role.id)
 
@@ -61,15 +56,12 @@ class TicketsSet(
         gc.logger.info(
             "Configured tickets",
             category=self.category.name if self.category else None,
-            staff_role=self.staff_role.name if self.staff_role else None,
             required_role=self.required_role.name if self.required_role else None,
         )
 
         parts = []
         if self.category:
             parts.append(f"category: {self.category.name}")
-        if self.staff_role:
-            parts.append(f"staff role: <@&{self.staff_role.id}>")
         if self.required_role:
             parts.append(f"required role: <@&{self.required_role.id}>")
 
@@ -103,6 +95,7 @@ class TicketsStatus(
         if not ctx.guild_id:
             return
         st = tickets_state.load(int(ctx.guild_id))
+        staff_role_id = GuildContext.from_ctx(ctx).staff_role_id
 
         bot: hikari.GatewayBot = ctx.client.app  # type: ignore[assignment]
         category_ch = (
@@ -121,7 +114,8 @@ class TicketsStatus(
         lines = ["*peers around curiously* 🐉 Here's my ticket setup:"]
         lines.append(f"• Category: {category_display}")
         lines.append(
-            f"• Staff role: {f'<@&{st.staff_role_id}>' if st.staff_role_id else 'not set'}"
+            f"• Staff role: {f'<@&{staff_role_id}>' if staff_role_id else 'not set'}"
+            " (set with `/config common`)"
         )
         lines.append(
             f"• Required role: {f'<@&{st.required_role_id}>' if st.required_role_id else 'not set (anyone can open)'}"
@@ -145,7 +139,6 @@ class TicketsClear(
         st = tickets_state.load(int(ctx.guild_id))
 
         st.category_id = None
-        st.staff_role_id = None
         st.required_role_id = None
         tickets_state.save(st)
 

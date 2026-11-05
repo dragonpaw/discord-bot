@@ -14,6 +14,7 @@ from dragonpaw_bot.plugins.birthdays.constants import (
 from dragonpaw_bot.structs import ButtonEntry, ButtonSpec
 
 if TYPE_CHECKING:
+    from dragonpaw_bot.structs import GuildState
     from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
@@ -26,7 +27,7 @@ MODAL_HANDLERS: dict[str, ModalHandler] = {
 }
 
 
-def _is_available(guild_id: int) -> bool:
+def _is_available(guild_id: int, _core: GuildState | None) -> bool:
     """Without an announcement channel there's nowhere to celebrate anyone."""
     return birthday_state.load(guild_id).config.announcement_channel is not None
 

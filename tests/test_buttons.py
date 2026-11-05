@@ -18,7 +18,6 @@ from dragonpaw_bot.plugins.birthdays.models import (
     BirthdayGuildState,
 )
 from dragonpaw_bot.plugins.subday.models import SubDayGuildState
-from dragonpaw_bot.plugins.tickets.models import TicketGuildState
 from dragonpaw_bot.structs import ButtonEntry, ButtonSpec, GuildState
 
 GUILD_ID = 424242
@@ -80,19 +79,31 @@ def _entry(key: str) -> ButtonEntry:
     return next(e for e in buttons._ENTRIES if e.key == key)
 
 
+def _core(staff_role_id: int | None = None) -> GuildState:
+    return GuildState(
+        id=hikari.Snowflake(GUILD_ID),
+        name="Test Guild",
+        config_url="",
+        config_last=datetime.datetime.now(tz=datetime.UTC),
+        staff_role_id=hikari.Snowflake(staff_role_id) if staff_role_id else None,
+    )
+
+
+def test_tickets_hidden_without_core_state(isolated_state):
+    assert _entry("tickets").is_available(GUILD_ID, None) is False
+
+
 def test_tickets_hidden_without_staff_role(isolated_state):
-    tickets_state.save(TicketGuildState(guild_id=GUILD_ID))
-    assert _entry("tickets").is_available(GUILD_ID) is False
+    assert _entry("tickets").is_available(GUILD_ID, _core()) is False
 
 
 def test_tickets_shown_with_staff_role(isolated_state):
-    tickets_state.save(TicketGuildState(guild_id=GUILD_ID, staff_role_id=77))
-    assert _entry("tickets").is_available(GUILD_ID) is True
+    assert _entry("tickets").is_available(GUILD_ID, _core(staff_role_id=77)) is True
 
 
 def test_birthdays_hidden_without_announcement_channel(isolated_state):
     birthday_state.save(BirthdayGuildState(guild_id=GUILD_ID))
-    assert _entry("birthdays").is_available(GUILD_ID) is False
+    assert _entry("birthdays").is_available(GUILD_ID, None) is False
 
 
 def test_birthdays_shown_with_announcement_channel(isolated_state):
@@ -102,37 +113,36 @@ def test_birthdays_shown_with_announcement_channel(isolated_state):
             config=BirthdayGuildConfig(announcement_channel="celebrations"),
         )
     )
-    assert _entry("birthdays").is_available(GUILD_ID) is True
+    assert _entry("birthdays").is_available(GUILD_ID, None) is True
 
 
 def test_subday_hidden_when_unconfigured(isolated_state):
-    assert _entry("subday").is_available(GUILD_ID) is False
+    assert _entry("subday").is_available(GUILD_ID, None) is False
 
 
 def test_subday_shown_once_state_exists(isolated_state):
     subday_state.save(SubDayGuildState(guild_id=GUILD_ID))
-    assert _entry("subday").is_available(GUILD_ID) is True
+    assert _entry("subday").is_available(GUILD_ID, None) is True
 
 
 def test_activity_hidden_when_unconfigured(isolated_state):
-    assert _entry("activity").is_available(GUILD_ID) is False
+    assert _entry("activity").is_available(GUILD_ID, None) is False
 
 
 def test_activity_shown_once_configured(isolated_state):
     activity_state.save_config(ActivityGuildMeta(guild_id=GUILD_ID))
-    assert _entry("activity").is_available(GUILD_ID) is True
+    assert _entry("activity").is_available(GUILD_ID, None) is True
 
 
 def test_available_entries_filters_and_preserves_order(isolated_state):
-    tickets_state.save(TicketGuildState(guild_id=GUILD_ID, staff_role_id=77))
     subday_state.save(SubDayGuildState(guild_id=GUILD_ID))
 
-    keys = [e.key for e in buttons.available_entries(GUILD_ID)]
+    keys = [e.key for e in buttons.available_entries(GUILD_ID, _core(77))]
     assert keys == ["tickets", "subday"]
 
 
 def test_available_entries_empty_for_unconfigured_guild(isolated_state):
-    assert buttons.available_entries(GUILD_ID) == []
+    assert buttons.available_entries(GUILD_ID, None) == []
 
 
 # ---------------------------------------------------------------------------- #
@@ -147,7 +157,7 @@ def test_build_embed_uses_entry_fields():
         description="Description",
         color=hikari.Color(0x123456),
         buttons=(ButtonSpec(custom_id="demo_go", label="Go", emoji="🐉"),),
-        is_available=lambda _: True,
+        is_available=lambda _guild_id, _core: True,
     )
     embed = buttons._build_embed(entry)
     assert embed.title == "Title"
@@ -165,14 +175,16 @@ def test_build_row_has_one_button_per_spec():
             ButtonSpec(custom_id="demo_go", label="Go", emoji="🐉"),
             ButtonSpec(custom_id="demo_why", label="Why?", emoji="❓"),
         ),
-        is_available=lambda _: True,
+        is_available=lambda _guild_id, _core: True,
     )
     row = buttons._build_row(entry)
     assert [c.custom_id for c in row.components] == ["demo_go", "demo_why"]
     assert [c.label for c in row.components] == ["Go", "Why?"]
 
 
-def _guild_context(button_channel_id: int | None) -> MagicMock:
+def _guild_context(
+    button_channel_id: int | None, staff_role_id: int | None = None
+) -> MagicMock:
     """A GuildContext stand-in wired for post_buttons()."""
     gc = MagicMock()
     gc.guild_id = hikari.Snowflake(GUILD_ID)
@@ -189,6 +201,7 @@ def _guild_context(button_channel_id: int | None) -> MagicMock:
         button_channel_id=hikari.Snowflake(button_channel_id)
         if button_channel_id
         else None,
+        staff_role_id=hikari.Snowflake(staff_role_id) if staff_role_id else None,
     )
     return gc
 
@@ -215,10 +228,9 @@ async def test_post_buttons_without_a_channel_warns(isolated_state):
 async def test_post_buttons_sends_one_message_per_entry(
     isolated_state, no_perm_problems
 ):
-    tickets_state.save(TicketGuildState(guild_id=GUILD_ID, staff_role_id=77))
     subday_state.save(SubDayGuildState(guild_id=GUILD_ID))
 
-    gc = _guild_context(CHANNEL_ID)
+    gc = _guild_context(CHANNEL_ID, staff_role_id=77)
     warnings = await buttons.post_buttons(gc)
 
     assert warnings == []
@@ -245,15 +257,13 @@ async def test_post_buttons_posts_a_note_when_nothing_is_configured(
 
 
 async def test_post_buttons_bails_on_missing_permissions(isolated_state, monkeypatch):
-    tickets_state.save(TicketGuildState(guild_id=GUILD_ID, staff_role_id=77))
-
     cc = MagicMock()
     cc.channel_name = "buttons"
     cc.check_perms = AsyncMock(return_value=["Manage Messages"])
     cc.delete_my_messages = AsyncMock()
     monkeypatch.setattr(buttons, "_channel_context", lambda gc, channel_id: cc)
 
-    gc = _guild_context(CHANNEL_ID)
+    gc = _guild_context(CHANNEL_ID, staff_role_id=77)
     warnings = await buttons.post_buttons(gc)
 
     assert len(warnings) == 1

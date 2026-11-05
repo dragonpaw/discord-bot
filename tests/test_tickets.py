@@ -33,7 +33,6 @@ def test_ticket_guild_state_defaults():
     assert st.guild_id == 100
     assert st.guild_name == ""
     assert st.category_id is None
-    assert st.staff_role_id is None
     assert st.required_role_id is None
     assert st.open_tickets == []
 
@@ -51,7 +50,6 @@ def test_ticket_guild_state_round_trip():
         guild_id=100,
         guild_name="Test Guild",
         category_id=500,
-        staff_role_id=600,
         required_role_id=700,
         open_tickets=[ticket],
     )
@@ -59,7 +57,6 @@ def test_ticket_guild_state_round_trip():
     loaded = TicketGuildState.model_validate(data)
     assert loaded.guild_id == 100
     assert loaded.category_id == 500
-    assert loaded.staff_role_id == 600
     assert loaded.required_role_id == 700
     assert len(loaded.open_tickets) == 1
     assert loaded.open_tickets[0].topic == "help me"
@@ -72,7 +69,6 @@ def test_state_round_trip(tmp_path, monkeypatch):
     st = TicketGuildState(
         guild_id=200,
         guild_name="Test Guild",
-        staff_role_id=999,
         open_tickets=[OpenTicket(user_id=1, channel_id=2, topic="halp")],
     )
     tickets_state.save(st)
@@ -81,9 +77,15 @@ def test_state_round_trip(tmp_path, monkeypatch):
     loaded = tickets_state.load(200)
     assert loaded.guild_id == 200
     assert loaded.guild_name == "Test Guild"
-    assert loaded.staff_role_id == 999
     assert len(loaded.open_tickets) == 1
     assert loaded.open_tickets[0].topic == "halp"
+
+
+def test_state_ignores_stale_staff_role_key():
+    """Old YAML files still carry staff_role_id; it moved to /config common."""
+    st = TicketGuildState.model_validate({"guild_id": 100, "staff_role_id": 600})
+    assert st.guild_id == 100
+    assert not hasattr(st, "staff_role_id")
 
 
 def test_state_load_missing_file(tmp_path, monkeypatch):
@@ -293,7 +295,9 @@ def _modal_bot(*, admin: bool = True, calls: list[str] | None = None) -> MagicMo
     guild.name = "Test Guild"
     bot.cache.get_guild = MagicMock(return_value=guild)
     bot.state = MagicMock(
-        return_value=SimpleNamespace(log_channel_id=LOG_CHANNEL_ID),
+        return_value=SimpleNamespace(
+            log_channel_id=LOG_CHANNEL_ID, staff_role_id=STAFF_ROLE_ID
+        ),
     )
 
     me = MagicMock()
@@ -363,7 +367,6 @@ async def test_topic_modal_creates_channel_and_saves_ticket(tmp_path, monkeypatc
         TicketGuildState(
             guild_id=int(GUILD_ID),
             category_id=CATEGORY_ID,
-            staff_role_id=STAFF_ROLE_ID,
         )
     )
     interaction = _modal_interaction()
@@ -390,9 +393,7 @@ async def test_topic_modal_creates_channel_and_saves_ticket(tmp_path, monkeypatc
 async def test_topic_modal_persists_ticket_across_reload(tmp_path, monkeypatch):
     """The saved ticket survives a cache-clearing reload, so it really hit disk."""
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
 
     await handle_topic_modal(_modal_interaction())
 
@@ -403,9 +404,7 @@ async def test_topic_modal_persists_ticket_across_reload(tmp_path, monkeypatch):
 
 async def test_topic_modal_pings_staff_role_in_ticket_channel(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _modal_interaction()
 
     await handle_topic_modal(interaction)
@@ -643,9 +642,7 @@ async def test_close_confirm_untracked_channel_still_deletes(tmp_path, monkeypat
 async def test_topic_modal_ping_allows_only_owner_and_staff_role(tmp_path, monkeypatch):
     """hikari suppresses pings unless allowed, and the topic must not ping anyone else."""
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _modal_interaction()
 
     await handle_topic_modal(interaction)
@@ -659,6 +656,25 @@ async def test_topic_modal_ping_allows_only_owner_and_staff_role(tmp_path, monke
     assert post.kwargs["role_mentions"] == [STAFF_ROLE_ID]
 
 
+async def test_topic_modal_without_shared_staff_role_pings_nobody(
+    tmp_path, monkeypatch
+):
+    _tickets_dir(tmp_path, monkeypatch)
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
+    interaction = _modal_interaction()
+    interaction.app.state.return_value.staff_role_id = None
+
+    await handle_topic_modal(interaction)
+
+    post = next(
+        c
+        for c in interaction.app.rest.create_message.await_args_list
+        if c.kwargs.get("channel") == NEW_CHANNEL_ID
+    )
+    assert "Hey staff!" in post.kwargs["content"]
+    assert post.kwargs["role_mentions"] is False
+
+
 # ---------------------------------------------------------------------------- #
 #                        Staff opening on someone's behalf                      #
 # ---------------------------------------------------------------------------- #
@@ -666,8 +682,15 @@ async def test_topic_modal_ping_allows_only_owner_and_staff_role(tmp_path, monke
 TARGET_ID = hikari.Snowflake(4242)
 
 
+def _core_state(app: MagicMock) -> None:
+    app.state = MagicMock(
+        return_value=SimpleNamespace(log_channel_id=None, staff_role_id=STAFF_ROLE_ID)
+    )
+
+
 def _button_interaction(*, role_ids: list[int]) -> MagicMock:
     interaction = MagicMock()
+    _core_state(interaction.app)
     interaction.guild_id = GUILD_ID
     interaction.member = _member(role_ids=role_ids)
     interaction.user.id = USER_ID
@@ -678,9 +701,7 @@ def _button_interaction(*, role_ids: list[int]) -> MagicMock:
 
 async def test_open_button_staff_gets_member_picker(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _button_interaction(role_ids=[STAFF_ROLE_ID])
 
     await handle_ticket_open_button(interaction)
@@ -700,9 +721,7 @@ async def test_open_button_staff_gets_member_picker(tmp_path, monkeypatch):
 
 async def test_open_button_member_gets_modal(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _button_interaction(role_ids=[])
 
     await handle_ticket_open_button(interaction)
@@ -718,6 +737,7 @@ def _for_select_interaction(
     target_id: hikari.Snowflake, *, role_ids: list[int] | None = None
 ) -> MagicMock:
     interaction = MagicMock()
+    _core_state(interaction.app)
     interaction.guild_id = GUILD_ID
     interaction.member = _member(
         role_ids=[STAFF_ROLE_ID] if role_ids is None else role_ids
@@ -731,9 +751,7 @@ def _for_select_interaction(
 
 async def test_for_select_shows_modal_carrying_target(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _for_select_interaction(TARGET_ID)
 
     await handle_ticket_for_select(interaction)
@@ -749,7 +767,6 @@ async def test_for_select_target_with_open_ticket_points_at_it(tmp_path, monkeyp
     tickets_state.save(
         TicketGuildState(
             guild_id=int(GUILD_ID),
-            staff_role_id=STAFF_ROLE_ID,
             open_tickets=[
                 OpenTicket(user_id=int(TARGET_ID), channel_id=20, topic="halp")
             ],
@@ -779,11 +796,7 @@ def _on_behalf_interaction() -> MagicMock:
 
 async def test_topic_modal_on_behalf_opens_ticket_for_target(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(
-            guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID, required_role_id=700
-        )
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID), required_role_id=700))
     interaction = _on_behalf_interaction()
 
     await handle_topic_modal(interaction)
@@ -805,9 +818,7 @@ async def test_topic_modal_on_behalf_opens_ticket_for_target(tmp_path, monkeypat
 
 async def test_topic_modal_on_behalf_journals_against_target(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _on_behalf_interaction()
     recorded = MagicMock()
     monkeypatch.setattr("dragonpaw_bot.journal.record", recorded)
@@ -820,9 +831,7 @@ async def test_topic_modal_on_behalf_journals_against_target(tmp_path, monkeypat
 
 async def test_for_select_non_staff_denied(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _for_select_interaction(TARGET_ID, role_ids=[])
 
     await handle_ticket_for_select(interaction)
@@ -836,9 +845,7 @@ async def test_topic_modal_on_behalf_from_non_staff_opens_for_self(
 ):
     """A target id in the custom_id is ignored unless the submitter is staff."""
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _on_behalf_interaction()
     interaction.member.role_ids = []
 
@@ -850,9 +857,7 @@ async def test_topic_modal_on_behalf_from_non_staff_opens_for_self(
 
 async def test_for_select_on_behalf_modal_warns_topic_is_visible(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _for_select_interaction(TARGET_ID)
 
     await handle_ticket_for_select(interaction)
@@ -865,9 +870,7 @@ async def test_for_select_on_behalf_modal_warns_topic_is_visible(tmp_path, monke
 
 async def test_for_select_picking_self_shows_ordinary_modal(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _for_select_interaction(USER_ID)
 
     await handle_ticket_for_select(interaction)
@@ -880,9 +883,7 @@ async def test_topic_modal_staff_picking_self_opens_ordinary_ticket(
     tmp_path, monkeypatch
 ):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _modal_interaction(custom_id=f"{TOPIC_MODAL_ID}:{USER_ID}")
     interaction.member.role_ids = [hikari.Snowflake(STAFF_ROLE_ID)]
     interaction.app.cache.get_member = MagicMock(
@@ -905,9 +906,7 @@ async def test_topic_modal_staff_picking_self_opens_ordinary_ticket(
 
 async def test_topic_modal_on_behalf_fetches_uncached_target(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _on_behalf_interaction()
     target = interaction.app.cache.get_member(GUILD_ID, TARGET_ID)
     interaction.app.cache.get_member = MagicMock(
@@ -928,9 +927,7 @@ async def test_topic_modal_on_behalf_fetches_uncached_target(tmp_path, monkeypat
 
 async def test_topic_modal_on_behalf_target_left_reports_it(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _on_behalf_interaction()
     interaction.app.cache.get_member = MagicMock(
         side_effect=lambda guild_id, user_id: (
@@ -953,9 +950,7 @@ async def test_topic_modal_on_behalf_target_left_reports_it(tmp_path, monkeypatc
 
 async def test_open_button_guild_owner_gets_member_picker(tmp_path, monkeypatch):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _button_interaction(role_ids=[])
     interaction.member.id = USER_ID
     interaction.member.get_guild.return_value.owner_id = USER_ID
@@ -970,9 +965,7 @@ async def test_topic_modal_on_behalf_from_guild_owner_opens_for_target(
     tmp_path, monkeypatch
 ):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _on_behalf_interaction()
     interaction.member.role_ids = []
     interaction.member.get_guild.return_value.owner_id = USER_ID
@@ -987,9 +980,7 @@ async def test_open_button_uncached_guild_falls_back_to_role_check(
     tmp_path, monkeypatch
 ):
     _tickets_dir(tmp_path, monkeypatch)
-    tickets_state.save(
-        TicketGuildState(guild_id=int(GUILD_ID), staff_role_id=STAFF_ROLE_ID)
-    )
+    tickets_state.save(TicketGuildState(guild_id=int(GUILD_ID)))
     interaction = _button_interaction(role_ids=[])
     interaction.member.get_guild.return_value = None
 

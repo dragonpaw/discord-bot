@@ -284,24 +284,30 @@ async def test_handler_exception_logs_and_responds(monkeypatch, caplog):
 
 
 # ---------------------------------------------------------------------------- #
-#                              /config channels                                 #
+#                               /config common                                  #
 # ---------------------------------------------------------------------------- #
 
 
-def _channels_cmd(**options):
-    cmd = bot_module.ConfigChannels()
-    for name in ("log", "general", "staff", "clear"):
+def _common_cmd(**options):
+    cmd = bot_module.ConfigCommon()
+    for name in (
+        "log_channel",
+        "general_channel",
+        "staff_channel",
+        "staff_role",
+        "clear",
+    ):
         setattr(cmd, name, options.get(name))
     return cmd
 
 
-def _channel(channel_id: int):
-    channel = Mock()
-    channel.id = hikari.Snowflake(channel_id)
-    return channel
+def _snowflake_obj(object_id: int):
+    obj = Mock()
+    obj.id = hikari.Snowflake(object_id)
+    return obj
 
 
-def _channels_setup(monkeypatch, state: GuildState):
+def _common_setup(monkeypatch, state: GuildState):
     gc = Mock()
     gc.state = Mock(return_value=state)
     gc.log = AsyncMock()
@@ -315,39 +321,62 @@ def _channels_setup(monkeypatch, state: GuildState):
     return ctx, gc, update
 
 
-async def test_config_channels_sets_only_given_channels(monkeypatch):
+async def test_config_common_sets_only_given_options(monkeypatch):
     state = _sample_state()
     state.log_channel_id = hikari.Snowflake(1)
-    ctx, gc, update = _channels_setup(monkeypatch, state)
-    await _channels_cmd(staff=_channel(3)).invoke(ctx)
+    ctx, gc, update = _common_setup(monkeypatch, state)
+    await _common_cmd(staff_channel=_snowflake_obj(3)).invoke(ctx)
     assert state.staff_channel_id == 3
     assert state.log_channel_id == 1
     update.assert_called_once_with(state)
     gc.log.assert_awaited_once()
 
 
-async def test_config_channels_clear_unsets_one(monkeypatch):
+async def test_config_common_sets_staff_role(monkeypatch):
+    state = _sample_state()
+    ctx, gc, update = _common_setup(monkeypatch, state)
+    await _common_cmd(staff_role=_snowflake_obj(77)).invoke(ctx)
+    assert state.staff_role_id == 77
+    update.assert_called_once_with(state)
+    assert "<@&77>" in gc.log.await_args.args[0]
+
+
+async def test_config_common_clear_unsets_one(monkeypatch):
     state = _sample_state()
     state.general_channel_id = hikari.Snowflake(2)
     state.staff_channel_id = hikari.Snowflake(3)
-    ctx, _, _ = _channels_setup(monkeypatch, state)
-    await _channels_cmd(clear="staff").invoke(ctx)
+    ctx, _, _ = _common_setup(monkeypatch, state)
+    await _common_cmd(clear="staff_channel").invoke(ctx)
     assert state.staff_channel_id is None
     assert state.general_channel_id == 2
 
 
-async def test_config_channels_no_options_just_shows(monkeypatch):
+async def test_config_common_clear_staff_role(monkeypatch):
+    state = _sample_state()
+    state.staff_role_id = hikari.Snowflake(77)
+    ctx, _, _ = _common_setup(monkeypatch, state)
+    await _common_cmd(clear="staff_role").invoke(ctx)
+    assert state.staff_role_id is None
+
+
+async def test_config_common_no_options_just_shows(monkeypatch):
     state = _sample_state()
     state.staff_channel_id = hikari.Snowflake(3)
-    ctx, gc, update = _channels_setup(monkeypatch, state)
-    await _channels_cmd().invoke(ctx)
+    state.staff_role_id = hikari.Snowflake(77)
+    ctx, gc, update = _common_setup(monkeypatch, state)
+    await _common_cmd().invoke(ctx)
     update.assert_not_called()
     gc.log.assert_not_awaited()
-    assert "<#3>" in ctx.respond.await_args.args[0]
+    shown = ctx.respond.await_args.args[0]
+    assert "<#3>" in shown
+    assert "<@&77>" in shown
 
 
-def test_staff_channel_survives_yaml_round_trip():
+def test_staff_channel_and_role_survive_yaml_round_trip():
     state = _sample_state()
     state.staff_channel_id = hikari.Snowflake(3)
+    state.staff_role_id = hikari.Snowflake(77)
     again = _yaml_dict_to_state(_state_to_yaml_dict(state))
     assert again.staff_channel_id == 3
+    assert again.staff_role_id == 77
+    assert isinstance(again.staff_role_id, hikari.Snowflake)

@@ -76,9 +76,9 @@ removes the member from Discord's view; bot state is cleaned up on the next
 
 Managed via `/config validation` (admins: MANAGE_GUILD or ADMINISTRATOR):
 
-- **`setup [lobby_channel] [validate_category] [member_role] [staff_role] [about_channel] [roles_channel] [events_channel] [chat_channel]`**
-  — Set any combination. Omitted params keep current values. The four `*_channel` options are the channels linked in the welcome announcement; the introductions link comes from the intros plugin's configured channel (`/config intros`), not from validation state. The welcome announcement channel is configured globally via `/config channels general:`. Timeout (4d, `MAX_VALIDATION_DAYS` in `commands.py`) and reminder interval (16h, `REMINDER_INTERVAL_HOURS` in `cron.py`) are hardcoded constants.
-- **`status`** — Shows config + member counts at each stage.
+- **`setup [lobby_channel] [validate_category] [member_role] [about_channel] [roles_channel] [events_channel]`**
+  — Set any combination. Omitted params keep current values. The `about`/`roles`/`events` channel options are linked in the welcome announcement; the introductions link comes from the intros plugin's configured channel (`/config intros`), and the chat link is the general channel itself — the announcement is posted there, configured globally via `/config common general_channel:`. The staff role (pinged on photo submission, added to validate channels) is the shared one from `/config common staff_role:`. Timeout (4d, `MAX_VALIDATION_DAYS` in `commands.py`) and reminder interval (16h, `REMINDER_INTERVAL_HOURS` in `cron.py`) are hardcoded constants.
+- **`status`** — Shows config (including the shared staff role) + member counts at each stage.
 
 State persisted to `state/validation_{guild_id}.yaml`.
 
@@ -120,7 +120,7 @@ These properties are enforced in code and must be preserved:
 
 - **Button ownership** — The rules-agreed button embeds the member's user ID in its custom ID (`validation_rules_agreed:{user_id}`). `handle_rules_agreed` rejects any clicker whose ID doesn't match. No other user can advance someone else through onboarding.
 - **Self-approval prevention** — Both `handle_approve_button` and `handle_approve_modal` reject the interaction if the clicker's user ID matches the `user_id` on the state entry for that channel.
-- **Staff-only approval** — `_is_staff` requires either ADMINISTRATOR permission or the configured staff role. Non-staff get an ephemeral rejection before any modal is shown.
+- **Staff-only approval** — `_is_staff` requires either ADMINISTRATOR permission or the shared staff role (`gc.staff_role_id`). Non-staff get an ephemeral rejection before any modal is shown.
 - **Photo counting isolation** — `on_message_create` only counts photos when all three conditions are true: the message is in the member's assigned validate channel, the author is that specific member, and the member's stage is `AWAITING_PHOTOS`. Photos posted to other channels, by other users, or after the stage has advanced are silently ignored.
 - **Nickname strip** — The approved name is `.strip()`-ed before the empty check, preventing whitespace-only nicknames from passing `if not name`.
 - **Channel name safety** — `_sanitize_channel_name` falls back to `"validate-member"` if the display name produces an empty string after stripping non-alphanumeric characters (e.g. emoji-only display names).

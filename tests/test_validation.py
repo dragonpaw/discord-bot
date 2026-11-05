@@ -168,8 +168,17 @@ def test_validation_guild_state_defaults():
     st = ValidationGuildState(guild_id=100, guild_name="Test")
     assert st.lobby_channel_id is None
     assert st.member_role_id is None
-    assert st.staff_role_id is None
     assert st.members == []
+
+
+def test_validation_guild_state_ignores_stale_keys():
+    """Old YAML files still carry staff_role_id and chat_channel_id."""
+    st = ValidationGuildState.model_validate(
+        {"guild_id": 100, "staff_role_id": 400, "chat_channel_id": 500}
+    )
+    assert st.guild_id == 100
+    assert not hasattr(st, "staff_role_id")
+    assert not hasattr(st, "chat_channel_id")
 
 
 def test_validation_guild_state_round_trip():
@@ -186,7 +195,6 @@ def test_validation_guild_state_round_trip():
         guild_name="Test Guild",
         lobby_channel_id=200,
         member_role_id=300,
-        staff_role_id=400,
         members=[member],
     )
     data = st.model_dump(mode="json")
@@ -194,7 +202,6 @@ def test_validation_guild_state_round_trip():
     assert loaded.guild_id == 100
     assert loaded.lobby_channel_id == 200
     assert loaded.member_role_id == 300
-    assert loaded.staff_role_id == 400
     assert len(loaded.members) == 1
     assert loaded.members[0].user_id == 10
     assert loaded.members[0].stage == ValidationStage.AWAITING_PHOTOS
@@ -246,7 +253,6 @@ def test_state_round_trip(tmp_path, monkeypatch):
     st = ValidationGuildState(
         guild_id=200,
         guild_name="Test Guild",
-        staff_role_id=999,
         members=[
             ValidationMember(
                 user_id=1,
@@ -261,7 +267,6 @@ def test_state_round_trip(tmp_path, monkeypatch):
 
     loaded = validation_state.load(200)
     assert loaded.guild_id == 200
-    assert loaded.staff_role_id == 999
     assert len(loaded.members) == 1
     assert loaded.members[0].stage == ValidationStage.AWAITING_PHOTOS
     assert loaded.members[0].channel_id == 77
@@ -842,8 +847,8 @@ def _use_tmp_state(tmp_path, monkeypatch) -> None:
 def _make_handler_bot():
     """Bot mock for interaction/listener tests.
 
-    bot.state() returns None so GuildContext has no log channel and gc.log() is a
-    silent no-op (and no general-channel announcement is attempted).
+    The core state has staff role 400 but no log or general channel, so gc.log()
+    is a silent no-op and no general-channel announcement is attempted.
     """
     guild = Mock()
     guild.id = GUILD_ID
@@ -853,7 +858,13 @@ def _make_handler_bot():
     bot.user_id = hikari.Snowflake(999)
     bot.cache = Mock()
     bot.cache.get_guild = Mock(return_value=guild)
-    bot.state = Mock(return_value=None)
+    bot.state = Mock(
+        return_value=Mock(
+            log_channel_id=None,
+            general_channel_id=None,
+            staff_role_id=hikari.Snowflake(400),
+        )
+    )
 
     bot.rest = Mock()
     bot.rest.create_message = AsyncMock()
@@ -958,7 +969,6 @@ async def test_rules_agreed_wrong_clicker_rejected(tmp_path, monkeypatch):
         ValidationGuildState(
             guild_id=1,
             guild_name="TestGuild",
-            staff_role_id=400,
             members=[ValidationMember(user_id=42, joined_at=now)],
         )
     )
@@ -1000,7 +1010,6 @@ async def test_rules_agreed_tagged_member_gets_channel(tmp_path, monkeypatch):
         ValidationGuildState(
             guild_id=1,
             guild_name="TestGuild",
-            staff_role_id=400,
             validate_category_id=7,
             members=[ValidationMember(user_id=42, joined_at=now)],
         )
@@ -1102,7 +1111,6 @@ def _approve_state(**overrides) -> ValidationGuildState:
     fields = {
         "guild_id": 1,
         "guild_name": "TestGuild",
-        "staff_role_id": 400,
         "member_role_id": 300,
         "members": [
             ValidationMember(
@@ -1325,6 +1333,39 @@ async def test_approve_modal_happy_path_saves_before_rest_work(tmp_path, monkeyp
     assert "Sparky" in _response_text(interaction.edit_initial_response.call_args)
 
 
+async def test_approve_modal_announcement_links_general_channel_for_chat(
+    tmp_path, monkeypatch
+):
+    """The 'comments go in chat' link points at the core general channel, which is
+    also where the announcement itself is posted."""
+    _use_tmp_state(tmp_path, monkeypatch)
+    validation_state.save(_approve_state())
+
+    bot = _make_handler_bot()
+    bot.state.return_value.general_channel_id = hikari.Snowflake(123)
+
+    async def _noop_close(_gc, _channel_id, _notice):
+        pass
+
+    monkeypatch.setattr(
+        "dragonpaw_bot.plugins.validation.commands._close_validate_channel",
+        _noop_close,
+    )
+
+    interaction = _make_modal_interaction(
+        bot, _make_member(77, role_ids=[400]), f"{APPROVE_MODAL_PREFIX}99"
+    )
+    await handle_approve_modal(interaction)
+
+    announcement = next(
+        c
+        for c in bot.rest.create_message.call_args_list
+        if c.kwargs.get("channel") == hikari.Snowflake(123)
+    )
+    assert "comments over in <#123>" in announcement.kwargs["content"]
+    assert "#general-often-lewd" not in announcement.kwargs["content"]
+
+
 async def test_approve_modal_unknown_channel_does_nothing(tmp_path, monkeypatch):
     """A modal for a channel with no state entry (already approved elsewhere) does no
     REST work and leaves other members' entries alone.
@@ -1390,7 +1431,6 @@ def _photos_state(stage: ValidationStage = ValidationStage.AWAITING_PHOTOS, **kw
     return ValidationGuildState(
         guild_id=1,
         guild_name="TestGuild",
-        staff_role_id=400,
         members=[
             ValidationMember(
                 user_id=42,

@@ -134,6 +134,11 @@ class GuildContext:
         state = self.state()
         return state.staff_channel_id if state else None
 
+    @property
+    def staff_role_id(self) -> hikari.Snowflake | None:
+        state = self.state()
+        return state.staff_role_id if state else None
+
     async def staff_post(
         self,
         content: str = "",

@@ -21,6 +21,7 @@ class GuildState(pydantic.BaseModel):
     log_channel_id: hikari.Snowflake | None = None
     general_channel_id: hikari.Snowflake | None = None
     staff_channel_id: hikari.Snowflake | None = None
+    staff_role_id: hikari.Snowflake | None = None
     button_channel_id: hikari.Snowflake | None = None
 
 
@@ -54,4 +55,4 @@ class ButtonEntry:
     description: str
     color: hikari.Color
     buttons: tuple[ButtonSpec, ...]
-    is_available: Callable[[int], bool]
+    is_available: Callable[[int, GuildState | None], bool]

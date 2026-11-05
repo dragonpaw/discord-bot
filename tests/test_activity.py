@@ -1158,7 +1158,6 @@ def test_purge_config_defaults():
     assert config.purge_enabled is False
     assert config.purge_interval_months == 4
     assert config.purge_grace_days == 5
-    assert config.purge_staff_role_id is None
 
 
 def test_evaluate_lurker_unknown_join_date_is_not_new():

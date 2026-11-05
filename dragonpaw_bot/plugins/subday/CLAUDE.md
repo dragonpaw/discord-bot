@@ -10,7 +10,7 @@ All role fields default to None (guild-owner-only access) and channel fields def
 
 The guild owner always passes role permission checks (enroll, complete, backfill), regardless of whether they have the required role.
 
-Notifications (completions, milestones, signups, removals, owner accept/deny, config changes) are sent to the guild-wide log channel configured via `/config channels log:`.
+Notifications (completions, milestones, signups, removals, owner accept/deny, config changes) are sent to the guild-wide log channel configured via `/config common log_channel:`.
 
 ### Slash Commands (`/subday`)
 
@@ -164,4 +164,4 @@ Persisted as `state/subday_{guild_id}.yaml`, separate from the main guild state.
 ### Required Discord Setup
 
 - Roles: Milestone roles as configured via `/config subday prize-roles`, plus any permission roles configured via `/config subday settings`
-- Channels: `achievements_channel` via `/config subday settings`; guild-wide log channel via `/config channels log:`
+- Channels: `achievements_channel` via `/config subday settings`; guild-wide log channel via `/config common log_channel:`

@@ -68,15 +68,12 @@ def _sanitize_channel_name(display_name: str) -> str:
     return f"help-{name}"[:100]
 
 
-def _is_staff(st: TicketGuildState, member: hikari.Member) -> bool:
+def _is_staff(staff_role_id: int | None, member: hikari.Member) -> bool:
     """Holds the staff role, or owns the guild. Cache-only, so safe before a modal."""
     guild = member.get_guild()
     if guild is not None and guild.owner_id == member.id:
         return True
-    return (
-        st.staff_role_id is not None
-        and hikari.Snowflake(st.staff_role_id) in member.role_ids
-    )
+    return staff_role_id is not None and staff_role_id in member.role_ids
 
 
 def _ticket_block_reason(
@@ -158,8 +155,9 @@ async def handle_ticket_open_button(interaction: hikari.ComponentInteraction) ->
         return
 
     st = tickets_state.load(int(interaction.guild_id))
+    staff_role_id = GuildContext.from_interaction(interaction).staff_role_id
 
-    if _is_staff(st, interaction.member):
+    if _is_staff(staff_role_id, interaction.member):
         select_row = interaction.app.rest.build_message_action_row()
         select_row.add_select_menu(
             hikari.ComponentType.USER_SELECT_MENU,
@@ -202,7 +200,8 @@ async def handle_ticket_for_select(interaction: hikari.ComponentInteraction) -> 
         return
 
     st = tickets_state.load(int(interaction.guild_id))
-    if not _is_staff(st, interaction.member):
+    staff_role_id = GuildContext.from_interaction(interaction).staff_role_id
+    if not _is_staff(staff_role_id, interaction.member):
         logger.warning("Ticket member picker used by non-staff")
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
@@ -234,7 +233,7 @@ async def handle_ticket_for_select(interaction: hikari.ComponentInteraction) -> 
 
 
 async def _ticket_owner(
-    bot: DragonpawBot, st: TicketGuildState, interaction: hikari.ModalInteraction
+    gc: GuildContext, interaction: hikari.ModalInteraction
 ) -> hikari.Member | None:
     """The member a staff-opened modal is for, or None when the opener is the owner.
 
@@ -244,16 +243,15 @@ async def _ticket_owner(
     target_id = custom_id.removeprefix(f"{TOPIC_MODAL_ID}:")
     if target_id == custom_id:
         return None
-    if not interaction.member or not _is_staff(st, interaction.member):
+    if not interaction.member or not _is_staff(gc.staff_role_id, interaction.member):
         logger.warning(
             "On-behalf ticket modal submitted by non-staff", target=target_id
         )
         return None
-    guild_id = st.guild_id
     user_id = int(target_id)
-    return bot.cache.get_member(guild_id, user_id) or await bot.rest.fetch_member(
-        guild_id, user_id
-    )
+    return gc.bot.cache.get_member(
+        gc.guild_id, user_id
+    ) or await gc.bot.rest.fetch_member(gc.guild_id, user_id)
 
 
 def _modal_topic(interaction: hikari.ModalInteraction) -> str | None:
@@ -294,7 +292,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
 
     opener = interaction.member
     try:
-        owner = await _ticket_owner(bot, st, interaction) or opener
+        owner = await _ticket_owner(gc, interaction) or opener
     except hikari.NotFoundError:
         await interaction.edit_initial_response(
             content="*confused head tilt* I can't find that member anymore — maybe they wandered off? 🐾"
@@ -334,7 +332,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         channel = await gc.create_private_channel(
             channel_name,
             user_ids=[owner.id],
-            extra_roles=[st.staff_role_id] if st.staff_role_id else [],
+            extra_roles=[gc.staff_role_id] if gc.staff_role_id else [],
             category_id=st.category_id,
         )
     except hikari.HTTPError:
@@ -355,7 +353,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
     tickets_state.save(st)
 
     # Post welcome message in ticket channel
-    staff_ping = f"<@&{st.staff_role_id}>" if st.staff_role_id else "Hey staff!"
+    staff_ping = f"<@&{gc.staff_role_id}>" if gc.staff_role_id else "Hey staff!"
     buttons_row = bot.rest.build_message_action_row()
     buttons_row.add_interactive_button(
         hikari.ButtonStyle.DANGER, "ticket_close", label="Close Ticket 🔒"
@@ -400,7 +398,7 @@ async def handle_topic_modal(interaction: hikari.ModalInteraction) -> None:
         # Explicit allow-lists: hikari suppresses pings by default, and the
         # member-written topic must not be able to ping anyone else.
         user_mentions=[owner.id],
-        role_mentions=[st.staff_role_id] if st.staff_role_id else False,
+        role_mentions=[gc.staff_role_id] if gc.staff_role_id else False,
     )
 
     await interaction.edit_initial_response(content=reply)

@@ -470,3 +470,15 @@ async def test_staff_post_without_channel_is_skipped():
     gc = _make_gc_with_staff(None)
     assert await gc.staff_post("hello") is None
     gc.bot.rest.create_message.assert_not_awaited()
+
+
+def test_staff_role_id_reads_core_state():
+    gc = _make_gc()
+    gc.bot.state = Mock(return_value=Mock(staff_role_id=77))
+    assert gc.staff_role_id == 77
+
+
+def test_staff_role_id_without_core_state_is_none():
+    gc = _make_gc()
+    gc.bot.state = Mock(return_value=None)
+    assert gc.staff_role_id is None

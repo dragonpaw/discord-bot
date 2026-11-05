@@ -12,8 +12,8 @@ Every journal command opens with the same four lines:
 ```python
 if not ctx.guild_id:
     return
-st = journal.load(int(ctx.guild_id))
-if refusal := staff_blocked(ctx, st.staff_role_id):
+staff_role_id = GuildContext.from_ctx(ctx).staff_role_id
+if refusal := staff_blocked(ctx, staff_role_id):
     logger.info("Journal … denied", actor=actor_name(ctx))
     await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
     return

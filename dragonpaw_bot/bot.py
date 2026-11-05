@@ -234,6 +234,9 @@ def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
     if data.get("staff_channel_id") is not None:
         data["staff_channel_id"] = hikari.Snowflake(data["staff_channel_id"])
 
+    if data.get("staff_role_id") is not None:
+        data["staff_role_id"] = hikari.Snowflake(data["staff_role_id"])
+
     if data.get("button_channel_id") is not None:
         data["button_channel_id"] = hikari.Snowflake(data["button_channel_id"])
 
@@ -381,30 +384,40 @@ _journal_sub = _config_group.subgroup("journal", "Member journal settings")
 _buttons_sub = _config_group.subgroup("buttons", "Feature button channel settings")
 
 
-_CHANNEL_LABELS = {
-    "log": "📜 Log",
-    "general": "💬 General chat",
-    "staff": "🛡️ Staff announcements",
+_COMMON_LABELS = {
+    "log_channel": "📜 Log channel",
+    "general_channel": "💬 General chat",
+    "staff_channel": "🛡️ Staff announcements",
+    "staff_role": "👑 Staff role",
 }
 
 
-class ConfigChannels(
+def _common_mention(key: str, object_id: int) -> str:
+    return f"<@&{object_id}>" if key == "staff_role" else f"<#{object_id}>"
+
+
+class ConfigCommon(
     lightbulb.SlashCommand,
-    name="channels",
-    description="Set the server's common channels (no options shows them)",
+    name="common",
+    description="Set the server's common channels and staff role (no options shows them)",
     hooks=[guild_owner_only],
 ):
-    log = lightbulb.channel("log", "Where I post my logs", default=None)
-    general = lightbulb.channel("general", "The general chat channel", default=None)
-    staff = lightbulb.channel(
-        "staff", "Staff announcements, like lurker purge lists", default=None
+    log_channel = lightbulb.channel("log_channel", "Where I post my logs", default=None)
+    general_channel = lightbulb.channel(
+        "general_channel", "The general chat channel", default=None
+    )
+    staff_channel = lightbulb.channel(
+        "staff_channel", "Staff announcements, like lurker purge lists", default=None
+    )
+    staff_role = lightbulb.role(
+        "staff_role",
+        "Staff for tickets, validation, the journal and lurker purges",
+        default=None,
     )
     clear = lightbulb.string(
         "clear",
-        "Unset one of the channels",
-        choices=[
-            lightbulb.Choice(label, key) for key, label in _CHANNEL_LABELS.items()
-        ],
+        "Unset one of these",
+        choices=[lightbulb.Choice(label, key) for key, label in _COMMON_LABELS.items()],
         default=None,
     )
 
@@ -423,33 +436,36 @@ class ConfigChannels(
             )
 
         changes: list[str] = []
-        for key, channel in (
-            ("log", self.log),
-            ("general", self.general),
-            ("staff", self.staff),
+        for key, chosen in (
+            ("log_channel", self.log_channel),
+            ("general_channel", self.general_channel),
+            ("staff_channel", self.staff_channel),
+            ("staff_role", self.staff_role),
         ):
-            if channel is not None:
-                setattr(state, f"{key}_channel_id", channel.id)
-                changes.append(f"{_CHANNEL_LABELS[key]} → <#{channel.id}>")
+            if chosen is not None:
+                setattr(state, f"{key}_id", chosen.id)
+                changes.append(
+                    f"{_COMMON_LABELS[key]} → {_common_mention(key, chosen.id)}"
+                )
         if self.clear is not None:
-            setattr(state, f"{self.clear}_channel_id", None)
-            changes.append(f"{_CHANNEL_LABELS[self.clear]} cleared")
+            setattr(state, f"{self.clear}_id", None)
+            changes.append(f"{_COMMON_LABELS[self.clear]} cleared")
         if changes:
             bot.state_update(state)
-            gc.logger.info("Channels changed", changes=changes)
+            gc.logger.info("Common settings changed", changes=changes)
 
-        lines = ["🐉 **My channels**"]
-        for key, label in _CHANNEL_LABELS.items():
-            channel_id = getattr(state, f"{key}_channel_id")
-            lines.append(
-                f"{label}: {f'<#{channel_id}>' if channel_id else '_not set_'}"
-            )
+        lines = ["🐉 **My common settings**"]
+        for key, label in _COMMON_LABELS.items():
+            object_id = getattr(state, f"{key}_id")
+            shown = _common_mention(key, object_id) if object_id else "_not set_"
+            lines.append(f"{label}: {shown}")
         await ctx.respond("\n".join(lines), flags=hikari.MessageFlag.EPHEMERAL)
 
         if changes:
             actor = actor_name(ctx)
+            # Fresh context: gc captured the log channel before this change.
             await GuildContext.from_ctx(ctx).log(
-                f"⚙️ *tail swish* **{actor}** rearranged my channels: "
+                f"⚙️ *tail swish* **{actor}** rearranged my common settings: "
                 + "; ".join(changes)
                 + " 🐉"
             )
@@ -459,7 +475,7 @@ from dragonpaw_bot.plugins.activity import config as activity_config  # noqa: E4
 
 _activity_sub = _config_group.subgroup("activity", "Activity tracker settings")
 
-_config_group.register(ConfigChannels)
+_config_group.register(ConfigCommon)
 media_config.register(_media_sub)
 cleanup_config.register(_cleanup_sub)
 intros_config.register(_intros_sub)

@@ -87,7 +87,6 @@ class JournalEntry(pydantic.BaseModel):
 
 
 class JournalGuildState(GuildStateBase):
-    staff_role_id: int | None = None
     next_id: int = 1
     entries: list[JournalEntry] = pydantic.Field(default_factory=list)
 

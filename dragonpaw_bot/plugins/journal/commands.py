@@ -19,7 +19,7 @@ def staff_blocked(ctx: lightbulb.Context, staff_role_id: int | None) -> str | No
         return (
             "*tilts head* I don't have a staff role set up yet, so I can't tell "
             "who's allowed to peek at my journal! Ask an admin to run "
-            "`/config journal set` first. 🐉"
+            "`/config common staff_role:` first. 🐉"
         )
     if not ctx.member or staff_role_id not in {int(r) for r in ctx.member.role_ids}:
         return "*curls protectively around my journal* Sorry, this one's staff-only! 🐉"
@@ -127,9 +127,8 @@ class JournalView(
         if not ctx.guild_id:
             return
         guild_id = int(ctx.guild_id)
-        st = journal.load(guild_id)
-
-        if refusal := staff_blocked(ctx, st.staff_role_id):
+        staff_role_id = GuildContext.from_ctx(ctx).staff_role_id
+        if refusal := staff_blocked(ctx, staff_role_id):
             logger.info("Journal view denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return
@@ -165,9 +164,8 @@ class JournalIneligibleList(
         if not ctx.guild_id:
             return
         guild_id = int(ctx.guild_id)
-        st = journal.load(guild_id)
-
-        if refusal := staff_blocked(ctx, st.staff_role_id):
+        staff_role_id = GuildContext.from_ctx(ctx).staff_role_id
+        if refusal := staff_blocked(ctx, staff_role_id):
             logger.info("Journal ineligible-list denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return
@@ -256,9 +254,8 @@ class JournalAdd(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         if not ctx.guild_id:
             return
-        st = journal.load(int(ctx.guild_id))
-
-        if refusal := staff_blocked(ctx, st.staff_role_id):
+        staff_role_id = GuildContext.from_ctx(ctx).staff_role_id
+        if refusal := staff_blocked(ctx, staff_role_id):
             logger.info("Journal add denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return
@@ -325,9 +322,8 @@ class JournalFollowup(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         if not ctx.guild_id:
             return
-        st = journal.load(int(ctx.guild_id))
-
-        if refusal := staff_blocked(ctx, st.staff_role_id):
+        staff_role_id = GuildContext.from_ctx(ctx).staff_role_id
+        if refusal := staff_blocked(ctx, staff_role_id):
             logger.info("Journal followup denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return
@@ -398,9 +394,8 @@ class LogWarningMessageCommand(
     async def invoke(self, ctx: lightbulb.Context) -> None:
         if not ctx.guild_id:
             return
-        st = journal.load(int(ctx.guild_id))
-
-        if refusal := staff_blocked(ctx, st.staff_role_id):
+        staff_role_id = GuildContext.from_ctx(ctx).staff_role_id
+        if refusal := staff_blocked(ctx, staff_role_id):
             logger.info("Journal message-command denied", actor=actor_name(ctx))
             await ctx.respond(refusal, flags=hikari.MessageFlag.EPHEMERAL)
             return

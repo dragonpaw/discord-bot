@@ -91,7 +91,6 @@ class ActivityGuildConfig(pydantic.BaseModel):
     purge_enabled: bool = False
     purge_interval_months: int = 4
     purge_grace_days: int = 5
-    purge_staff_role_id: int | None = None
 
 
 PURGE_BOOT_EXPIRY_DAYS = 14

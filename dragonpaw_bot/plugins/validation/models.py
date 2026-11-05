@@ -28,11 +28,9 @@ class ValidationGuildState(GuildStateBase):
     lobby_channel_id: int | None = None
     validate_category_id: int | None = None
     member_role_id: int | None = None
-    staff_role_id: int | None = None
     # welcome message channel links
     about_channel_id: int | None = None
     roles_channel_id: int | None = None
     events_channel_id: int | None = None
-    chat_channel_id: int | None = None
     # runtime
     members: list[ValidationMember] = pydantic.Field(default_factory=list)

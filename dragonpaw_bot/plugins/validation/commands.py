@@ -271,7 +271,7 @@ async def on_message_create(event: hikari.GuildMessageCreateEvent) -> None:
             or await bot.rest.fetch_guild(event.guild_id),
         )
 
-        staff_ping = f"<@&{st.staff_role_id}>" if st.staff_role_id else "Hey staff!"
+        staff_ping = f"<@&{gc.staff_role_id}>" if gc.staff_role_id else "Hey staff!"
         approve_row = bot.rest.build_message_action_row()
         approve_row.add_interactive_button(
             hikari.ButtonStyle.SUCCESS,
@@ -488,7 +488,7 @@ async def handle_rules_agreed(interaction: hikari.ComponentInteraction) -> None:
         channel = await gc.create_private_channel(
             channel_name,
             user_ids=[interaction.user.id],
-            extra_roles=[st.staff_role_id] if st.staff_role_id else [],
+            extra_roles=[gc.staff_role_id] if gc.staff_role_id else [],
             category_id=st.validate_category_id,
         )
     except hikari.HTTPError:
@@ -575,7 +575,8 @@ async def handle_approve_button(interaction: hikari.ComponentInteraction) -> Non
         )
         return
 
-    if not _is_staff(interaction, st.staff_role_id):
+    staff_role_id = GuildContext.from_interaction(interaction).staff_role_id
+    if not _is_staff(interaction, staff_role_id):
         await interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_CREATE,
             content="*snorts smoke* 🐉 Only staff can approve verifications! 🐾",
@@ -625,7 +626,8 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
             content="*side-eyes you* 🐉 You can't approve your own verification! 🐾"
         )
         return
-    if not _is_staff(interaction, st.staff_role_id):
+    gc = GuildContext.from_interaction(interaction)  # type: ignore[arg-type]
+    if not _is_staff(interaction, gc.staff_role_id):
         await interaction.edit_initial_response(
             content="*snorts smoke* 🐉 Only staff can approve verifications! 🐾"
         )
@@ -643,7 +645,6 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
         return
 
     bot: DragonpawBot = interaction.app  # type: ignore[assignment]
-    gc = GuildContext.from_interaction(interaction)  # type: ignore[arg-type]
 
     if not member_entry:
         await interaction.edit_initial_response(
@@ -723,7 +724,7 @@ async def handle_approve_modal(interaction: hikari.ModalInteraction) -> None:  #
         # the intros plugin owns the intros channel fact
         intros_ref = _channel_ref(intros_st.channel_id, "#introductions")
         events_ref = _channel_ref(st.events_channel_id, "#classes-and-events")
-        chat_ref = _channel_ref(st.chat_channel_id, "#general-often-lewd")
+        chat_ref = _channel_ref(general_channel_id, "#general-often-lewd")
         try:
             await bot.rest.create_message(
                 channel=general_channel_id,

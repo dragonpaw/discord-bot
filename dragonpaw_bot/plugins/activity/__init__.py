@@ -16,6 +16,7 @@ from dragonpaw_bot.plugins.activity.purge import (
 from dragonpaw_bot.structs import ButtonEntry, ButtonSpec
 
 if TYPE_CHECKING:
+    from dragonpaw_bot.structs import GuildState
     from dragonpaw_bot.utils import InteractionHandler
 
 ACTIVITY_SCORE_ID = "activity_score"
@@ -25,6 +26,10 @@ INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     SPARE_ID: handle_spare,
     BOOT_ID: handle_boot,
 }
+
+
+def _is_available(guild_id: int, _core: GuildState | None) -> bool:
+    return activity_state.is_configured(guild_id)
 
 
 BUTTON_ENTRY = ButtonEntry(
@@ -39,5 +44,5 @@ BUTTON_ENTRY = ButtonEntry(
     buttons=(
         ButtonSpec(custom_id=ACTIVITY_SCORE_ID, label="My Activity Score", emoji="📊"),
     ),
-    is_available=activity_state.is_configured,
+    is_available=_is_available,
 )

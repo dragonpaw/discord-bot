@@ -16,6 +16,7 @@ from dragonpaw_bot.plugins.subday.constants import (
 from dragonpaw_bot.structs import ButtonEntry, ButtonSpec
 
 if TYPE_CHECKING:
+    from dragonpaw_bot.structs import GuildState
     from dragonpaw_bot.utils import InteractionHandler
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
@@ -25,6 +26,10 @@ INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     SUBDAY_CONFIG_PREFIX: subday_config.handle_config_interaction,
     SUBDAY_CFG_ROLE_PREFIX: subday_config.handle_config_interaction,
 }
+
+
+def _is_available(guild_id: int, _core: GuildState | None) -> bool:
+    return subday_state.is_configured(guild_id)
 
 
 BUTTON_ENTRY = ButtonEntry(
@@ -41,5 +46,5 @@ BUTTON_ENTRY = ButtonEntry(
         ButtonSpec(custom_id=SUBDAY_SIGNUP_ID, label="Join Where I am Led", emoji="📖"),
         ButtonSpec(custom_id=SUBDAY_ABOUT_ID, label="What is this?", emoji="❓"),
     ),
-    is_available=subday_state.is_configured,
+    is_available=_is_available,
 )

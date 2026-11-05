@@ -10,7 +10,7 @@ is ever acted on automatically.
 The **store lives in core**, at `dragonpaw_bot/journal.py`, not in this
 package. That is because `gc.log()` writes to it, and `context.py` cannot
 import a plugin without inverting the layering. This package owns only the
-command surface, the config commands, and the name-change listener.
+command surface, the `/config journal status` command, and the name-change listener.
 
 ### Entry kinds
 
@@ -64,7 +64,7 @@ events. No plugin reads this flag and nothing is blocked programmatically.
 | Log channel set, normal | Recorded | Recorded |
 
 (`name_change` is the exception — it never routes through `gc.log()`, so it is
-gated on `staff_role_id` instead. See **Name changes** below.)
+gated on the shared staff role instead. See **Name changes** below.)
 
 An unconfigured log channel is the guild's opt-out signal, so `gc.log()` writes
 nothing. A transient `HTTPError` is *not* that signal, so the entry is written
@@ -73,9 +73,10 @@ and are never gated — a warning a human sat down and typed is not noise.
 
 ### Commands
 
-All staff-gated on `staff_role_id`, all responses ephemeral. Without a staff
-role configured the plugin refuses and points at `/config journal set` rather
-than falling open.
+All staff-gated on the shared staff role (`gc.staff_role_id`, set with
+`/config common staff_role:`), all responses ephemeral. Without a staff role
+configured the plugin refuses and points at `/config common` rather than
+falling open.
 
 - **`/journal view <user>`** — Full timeline, newest first. Each entry shows
   the cited message (if any) as a blockquote, then its follow-ups nested
@@ -105,9 +106,10 @@ response. `tests/test_journal.py` asserts the exclusion list matches the real
 
 `/config journal` (guild owner only):
 
-- **`set staff_role:<role>`** — Role allowed to read and write the journal.
-- **`status`** — Staff role, entry count, current ineligible count.
-- **`clear`** — Clears the staff role. **Entries are never deleted.**
+- **`status`** — Shared staff role, entry count, current ineligible count.
+
+The staff role itself is the bot-wide one set with `/config common staff_role:`.
+**Entries are never deleted.**
 
 State is persisted to `state/journal_{guild_id}.yaml`.
 
@@ -142,10 +144,10 @@ store and **never posted to the log channel**; a few hundred renames a year
 would drown it.
 
 Because they bypass `gc.log()`, the log channel cannot be their opt-in signal.
-They are gated on `staff_role_id` instead: a guild that has never run
-`/config journal set` has nobody who could read them, and append-only means
+They are gated on the shared staff role instead: a guild that has never set
+one with `/config common` has nobody who could read them, and append-only means
 nobody could delete them either. This is the one observed kind whose gate is
-the plugin's own config rather than the log channel.
+the staff role rather than the log channel.
 
 ### No button channel card
 
@@ -156,7 +158,7 @@ Staff-driven, so no `BUTTON_ENTRY` — matching every other staff-only plugin.
 - **`__init__.py`** — `MODAL_HANDLERS` exports only
 - **`commands.py`** — `lightbulb.Loader()`, the `/journal` group, the message
   context menu, rendering helpers, and all modal handlers
-- **`config.py`** — `/config journal` subcommands
+- **`config.py`** — `/config journal status`
 - **`listeners.py`** — `MemberUpdateEvent` name-change listener
 - **`../../journal.py`** — models, store, and write path (core, not this package)
 

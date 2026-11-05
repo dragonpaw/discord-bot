@@ -8,7 +8,7 @@ All settings are configurable per server via `/config birthday settings` (owner 
 
 The guild owner (i.e. the Discord server owner, not a SubDay "owner") always passes role permission checks regardless of whether they have the required role.
 
-Notifications (registrations, removals, config changes) are sent to the guild-wide log channel configured via `/config channels log:`.
+Notifications (registrations, removals, config changes) are sent to the guild-wide log channel configured via `/config common log_channel:`.
 
 ### Slash Commands (`/birthday`)
 
@@ -110,5 +110,5 @@ All log messages use structlog with `guild=` and `user=` keyword arguments. Inte
 - Announcement channel via `/config birthday settings`
 - Birthday role via `/config birthday settings` (optional)
 - Permission roles via `/config birthday settings` (optional, defaults to owner-only)
-- Guild-wide log channel via `/config channels log:` (optional)
+- Guild-wide log channel via `/config common log_channel:` (optional)
 - Bot needs Manage Roles permission if birthday role is configured

@@ -78,7 +78,7 @@ All require MANAGE_GUILD or ADMINISTRATOR (the guild_owner_only hook).
 
 ### Lurker Config (`/config lurker`)
 
-A direct subcommand of `/config` (registered in `bot.py` as `activity_config.LurkerConfig`), guild_owner_only. All options are optional; with none it shows an ephemeral settings summary, including any purge in progress (day N of the grace period, or "final list is up").
+A direct subcommand of `/config` (registered in `bot.py` as `activity_config.LurkerConfig`), guild_owner_only. All options are optional; with none it shows an ephemeral settings summary, including the shared staff role (from `/config common`) and any purge in progress (day N of the grace period, or "final list is up").
 
 | Option       | Type        | Meaning                                                            |
 | ------------ | ----------- | ------------------------------------------------------------------ |
@@ -86,10 +86,9 @@ A direct subcommand of `/config` (registered in `bot.py` as `activity_config.Lur
 | `enabled`    | boolean     | Turn automatic purges on or off.                                   |
 | `frequency`  | int, 1-12   | Months between purges (default 4). Also the newcomer window.       |
 | `grace`      | int, 1-14   | Days staff have to spare members (default 5).                      |
-| `staff_role` | role        | Role allowed to spare and Boot, in addition to the guild owner.    |
 | `clear_role` | boolean     | Forget the lurker role; also turns purges off (cancelling any run). |
 
-Only the options given are changed. Enabling is **refused** (old value kept, a friendly note says why) if there is no lurker role (counting one set in the same call) or no staff channel (`/config channels staff:`). If the bot lacks `KICK_MEMBERS` the command still saves but warns. The config is saved before any purge is started. Turning purges on starts a purge immediately; if nobody is on the list the response says so and the next daily check tries again. Turning them off (with `enabled:false` or `clear_role:true`) while one is running cancels it. Changes are logged with ⚙️.
+Only the options given are changed. Enabling is **refused** (old value kept, a friendly note says why) if there is no lurker role (counting one set in the same call) or no staff channel (`/config common staff_channel:`). If the bot lacks `KICK_MEMBERS` the command still saves but warns. The config is saved before any purge is started. Turning purges on starts a purge immediately; if nobody is on the list the response says so and the next daily check tries again. Turning them off (with `enabled:false` or `clear_role:true`) while one is running cancels it. Changes are logged with ⚙️.
 
 ### Lurker purges
 
@@ -106,9 +105,9 @@ An opt-in, staff-supervised sweep of everyone who holds the lurker role. Nobody 
 
 **The list is frozen at start.** Candidates are the non-bot members holding the lurker role at that moment who are not newcomers (`select_candidates(members, role_id, now, interval_months)`, sorted by display name; the same `models.is_newcomer` rule as the lurker sync, so a member who still holds a stale lurker role after joining recently is left off). Later lurkers are never added, and activity never removes anyone — a spared or newly active member stays on the list until staff act. `LurkerPurge.candidates` holds `PurgeCandidate(user_id, display_name, spared_by)`.
 
-**The post.** One embed in the staff announcements channel (`build_purge_post`, sent via `gc.staff_post`) listing candidates, spared ones struck through with "spared by X". Description is capped at 4096 chars with an "...and N more" tail. A select menu (`activity_purge_spare`, max 25 options of the not-yet-spared) lets staff spare members; after the final step a danger **Boot** button (`activity_purge_boot`) appears. Each repost first strips the components from the previous message (`message_id` and `channel_id` are tracked, so the strip reaches the old post even if the staff channel has since changed; a `None` `channel_id` falls back to the current staff channel). The purge staff role (`purge_staff_role_id`) is pinged on the day-1 post and on the final post with Boot — not on daily reminders. With no staff role set, nobody is pinged. Member and staff display names are passed through `journal.escape_markdown` wherever they land in Discord-rendered text (embed lines, the booting line, summaries, journal summaries) — but not in select-menu labels or the kick audit reason, which don't render markdown. If no staff channel is configured the post is skipped with a warning.
+**The post.** One embed in the staff announcements channel (`build_purge_post`, sent via `gc.staff_post`) listing candidates, spared ones struck through with "spared by X". Description is capped at 4096 chars with an "...and N more" tail. A select menu (`activity_purge_spare`, max 25 options of the not-yet-spared) lets staff spare members; after the final step a danger **Boot** button (`activity_purge_boot`) appears. Each repost first strips the components from the previous message (`message_id` and `channel_id` are tracked, so the strip reaches the old post even if the staff channel has since changed; a `None` `channel_id` falls back to the current staff channel). The shared staff role (`gc.staff_role_id`, set with `/config common staff_role:`) is pinged on the day-1 post and on the final post with Boot — not on daily reminders. With no staff role set, nobody is pinged. Member and staff display names are passed through `journal.escape_markdown` wherever they land in Discord-rendered text (embed lines, the booting line, summaries, journal summaries) — but not in select-menu labels or the kick audit reason, which don't render markdown. If no staff channel is configured the post is skipped with a warning.
 
-**Staff.** `is_purge_staff`: the guild owner, or a member with `purge_staff_role_id`. Anyone else clicking gets an in-voice refusal. Both handlers also reject clicks on a stale message (not the current `message_id`).
+**Staff.** `is_purge_staff`: the guild owner, or a member with the shared staff role. Anyone else clicking gets an in-voice refusal. Both handlers also reject clicks on a stale message (not the current `message_id`).
 
 **Spare** (`handle_spare`): marks the chosen candidates `spared_by` the clicker's display name, saves, writes a `lurker_spared` journal entry per spare (before responding, so a failed response can't lose the record), then updates the post in place. Spares are one-way — no un-spare and no reason prompt.
 
@@ -154,7 +153,7 @@ The button always shows the clicker their own score, so it skips the viewer-role
 
 Split across two file types per guild:
 
-- **`state/activity_config_{guild_id}.yaml`** — `ActivityGuildMeta`: guild_id, guild_name, config (ActivityGuildConfig with role_configs, channel_configs, lurker_role_id/name, viewer_role_id/name, `purge_enabled` (default off), `purge_interval_months` (4), `purge_grace_days` (5), `purge_staff_role_id`), `purge` (`LurkerPurge | None`: `started_at`, `day`, `boot_posted_at`, `message_id`, `channel_id`, `candidates`), `last_purge_started`
+- **`state/activity_config_{guild_id}.yaml`** — `ActivityGuildMeta`: guild_id, guild_name, config (ActivityGuildConfig with role_configs, channel_configs, lurker_role_id/name, viewer_role_id/name, `purge_enabled` (default off), `purge_interval_months` (4), `purge_grace_days` (5)), `purge` (`LurkerPurge | None`: `started_at`, `day`, `boot_posted_at`, `message_id`, `channel_id`, `candidates`), `last_purge_started`
 - **`state/activity_user_{guild_id}_{user_id}.yaml`** — `UserActivity`: user_id, list of ContributionBuckets
 
 

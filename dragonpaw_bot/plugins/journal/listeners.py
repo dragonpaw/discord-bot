@@ -45,11 +45,11 @@ async def on_member_update(event: hikari.MemberUpdateEvent) -> None:
 
     # These bypass gc.log(), so the log channel can't be their opt-in signal.
     # A guild with no staff role has nobody who could ever read them.
-    st = journal.load(int(event.guild_id))
-    if st.staff_role_id is None:
+    bot: DragonpawBot = event.app  # type: ignore[assignment]
+    core = bot.state(event.guild_id)
+    if core is None or core.staff_role_id is None:
         return
 
-    bot: DragonpawBot = event.app  # type: ignore[assignment]
     guild = bot.cache.get_guild(event.guild_id)
     journal.record(
         int(event.guild_id),

@@ -13,6 +13,5 @@ class OpenTicket(pydantic.BaseModel):
 
 class TicketGuildState(GuildStateBase):
     category_id: int | None = None
-    staff_role_id: int | None = None
     required_role_id: int | None = None
     open_tickets: list[OpenTicket] = pydantic.Field(default_factory=list)

@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from dragonpaw_bot.colors import SOLARIZED_ORANGE
-from dragonpaw_bot.plugins.tickets import state as tickets_state
 from dragonpaw_bot.plugins.tickets.commands import (
     TICKET_FOR_SELECT_ID,
     TICKET_OPEN_ID,
@@ -18,6 +17,7 @@ from dragonpaw_bot.plugins.tickets.commands import (
 from dragonpaw_bot.structs import ButtonEntry, ButtonSpec
 
 if TYPE_CHECKING:
+    from dragonpaw_bot.structs import GuildState
     from dragonpaw_bot.utils import InteractionHandler, ModalHandler
 
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
@@ -34,9 +34,9 @@ MODAL_HANDLERS: dict[str, ModalHandler] = {
 }
 
 
-def _is_available(guild_id: int) -> bool:
+def _is_available(_guild_id: int, core: GuildState | None) -> bool:
     """Tickets need a staff role — without one there's nobody to ping."""
-    return tickets_state.load(guild_id).staff_role_id is not None
+    return core is not None and core.staff_role_id is not None
 
 
 BUTTON_ENTRY = ButtonEntry(
