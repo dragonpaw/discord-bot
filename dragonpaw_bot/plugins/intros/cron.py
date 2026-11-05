@@ -12,6 +12,7 @@ from dragonpaw_bot.context import (
     GuildContext,
     check_channel_perms,
 )
+from dragonpaw_bot.journal import escape_markdown
 from dragonpaw_bot.plugins.intros import state as intros_state
 from dragonpaw_bot.utils import guild_member, guild_members
 
@@ -264,6 +265,7 @@ async def _cleanup_messages(
     removed_dupes: list[str] = []
     seen_authors: set[int] = set()
     gone_ids: set[int] = set()
+    kept_ids: set[int] = set()
 
     for message in messages:
         if message.is_pinned:
@@ -279,11 +281,13 @@ async def _cleanup_messages(
                 message.author.display_name or message.author.id
             )
             if await _try_delete(message, "intro message", gc.name):
-                gone_ids.add(author_id)
                 removed_departed.append(author_name)
                 logger.info(
                     "Removed departed member's intro", guild=gc.name, user=author_name
                 )
+            else:
+                kept_ids.add(author_id)
+            gone_ids.add(author_id)
             continue
 
         author_name = member.display_name
@@ -295,17 +299,17 @@ async def _cleanup_messages(
         else:
             seen_authors.add(author_id)
 
-    for author_id in gone_ids:
+    for author_id in gone_ids - kept_ids:
         st.aliases.pop(author_id, None)
 
     if removed_departed:
-        names = ", ".join(f"**{n}**" for n in removed_departed)
+        names = ", ".join(f"**{escape_markdown(n)}**" for n in removed_departed)
         await gc.log(
             f"🧹 *tidies the den* I nom'd {len(removed_departed)} intro post(s) from members who've left: {names}. 🐉"
         )
 
     if removed_dupes:
-        names = ", ".join(f"**{n}**" for n in removed_dupes)
+        names = ", ".join(f"**{escape_markdown(n)}**" for n in removed_dupes)
         await gc.log(
             f"✂️ *snorts smoke* Spotted some sneaky double-intros and trimmed the older one(s) from: {names}. One intro per hoard member! 🐾"
         )

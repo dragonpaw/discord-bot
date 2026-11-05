@@ -567,12 +567,12 @@ async def test_cleanup_names_departed_member_by_remembered_alias():
 
 
 async def test_cleanup_falls_back_to_username_without_alias():
-    departed = _message(2, display_name="discord_username")
+    departed = _message(2, display_name="discordname")
     bot = _bot()
 
     await _cleanup_messages(_gc(bot), _state(), [], [departed])
 
-    assert "discord_username" in _logged(bot)[0]
+    assert "discordname" in _logged(bot)[0]
 
 
 async def test_cleanup_remembers_present_authors_alias():
@@ -617,3 +617,23 @@ async def test_daily_guild_persists_remembered_aliases(tmp_path, monkeypatch):
 
     intros_state.store.cache.clear()
     assert intros_state.load(GUILD_ID).aliases == {2: "user2"}
+
+
+async def test_cleanup_keeps_alias_when_one_of_two_deletes_fails():
+    first, second = _message(2), _message(2)
+    second.delete.side_effect = _forbidden()
+    st = _state(aliases={2: "Server Alias"})
+
+    await _cleanup_messages(_gc(_bot()), st, [], [first, second])
+
+    assert st.aliases == {2: "Server Alias"}
+
+
+async def test_cleanup_escapes_markdown_in_logged_names():
+    departed = _message(2)
+    st = _state(aliases={2: "x** @here"})
+    bot = _bot()
+
+    await _cleanup_messages(_gc(bot), st, [], [departed])
+
+    assert "x\\*\\* @here" in _logged(bot)[0]
