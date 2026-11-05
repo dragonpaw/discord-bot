@@ -142,7 +142,20 @@ def _bot():
 
 
 def _gc():
-    return SimpleNamespace(bot=_bot(), log_channel_id=7, log=AsyncMock())
+    bot = _bot()
+
+    async def staff_post(content="", *, embed=None, components=(), ping_role_id=None):
+        return await bot.rest.create_message(
+            7, content, embed=embed, components=components, ping_role_id=ping_role_id
+        )
+
+    return SimpleNamespace(
+        bot=bot,
+        staff_channel_id=7,
+        log=AsyncMock(),
+        logger=MagicMock(),
+        staff_post=AsyncMock(side_effect=staff_post),
+    )
 
 
 def _many(n: int, spared: int = 0) -> LurkerPurge:
@@ -229,7 +242,7 @@ async def test_daily_step_start_with_no_lurkers_changes_nothing(monkeypatch):
     await purge_daily_step(gc, meta, [_member("x", roles=())], NOW)
     assert meta.purge is None
     assert meta.last_purge_started is None
-    gc.log.assert_not_awaited()
+    gc.staff_post.assert_not_awaited()
     gc.bot.rest.create_message.assert_not_awaited()
 
 
@@ -268,6 +281,48 @@ async def test_daily_step_final_sets_boot_posted_at(monkeypatch):
     assert meta.purge.boot_posted_at == NOW
 
 
+def _ping(gc) -> int | None:
+    return gc.staff_post.await_args.kwargs["ping_role_id"]
+
+
+async def test_start_pings_purge_staff_role(monkeypatch):
+    monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
+    gc = _gc()
+    meta = _meta()
+    meta.config.lurker_role_id = ROLE
+    meta.config.purge_staff_role_id = 77
+    await purge_daily_step(gc, meta, [_member("bob")], NOW)
+    assert _ping(gc) == 77
+
+
+async def test_reminder_does_not_ping(monkeypatch):
+    monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
+    gc = _gc()
+    meta = _meta(purge=_purge(message_id=123))
+    meta.config.purge_staff_role_id = 77
+    await purge_daily_step(gc, meta, [], NOW)
+    assert _ping(gc) is None
+
+
+async def test_final_pings_purge_staff_role(monkeypatch):
+    monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
+    gc = _gc()
+    meta = _meta(purge=_purge(day=5, message_id=123))
+    meta.config.purge_staff_role_id = 77
+    await purge_daily_step(gc, meta, [], NOW)
+    assert _ping(gc) == 77
+
+
+async def test_no_staff_channel_skips_post(monkeypatch):
+    monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
+    gc = _gc()
+    gc.staff_channel_id = None
+    meta = _meta(purge=_purge(message_id=123))
+    await purge_daily_step(gc, meta, [], NOW)
+    gc.staff_post.assert_not_awaited()
+    assert meta.purge.message_id == 123
+
+
 async def test_daily_step_expire_clears_purge_and_posts_note(monkeypatch):
     monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
     gc = _gc()
@@ -276,7 +331,7 @@ async def test_daily_step_expire_clears_purge_and_posts_note(monkeypatch):
     await purge_daily_step(gc, meta, [], NOW)
     assert meta.purge is None
     gc.bot.rest.edit_message.assert_awaited_once_with(7, 123, components=[])
-    gc.log.assert_awaited_once()
+    gc.staff_post.assert_awaited_once()
 
 
 async def test_list_frozen_new_lurker_not_added(monkeypatch):
@@ -294,7 +349,7 @@ async def test_cancel_purge_clears_state(monkeypatch):
     await cancel_purge(gc, meta)
     assert meta.purge is None
     gc.bot.rest.edit_message.assert_awaited_once_with(7, 123, components=[])
-    gc.log.assert_awaited_once()
+    gc.staff_post.assert_awaited_once()
 
 
 def _save_before_strip(monkeypatch, gc):
@@ -482,7 +537,7 @@ def _boot_setup(monkeypatch, *, purge, roles=(STAFF_ROLE,), departed=(), calls=N
         return SimpleNamespace(id=user_id, send=AsyncMock(side_effect=send))
 
     monkeypatch.setattr(purge_module, "guild_member", guild_member)
-    gc = SimpleNamespace(log=AsyncMock())
+    gc = SimpleNamespace(staff_post=AsyncMock(), logger=MagicMock())
     monkeypatch.setattr(purge_module.GuildContext, "from_interaction", lambda _i: gc)
     return meta, interaction, record, gc, calls
 
@@ -569,7 +624,7 @@ async def test_boot_departed_member_not_dmed_or_kicked(monkeypatch):
     await handle_boot(interaction)
     assert calls == [("dm", 2), ("kick", 2)]
     assert [c.kwargs["user_id"] for c in record.call_args_list] == [2]
-    summary = gc.log.await_args.args[0]
+    summary = gc.staff_post.await_args.args[0]
     assert "c1" in summary.split("left")[1]
 
 
@@ -585,7 +640,7 @@ async def test_boot_kick_forbidden_continues_and_reports(monkeypatch):
     await handle_boot(interaction)
     assert ("kick", 2) in calls
     assert [c.kwargs["user_id"] for c in record.call_args_list] == [2]
-    summary = gc.log.await_args.args[0]
+    summary = gc.staff_post.await_args.args[0]
     assert summary.startswith("💨")
     failed_part, kicked_part = summary.split("Booted")
     assert "c1" in failed_part
@@ -602,7 +657,7 @@ async def test_boot_kick_404_counts_as_left(monkeypatch):
     )
     await handle_boot(interaction)
     record.assert_not_called()
-    summary = gc.log.await_args.args[0]
+    summary = gc.staff_post.await_args.args[0]
     assert "couldn't" not in summary
     assert "c1" in summary.split("left")[1]
 
@@ -620,7 +675,7 @@ async def test_boot_member_lookup_error_is_failed_and_continues(monkeypatch):
     await handle_boot(interaction)
     assert calls == [("dm", 2), ("kick", 2)]
     assert [c.kwargs["user_id"] for c in record.call_args_list] == [2]
-    summary = gc.log.await_args.args[0]
+    summary = gc.staff_post.await_args.args[0]
     assert "c1" in summary.split("couldn't")[1].split("Booted")[0]
 
 
@@ -662,7 +717,7 @@ async def test_boot_summary_split_under_2000_chars(monkeypatch):
 
     interaction.app.rest.kick_user = AsyncMock(side_effect=kick_user)
     await handle_boot(interaction)
-    messages = [c.args[0] for c in gc.log.await_args_list]
+    messages = [c.args[0] for c in gc.staff_post.await_args_list]
     assert len(messages) > 1
     assert all(len(m) <= 2000 for m in messages)
     assert messages[0].startswith("💨")
@@ -694,7 +749,7 @@ async def test_boot_escapes_names_in_rendered_text(monkeypatch):
     assert record.call_args.kwargs["summary"].endswith("by \\_Staffer\\_")
     content = interaction.create_initial_response.await_args.args[1]
     assert "\\_Staffer\\_" in content
-    summary = gc.log.await_args.args[0]
+    summary = gc.staff_post.await_args.args[0]
     assert "\\_Staffer\\_" in summary
     assert "\\*c1\\*" in summary
 
@@ -710,7 +765,7 @@ def _lurker_cmd(**options):
     return cmd
 
 
-def _lurker_setup(monkeypatch, tmp_path, *, log_channel=555, **config):
+def _lurker_setup(monkeypatch, tmp_path, *, staff_channel=555, **config):
     monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
     activity_state._config_cache.clear()
     meta = activity_state.load_config(1)
@@ -721,7 +776,7 @@ def _lurker_setup(monkeypatch, tmp_path, *, log_channel=555, **config):
     gc = MagicMock()
     gc.name = "Guild"
     gc.log = AsyncMock()
-    gc.log_channel_id = log_channel
+    gc.staff_channel_id = staff_channel
     gc.bot = MagicMock()
     monkeypatch.setattr(
         activity_config.GuildContext, "from_ctx", MagicMock(return_value=gc)
@@ -752,13 +807,15 @@ def _role(role_id: int = ROLE):
     return role
 
 
-async def test_lurker_config_refuses_enable_without_log_channel(monkeypatch, tmp_path):
+async def test_lurker_config_refuses_enable_without_staff_channel(
+    monkeypatch, tmp_path
+):
     ctx, _, start, _ = _lurker_setup(
-        monkeypatch, tmp_path, log_channel=None, lurker_role_id=ROLE
+        monkeypatch, tmp_path, staff_channel=None, lurker_role_id=ROLE
     )
     await _lurker_cmd(enabled=True).invoke(ctx)
     assert not activity_state.load_config(1).config.purge_enabled
-    assert "log" in ctx.respond.await_args.args[0]
+    assert "staff channel" in ctx.respond.await_args.args[0]
     start.assert_not_awaited()
 
 

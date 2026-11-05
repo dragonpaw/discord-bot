@@ -128,7 +128,7 @@ def build_purge_post(
 async def _strip_components(
     gc: GuildContext, meta: ActivityGuildMeta, purge: LurkerPurge
 ) -> None:
-    channel_id = purge.channel_id or gc.log_channel_id
+    channel_id = purge.channel_id or gc.staff_channel_id
     if purge.message_id is None or channel_id is None:
         return
     try:
@@ -137,17 +137,33 @@ async def _strip_components(
         logger.debug("Old purge post already gone", guild=meta.guild_name)
 
 
-async def _post(gc: GuildContext, meta: ActivityGuildMeta, purge: LurkerPurge) -> None:
-    if gc.log_channel_id is None:
-        logger.warning("No log channel for lurker purge post", guild=meta.guild_name)
+async def _post(
+    gc: GuildContext, meta: ActivityGuildMeta, purge: LurkerPurge, *, ping: bool
+) -> None:
+    """Repost the list in the staff channel; ping staff for the start and the Boot."""
+    channel_id = gc.staff_channel_id
+    if channel_id is None:
+        logger.warning("No staff channel for lurker purge post", guild=meta.guild_name)
         return
     await _strip_components(gc, meta, purge)
     embed, components = build_purge_post(gc.bot, purge, meta.config.purge_grace_days)
-    message = await gc.bot.rest.create_message(
-        gc.log_channel_id, embed=embed, components=components
+    message = await gc.staff_post(
+        embed=embed,
+        components=components,
+        ping_role_id=meta.config.purge_staff_role_id if ping else None,
     )
+    if message is None:
+        return
     purge.message_id = int(message.id)
-    purge.channel_id = gc.log_channel_id
+    purge.channel_id = int(channel_id)
+
+
+async def _staff_note(gc: GuildContext, text: str) -> None:
+    """A plain staff-channel note whose loss shouldn't break the caller."""
+    try:
+        await gc.staff_post(text)
+    except hikari.HTTPError as exc:
+        gc.logger.warning("Failed to post lurker purge note", error=str(exc))
 
 
 async def start_purge(
@@ -168,7 +184,7 @@ async def start_purge(
     purge = LurkerPurge(started_at=now, candidates=candidates)
     meta.purge = purge
     logger.info("Lurker purge started", guild=meta.guild_name, count=len(candidates))
-    await _post(gc, meta, purge)
+    await _post(gc, meta, purge, ping=True)
     return True
 
 
@@ -180,9 +196,10 @@ async def cancel_purge(gc: GuildContext, meta: ActivityGuildMeta) -> None:
     activity_state.save_config(meta)
     logger.info("Lurker purge cancelled", guild=meta.guild_name)
     await _strip_components(gc, meta, purge)
-    await gc.log(
+    await _staff_note(
+        gc,
         "🕊️ *tucks my tail* I've called off the lurker purge — nobody is getting"
-        " booted. 🐾"
+        " booted. 🐾",
     )
 
 
@@ -202,15 +219,16 @@ async def purge_daily_step(
             purge.day += 1
         else:
             purge.boot_posted_at = now
-        await _post(gc, meta, purge)
+        await _post(gc, meta, purge, ping=action == "final")
     elif action == "expire" and purge is not None:
         meta.purge = None
         activity_state.save_config(meta)
         logger.info("Lurker purge expired", guild=meta.guild_name)
         await _strip_components(gc, meta, purge)
-        await gc.log(
+        await _staff_note(
+            gc,
             "⌛ *yawns* Nobody pressed Boot, so this lurker purge has lapsed and"
-            " nobody was kicked. I'll be back with the next one on schedule! 🐉"
+            " nobody was kicked. I'll be back with the next one on schedule! 🐉",
         )
     else:
         return
@@ -417,7 +435,7 @@ async def _log_boot_summary(
         " done! 🐉"
     )
     for message in _summary_messages(header, sections):
-        await gc.log(message)
+        await _staff_note(gc, message)
 
 
 def _summary_messages(header: str, sections: list[tuple[str, list[str]]]) -> list[str]:

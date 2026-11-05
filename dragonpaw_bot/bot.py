@@ -231,6 +231,9 @@ def _yaml_dict_to_state(data: dict[str, Any]) -> structs.GuildState:
     if data.get("general_channel_id") is not None:
         data["general_channel_id"] = hikari.Snowflake(data["general_channel_id"])
 
+    if data.get("staff_channel_id") is not None:
+        data["staff_channel_id"] = hikari.Snowflake(data["staff_channel_id"])
+
     if data.get("button_channel_id") is not None:
         data["button_channel_id"] = hikari.Snowflake(data["button_channel_id"])
 
@@ -366,7 +369,6 @@ async def on_dm_message(event: hikari.DMMessageCreateEvent) -> None:
 loader = lightbulb.Loader()
 
 _config_group = lightbulb.Group("config", "Bot configuration")
-_channels_sub = _config_group.subgroup("channels", "Channel settings")
 _media_sub = _config_group.subgroup("media", "Media-only channel settings")
 _cleanup_sub = _config_group.subgroup("cleanup", "Auto-expiry channel settings")
 _intros_sub = _config_group.subgroup("intros", "Intro channel settings")
@@ -379,26 +381,40 @@ _journal_sub = _config_group.subgroup("journal", "Member journal settings")
 _buttons_sub = _config_group.subgroup("buttons", "Feature button channel settings")
 
 
-class SetLogChannel(
+_CHANNEL_LABELS = {
+    "log": "📜 Log",
+    "general": "💬 General chat",
+    "staff": "🛡️ Staff announcements",
+}
+
+
+class ConfigChannels(
     lightbulb.SlashCommand,
-    name="log",
-    description="Set or clear the bot's log channel for this server.",
+    name="channels",
+    description="Set the server's common channels (no options shows them)",
     hooks=[guild_owner_only],
 ):
-    channel = lightbulb.channel(
-        "channel", "Channel for bot logs (omit to clear)", default=None
+    log = lightbulb.channel("log", "Where I post my logs", default=None)
+    general = lightbulb.channel("general", "The general chat channel", default=None)
+    staff = lightbulb.channel(
+        "staff", "Staff announcements, like lurker purge lists", default=None
+    )
+    clear = lightbulb.string(
+        "clear",
+        "Unset one of the channels",
+        choices=[
+            lightbulb.Choice(label, key) for key, label in _CHANNEL_LABELS.items()
+        ],
+        default=None,
     )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        if not ctx.guild_id:
-            logger.error("Interaction without a guild")
-            return
-
+        assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
-        guild = await gc.fetch_guild()
         state = gc.state()
         if not state:
+            guild = await gc.fetch_guild()
             state = structs.GuildState(
                 id=ctx.guild_id,
                 name=guild.name,
@@ -406,79 +422,44 @@ class SetLogChannel(
                 config_last=datetime.datetime.now(tz=datetime.UTC),
             )
 
-        if self.channel is not None:
-            state.log_channel_id = self.channel.id
+        changes: list[str] = []
+        for key, channel in (
+            ("log", self.log),
+            ("general", self.general),
+            ("staff", self.staff),
+        ):
+            if channel is not None:
+                setattr(state, f"{key}_channel_id", channel.id)
+                changes.append(f"{_CHANNEL_LABELS[key]} → <#{channel.id}>")
+        if self.clear is not None:
+            setattr(state, f"{self.clear}_channel_id", None)
+            changes.append(f"{_CHANNEL_LABELS[self.clear]} cleared")
+        if changes:
             bot.state_update(state)
-            gc.logger.info("Set log channel", channel=self.channel.name)
-            await ctx.respond(
-                f"Log channel set to <#{self.channel.id}>.",
-                flags=hikari.MessageFlag.EPHEMERAL,
+            gc.logger.info("Channels changed", changes=changes)
+
+        lines = ["🐉 **My channels**"]
+        for key, label in _CHANNEL_LABELS.items():
+            channel_id = getattr(state, f"{key}_channel_id")
+            lines.append(
+                f"{label}: {f'<#{channel_id}>' if channel_id else '_not set_'}"
             )
-        else:
-            state.log_channel_id = None
-            bot.state_update(state)
-            gc.logger.info("Cleared log channel")
-            await ctx.respond(
-                "Log channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
-            )
+        await ctx.respond("\n".join(lines), flags=hikari.MessageFlag.EPHEMERAL)
 
-
-class SetGeneralChannel(
-    lightbulb.SlashCommand,
-    name="general",
-    description="Set or clear the general chat channel for this server.",
-    hooks=[guild_owner_only],
-):
-    channel = lightbulb.channel(
-        "channel", "General chat channel (omit to clear)", default=None
-    )
-
-    @lightbulb.invoke
-    async def invoke(self, ctx: lightbulb.Context) -> None:
-        if not ctx.guild_id:
-            logger.error("Interaction without a guild")
-            return
-
-        gc = GuildContext.from_ctx(ctx)
-        guild = await gc.fetch_guild()
-        state = gc.state()
-        if not state:
-            state = structs.GuildState(
-                id=ctx.guild_id,
-                name=guild.name,
-                config_url="",
-                config_last=datetime.datetime.now(tz=datetime.UTC),
-            )
-
-        if self.channel is not None:
-            state.general_channel_id = self.channel.id
-            bot.state_update(state)
-            gc.logger.info("Set general chat channel", channel=self.channel.name)
-            await ctx.respond(
-                f"General chat channel set to <#{self.channel.id}>.",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
+        if changes:
             actor = actor_name(ctx)
-            await gc.log(
-                f"⚙️ *tail swish* **{actor}** pointed me at <#{self.channel.id}> as the general chat channel! 🐉"
+            await GuildContext.from_ctx(ctx).log(
+                f"⚙️ *tail swish* **{actor}** rearranged my channels: "
+                + "; ".join(changes)
+                + " 🐉"
             )
-        else:
-            state.general_channel_id = None
-            bot.state_update(state)
-            gc.logger.info("Cleared general chat channel")
-            await ctx.respond(
-                "General chat channel cleared.", flags=hikari.MessageFlag.EPHEMERAL
-            )
-            actor = actor_name(ctx)
-            await gc.log(f"⚙️ **{actor}** cleared the general chat channel 🐉")
 
 
 from dragonpaw_bot.plugins.activity import config as activity_config  # noqa: E402
 
 _activity_sub = _config_group.subgroup("activity", "Activity tracker settings")
 
-_channels_sub.register(SetLogChannel)
-_channels_sub.register(SetGeneralChannel)
+_config_group.register(ConfigChannels)
 media_config.register(_media_sub)
 cleanup_config.register(_cleanup_sub)
 intros_config.register(_intros_sub)

@@ -433,3 +433,40 @@ async def test_user_without_kind_raises(journal_store):
     gc = _journal_gc(log_channel_id=hikari.Snowflake(99))
     with pytest.raises(ValueError):
         await gc.log("x", journal_user=_subject())
+
+
+# ---------------------------------------------------------------------------- #
+#                          GuildContext.staff_post                              #
+# ---------------------------------------------------------------------------- #
+
+
+def _make_gc_with_staff(staff_channel_id: int | None) -> GuildContext:
+    gc = _make_gc()
+    gc.bot.state = Mock(
+        return_value=Mock(staff_channel_id=staff_channel_id)
+        if staff_channel_id
+        else None
+    )
+    return gc
+
+
+async def test_staff_post_pings_role_and_allows_the_mention():
+    gc = _make_gc_with_staff(55)
+    await gc.staff_post("hello", ping_role_id=77)
+    args, kwargs = gc.bot.rest.create_message.await_args
+    assert args == (55, "<@&77> hello")
+    assert kwargs["role_mentions"] == [77]
+
+
+async def test_staff_post_without_ping_mentions_nobody():
+    gc = _make_gc_with_staff(55)
+    await gc.staff_post("hello")
+    args, kwargs = gc.bot.rest.create_message.await_args
+    assert args == (55, "hello")
+    assert kwargs["role_mentions"] is False
+
+
+async def test_staff_post_without_channel_is_skipped():
+    gc = _make_gc_with_staff(None)
+    assert await gc.staff_post("hello") is None
+    gc.bot.rest.create_message.assert_not_awaited()

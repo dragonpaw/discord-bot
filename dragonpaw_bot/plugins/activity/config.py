@@ -382,10 +382,10 @@ async def _try_enable(
             "🐉 I can't start purging yet — I don't know who the lurkers are!"
             " Set the lurker role with `role:` first. 🐾"
         ]
-    if not gc.log_channel_id:
+    if not gc.staff_channel_id:
         return [
-            "🐉 I can't start purging yet — I post the list in the staff log"
-            " channel and I don't have one! Set it with `/config channels log`"
+            "🐉 I can't start purging yet — I post the list in the staff"
+            " channel and I don't have one! Set it with `/config channels staff:`"
             " first. 🐾"
         ]
     cfg.purge_enabled = True

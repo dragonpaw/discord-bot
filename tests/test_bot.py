@@ -281,3 +281,73 @@ async def test_handler_exception_logs_and_responds(monkeypatch, caplog):
     interaction.create_initial_response.assert_called_once()
     call_kwargs = interaction.create_initial_response.call_args
     assert "error occurred" in str(call_kwargs).lower()
+
+
+# ---------------------------------------------------------------------------- #
+#                              /config channels                                 #
+# ---------------------------------------------------------------------------- #
+
+
+def _channels_cmd(**options):
+    cmd = bot_module.ConfigChannels()
+    for name in ("log", "general", "staff", "clear"):
+        setattr(cmd, name, options.get(name))
+    return cmd
+
+
+def _channel(channel_id: int):
+    channel = Mock()
+    channel.id = hikari.Snowflake(channel_id)
+    return channel
+
+
+def _channels_setup(monkeypatch, state: GuildState):
+    gc = Mock()
+    gc.state = Mock(return_value=state)
+    gc.log = AsyncMock()
+    monkeypatch.setattr(bot_module.GuildContext, "from_ctx", Mock(return_value=gc))
+    update = Mock()
+    monkeypatch.setattr(bot_module.bot, "state_update", update)
+    ctx = Mock()
+    ctx.guild_id = hikari.Snowflake(99)
+    ctx.respond = AsyncMock()
+    ctx.member.display_name = "Owner"
+    return ctx, gc, update
+
+
+async def test_config_channels_sets_only_given_channels(monkeypatch):
+    state = _sample_state()
+    state.log_channel_id = hikari.Snowflake(1)
+    ctx, gc, update = _channels_setup(monkeypatch, state)
+    await _channels_cmd(staff=_channel(3)).invoke(ctx)
+    assert state.staff_channel_id == 3
+    assert state.log_channel_id == 1
+    update.assert_called_once_with(state)
+    gc.log.assert_awaited_once()
+
+
+async def test_config_channels_clear_unsets_one(monkeypatch):
+    state = _sample_state()
+    state.general_channel_id = hikari.Snowflake(2)
+    state.staff_channel_id = hikari.Snowflake(3)
+    ctx, _, _ = _channels_setup(monkeypatch, state)
+    await _channels_cmd(clear="staff").invoke(ctx)
+    assert state.staff_channel_id is None
+    assert state.general_channel_id == 2
+
+
+async def test_config_channels_no_options_just_shows(monkeypatch):
+    state = _sample_state()
+    state.staff_channel_id = hikari.Snowflake(3)
+    ctx, gc, update = _channels_setup(monkeypatch, state)
+    await _channels_cmd().invoke(ctx)
+    update.assert_not_called()
+    gc.log.assert_not_awaited()
+    assert "<#3>" in ctx.respond.await_args.args[0]
+
+
+def test_staff_channel_survives_yaml_round_trip():
+    state = _sample_state()
+    state.staff_channel_id = hikari.Snowflake(3)
+    again = _yaml_dict_to_state(_state_to_yaml_dict(state))
+    assert again.staff_channel_id == 3

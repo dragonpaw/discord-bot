@@ -11,6 +11,8 @@ import structlog
 from dragonpaw_bot import journal
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from dragonpaw_bot.bot import DragonpawBot
     from dragonpaw_bot.structs import GuildState
 
@@ -126,6 +128,38 @@ class GuildContext:
             )
         except hikari.HTTPError as exc:
             self.logger.warning("Failed to send log message", error=str(exc))
+
+    @property
+    def staff_channel_id(self) -> hikari.Snowflake | None:
+        state = self.state()
+        return state.staff_channel_id if state else None
+
+    async def staff_post(
+        self,
+        content: str = "",
+        *,
+        embed: hikari.Embed | None = None,
+        components: Sequence[hikari.api.ComponentBuilder] = (),
+        ping_role_id: int | None = None,
+    ) -> hikari.Message | None:
+        """Post to the staff announcements channel, optionally pinging a role.
+
+        Returns None (with a warning) when no staff channel is configured;
+        HTTP errors propagate so callers that track the message can react.
+        """
+        channel_id = self.staff_channel_id
+        if channel_id is None:
+            self.logger.warning("No staff channel configured, skipping staff post")
+            return None
+        if ping_role_id is not None:
+            content = f"<@&{ping_role_id}> {content}".rstrip()
+        return await self.bot.rest.create_message(
+            channel_id,
+            content or hikari.UNDEFINED,
+            embed=embed or hikari.UNDEFINED,
+            components=components,
+            role_mentions=[ping_role_id] if ping_role_id is not None else False,
+        )
 
     def state(self) -> GuildState | None:
         """Get the guild's core GuildState."""
