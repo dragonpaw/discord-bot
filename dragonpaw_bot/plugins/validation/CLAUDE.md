@@ -122,6 +122,7 @@ These properties are enforced in code and must be preserved:
 - **Self-approval prevention** — Both `handle_approve_button` and `handle_approve_modal` reject the interaction if the clicker's user ID matches the `user_id` on the state entry for that channel.
 - **Staff-only approval** — `_is_staff` requires either ADMINISTRATOR permission or the shared staff role (`gc.staff_role_id`). Non-staff get an ephemeral rejection before any modal is shown.
 - **Photo counting isolation** — `on_message_create` only counts photos when all three conditions are true: the message is in the member's assigned validate channel, the author is that specific member, and the member's stage is `AWAITING_PHOTOS`. Photos posted to other channels, by other users, or after the stage has advanced are silently ignored.
+- **Staff ping allow-list** — The photos-submitted ping passes explicit `user_mentions=[member]` / `role_mentions=[staff role]`; hikari suppresses pings by default, so without them the staff role would never actually be pinged.
 - **Nickname strip** — The approved name is `.strip()`-ed before the empty check, preventing whitespace-only nicknames from passing `if not name`.
 - **Channel name safety** — `_sanitize_channel_name` falls back to `"validate-member"` if the display name produces an empty string after stripping non-alphanumeric characters (e.g. emoji-only display names).
 
