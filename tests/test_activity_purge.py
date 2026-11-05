@@ -6,6 +6,7 @@ import hikari
 import hikari.impl
 
 from dragonpaw_bot import journal
+from dragonpaw_bot.plugins.activity import purge as purge_module
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     ActivityGuildConfig,
@@ -18,6 +19,7 @@ from dragonpaw_bot.plugins.activity.purge import (
     SPARE_ID,
     build_purge_post,
     cancel_purge,
+    handle_boot,
     handle_spare,
     next_action,
     purge_daily_step,
@@ -355,3 +357,147 @@ async def test_spare_allowed_for_owner(monkeypatch):
     interaction.member.id = OWNER
     await handle_spare(interaction)
     assert _response_type(interaction) == hikari.ResponseType.MESSAGE_UPDATE
+
+
+def _boot_setup(monkeypatch, *, purge, roles=(STAFF_ROLE,), departed=(), calls=None):
+    meta, interaction, record = _spare_setup(monkeypatch, purge=purge, roles=roles)
+    interaction.get_guild = lambda: SimpleNamespace(owner_id=OWNER, name="Den")
+    calls = [] if calls is None else calls
+
+    async def kick_user(_guild_id, user_id, *, reason):
+        calls.append(("kick", user_id))
+
+    interaction.app.rest.kick_user = AsyncMock(side_effect=kick_user)
+
+    async def guild_member(_bot, _guild_id, user_id):
+        if user_id in departed:
+            return None
+
+        async def send(content):
+            assert "Den" in content
+            calls.append(("dm", user_id))
+
+        return SimpleNamespace(id=user_id, send=AsyncMock(side_effect=send))
+
+    monkeypatch.setattr(purge_module, "guild_member", guild_member)
+    gc = SimpleNamespace(log=AsyncMock())
+    monkeypatch.setattr(purge_module.GuildContext, "from_interaction", lambda _i: gc)
+    return meta, interaction, record, gc, calls
+
+
+def _boot_purge(n: int = 2, spared: int = 0) -> LurkerPurge:
+    purge = _many(n, spared=spared)
+    purge.message_id = 555
+    purge.boot_posted_at = NOW
+    return purge
+
+
+async def test_boot_denied_for_non_staff(monkeypatch):
+    meta, interaction, record, _, calls = _boot_setup(
+        monkeypatch, purge=_boot_purge(), roles=()
+    )
+    await handle_boot(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_CREATE
+    assert meta.purge is not None
+    assert calls == []
+    record.assert_not_called()
+
+
+async def test_boot_before_final_rejected(monkeypatch):
+    purge = _boot_purge()
+    purge.boot_posted_at = None
+    meta, interaction, _, _, calls = _boot_setup(monkeypatch, purge=purge)
+    await handle_boot(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_CREATE
+    assert meta.purge is purge
+    assert calls == []
+
+
+async def test_boot_second_press_is_rejected(monkeypatch):
+    meta, interaction, _, _, _ = _boot_setup(monkeypatch, purge=_boot_purge())
+    await handle_boot(interaction)
+    assert meta.purge is None
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_UPDATE
+    assert interaction.app.rest.kick_user.await_count == 2
+    await handle_boot(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_CREATE
+    assert interaction.app.rest.kick_user.await_count == 2
+
+
+async def test_boot_update_strips_components(monkeypatch):
+    _, interaction, _, _, _ = _boot_setup(monkeypatch, purge=_boot_purge())
+    await handle_boot(interaction)
+    kwargs = interaction.create_initial_response.await_args_list[0].kwargs
+    assert kwargs["components"] == []
+
+
+async def test_boot_dms_before_kick(monkeypatch):
+    _, interaction, _, _, calls = _boot_setup(monkeypatch, purge=_boot_purge())
+    await handle_boot(interaction)
+    assert calls == [("dm", 1), ("kick", 1), ("dm", 2), ("kick", 2)]
+
+
+async def test_boot_dm_failure_still_kicks(monkeypatch):
+    _, interaction, _, _, calls = _boot_setup(monkeypatch, purge=_boot_purge(1))
+
+    async def guild_member(_bot, _guild_id, user_id):
+        return SimpleNamespace(
+            id=user_id,
+            send=AsyncMock(side_effect=hikari.ForbiddenError("u", {}, b"")),
+        )
+
+    monkeypatch.setattr(purge_module, "guild_member", guild_member)
+    await handle_boot(interaction)
+    assert calls == [("kick", 1)]
+
+
+async def test_boot_skips_spared(monkeypatch):
+    _, interaction, record, _, calls = _boot_setup(
+        monkeypatch, purge=_boot_purge(3, spared=1)
+    )
+    await handle_boot(interaction)
+    assert [c for c in calls if c[0] == "kick"] == [("kick", 2), ("kick", 3)]
+    assert [c.kwargs["user_id"] for c in record.call_args_list] == [2, 3]
+
+
+async def test_boot_departed_member_not_dmed_or_kicked(monkeypatch):
+    _, interaction, record, gc, calls = _boot_setup(
+        monkeypatch, purge=_boot_purge(), departed=(1,)
+    )
+    await handle_boot(interaction)
+    assert calls == [("dm", 2), ("kick", 2)]
+    assert [c.kwargs["user_id"] for c in record.call_args_list] == [2]
+    summary = gc.log.await_args.args[0]
+    assert "c1" in summary.split("left")[1]
+
+
+async def test_boot_kick_forbidden_continues_and_reports(monkeypatch):
+    _, interaction, record, gc, calls = _boot_setup(monkeypatch, purge=_boot_purge())
+
+    async def kick_user(_guild_id, user_id, *, reason):
+        if user_id == 1:
+            raise hikari.ForbiddenError("u", {}, b"")
+        calls.append(("kick", user_id))
+
+    interaction.app.rest.kick_user = AsyncMock(side_effect=kick_user)
+    await handle_boot(interaction)
+    assert ("kick", 2) in calls
+    assert [c.kwargs["user_id"] for c in record.call_args_list] == [2]
+    summary = gc.log.await_args.args[0]
+    assert summary.startswith("💨")
+    kicked_part, failed_part = summary.split("couldn't")
+    assert "c2" in kicked_part
+    assert "c1" not in kicked_part
+    assert "c1" in failed_part
+    assert "Kick Members" in summary
+
+
+async def test_boot_journal_and_audit_reason(monkeypatch):
+    _, interaction, record, _, _ = _boot_setup(monkeypatch, purge=_boot_purge(1))
+    await handle_boot(interaction)
+    reason = interaction.app.rest.kick_user.await_args.kwargs["reason"]
+    assert reason == "Lurker purge — booted by Staffer"
+    kwargs = record.call_args.kwargs
+    assert kwargs["kind"] == "lurker_kicked"
+    assert kwargs["user_id"] == 1
+    assert kwargs["summary"] == "Booted in the lurker purge by Staffer"

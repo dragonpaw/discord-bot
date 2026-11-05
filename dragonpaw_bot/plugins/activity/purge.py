@@ -9,6 +9,7 @@ import hikari
 import structlog
 
 from dragonpaw_bot import journal
+from dragonpaw_bot.context import GuildContext
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     PURGE_BOOT_EXPIRY_DAYS,
@@ -17,12 +18,12 @@ from dragonpaw_bot.plugins.activity.models import (
     PurgeCandidate,
     add_months,
 )
+from dragonpaw_bot.utils import guild_member
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from dragonpaw_bot.bot import DragonpawBot
-    from dragonpaw_bot.context import GuildContext
 
 logger = structlog.get_logger(__name__)
 
@@ -266,3 +267,107 @@ async def handle_spare(interaction: hikari.ComponentInteraction) -> None:
             kind="lurker_spared",
             summary=f"🛡️ Spared from the lurker purge by {member.display_name}",
         )
+
+
+GOODBYE_DM = (
+    "🐉 *soft dragon nuzzle* Hi there! It's been a long while since I've seen you"
+    " around **{guild}**, so the staff team and I are doing a little tidy-up of"
+    " quiet members. This isn't a punishment, and there are no hard feelings at"
+    " all — thank you for the time you spent with us. I hope all your adventures"
+    " are wonderful! 🐾"
+)
+
+
+async def handle_boot(interaction: hikari.ComponentInteraction) -> None:
+    assert interaction.guild_id is not None
+    assert interaction.member is not None
+    guild = interaction.get_guild()
+    meta = activity_state.load_config(int(interaction.guild_id))
+    staff = interaction.member.display_name
+    if guild is None or not is_purge_staff(
+        meta, interaction.member, int(guild.owner_id)
+    ):
+        logger.warning("Lurker purge Boot attempted by non-staff")
+        await _reply(
+            interaction,
+            "*snorts smoke* Only the staff team can press Boot on the purge! 🐉",
+        )
+        return
+
+    purge = meta.purge
+    if purge is None or purge.boot_posted_at is None:
+        await _reply(
+            interaction,
+            "*tilts head* There's no final list waiting for a Boot right now —"
+            " it's already been taken care of. 🐾",
+        )
+        return
+
+    # Claimed before any await, so a second press sees no purge and is turned away.
+    meta.purge = None
+    activity_state.save_config(meta)
+    logger.info("Lurker purge Boot pressed")
+
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    embed, _ = build_purge_post(bot, purge, meta.config.purge_grace_days)
+    await interaction.create_initial_response(
+        hikari.ResponseType.MESSAGE_UPDATE,
+        f"👢 {staff} pressed Boot — booting…",
+        embed=embed,
+        components=[],
+    )
+
+    kicked: list[str] = []
+    left: list[str] = []
+    failed: list[str] = []
+    for c in purge.candidates:
+        if c.spared_by is not None:
+            continue
+        member = await guild_member(bot, meta.guild_id, c.user_id)
+        if member is None:
+            left.append(c.display_name)
+            continue
+        try:
+            await member.send(GOODBYE_DM.format(guild=guild.name))
+        except hikari.HTTPError as exc:
+            logger.warning(
+                "Could not DM lurker purge goodbye",
+                member=c.display_name,
+                error=str(exc),
+            )
+        try:
+            await bot.rest.kick_user(
+                meta.guild_id, c.user_id, reason=f"Lurker purge — booted by {staff}"
+            )
+        except hikari.HTTPError as exc:
+            logger.warning(
+                "Lurker purge kick failed", member=c.display_name, error=str(exc)
+            )
+            failed.append(c.display_name)
+            continue
+        kicked.append(c.display_name)
+        journal.record(
+            meta.guild_id,
+            meta.guild_name,
+            user_id=c.user_id,
+            user_name=c.display_name,
+            kind="lurker_kicked",
+            summary=f"Booted in the lurker purge by {staff}",
+        )
+    logger.info(
+        "Lurker purge finished", kicked=len(kicked), left=len(left), failed=len(failed)
+    )
+
+    lines = [
+        f"💨 *happy crunch* {staff} pressed Boot and the lurker purge is all done! 🐉",
+        f"👢 Booted: {', '.join(kicked) or 'nobody'}",
+    ]
+    if left:
+        lines.append(f"🚪 Had already left: {', '.join(left)}")
+    if failed:
+        lines.append(
+            f"⚠️ I couldn't kick: {', '.join(failed)} — please check my **Kick"
+            " Members** permission and that my role sits above theirs, then kick"
+            " them by hand. 🐾"
+        )
+    await GuildContext.from_interaction(interaction).log("\n".join(lines))

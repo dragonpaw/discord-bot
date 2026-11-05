@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 from dragonpaw_bot.colors import SOLARIZED_CYAN
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.commands import handle_score_interaction
-from dragonpaw_bot.plugins.activity.purge import SPARE_ID, handle_spare
+from dragonpaw_bot.plugins.activity.purge import (
+    BOOT_ID,
+    SPARE_ID,
+    handle_boot,
+    handle_spare,
+)
 from dragonpaw_bot.structs import ButtonEntry, ButtonSpec
 
 if TYPE_CHECKING:
@@ -18,6 +23,7 @@ ACTIVITY_SCORE_ID = "activity_score"
 INTERACTION_HANDLERS: dict[str, InteractionHandler] = {
     ACTIVITY_SCORE_ID: handle_score_interaction,
     SPARE_ID: handle_spare,
+    BOOT_ID: handle_boot,
 }
 
 
