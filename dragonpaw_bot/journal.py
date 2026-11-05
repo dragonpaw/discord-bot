@@ -25,6 +25,8 @@ EntryKind = Literal[
     "birthday_set",
     "birthday_removed",
     "name_change",
+    "lurker_spared",
+    "lurker_kicked",
 ]
 
 #: An embed has one colour, so kinds are distinguished by leading emoji instead.
@@ -37,6 +39,8 @@ KIND_EMOJI: dict[str, str] = {
     "birthday_set": "🎂",
     "birthday_removed": "🎂",
     "name_change": "🏷️",
+    "lurker_spared": "🛡️",
+    "lurker_kicked": "👢",
 }
 
 

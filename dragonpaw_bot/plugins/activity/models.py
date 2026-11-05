@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import calendar
+import datetime  # noqa: TC003
 import enum
 import math
 import time
-from typing import TYPE_CHECKING
 
 import pydantic
-
-if TYPE_CHECKING:
-    import datetime
 
 
 class ContributionKind(enum.StrEnum):
@@ -90,12 +87,31 @@ class ActivityGuildConfig(pydantic.BaseModel):
     purge_staff_role_id: int | None = None
 
 
+PURGE_BOOT_EXPIRY_DAYS = 14
+
+
+class PurgeCandidate(pydantic.BaseModel):
+    user_id: int
+    display_name: str
+    spared_by: str | None = None
+
+
+class LurkerPurge(pydantic.BaseModel):
+    started_at: datetime.datetime
+    day: int = 1
+    boot_posted_at: datetime.datetime | None = None
+    message_id: int | None = None
+    candidates: list[PurgeCandidate]
+
+
 class ActivityGuildMeta(pydantic.BaseModel):
     """Persisted guild-level config and metadata (no user data)."""
 
     guild_id: int = pydantic.Field(gt=0)
     guild_name: str = ""
     config: ActivityGuildConfig = pydantic.Field(default_factory=ActivityGuildConfig)
+    purge: LurkerPurge | None = None
+    last_purge_started: datetime.datetime | None = None
 
 
 def bucket_is_negligible(
