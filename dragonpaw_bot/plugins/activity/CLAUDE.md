@@ -1,6 +1,6 @@
 ## Activity Tracker Plugin
 
-Tracks member engagement across text posts, media posts, reactions, and voice channel time. Scores use exponential decay so active members stay relevant while inactive ones fade. Roles and channels can be configured with multipliers. A "lurker" role is assigned/removed daily based on score.
+Tracks member engagement across text posts, media posts, reactions, and voice channel time. Scores use exponential decay so active members stay relevant while inactive ones fade. Roles and channels can be configured with multipliers. A "lurker" role is assigned/removed daily based on score, and an optional automatic purge lets staff boot long-term lurkers (see Lurker purges).
 
 ### Scoring
 
@@ -73,9 +73,51 @@ All require MANAGE_GUILD or ADMINISTRATOR (the guild_owner_only hook).
 - **`role-remove @role`** — Remove a role's activity configuration.
 - **`channel-add #channel [multiplier]`** — Add or update a channel's point multiplier (default 2.0). Multiplier 0 silently ignores all activity (messages, reactions, VC) in that channel.
 - **`channel-remove #channel`** — Remove a channel's multiplier.
-- **`lurker @role`** — Set the lurker role (omit to clear). Validates bot can manage the role via `check_role_manageable`.
 - **`viewer @role`** — Set the activity viewer role (omit to clear) — who may check others' scores and run `/activity report` without admin permissions.
-- **`status`** — Show current configuration: roles, channel multipliers, lurker role, total tracked members.
+- **`status`** — Show current configuration: roles, channel multipliers, lurker role (with a `(see /config lurker)` hint), total tracked members.
+
+### Lurker Config (`/config lurker`)
+
+A direct subcommand of `/config` (registered in `bot.py` as `activity_config.LurkerConfig`), guild_owner_only. All options are optional; with none it shows an ephemeral settings summary, including any purge in progress (day N of the grace period, or "final list is up").
+
+| Option       | Type        | Meaning                                                            |
+| ------------ | ----------- | ------------------------------------------------------------------ |
+| `role`       | role        | The lurker role. Checked with `check_role_manageable`.             |
+| `enabled`    | boolean     | Turn automatic purges on or off.                                   |
+| `frequency`  | int, 1-12   | Months between purges (default 4). Also the newcomer window.       |
+| `grace`      | int, 1-14   | Days staff have to spare members (default 5).                      |
+| `staff_role` | role        | Role allowed to spare and Boot, in addition to the guild owner.    |
+
+Only the options given are changed. Enabling is **refused** (old value kept, a friendly note says why) if there is no lurker role (counting one set in the same call) or no log channel (`/config channels log`). If the bot lacks `KICK_MEMBERS` the command still saves but warns. Turning purges on starts a purge immediately; turning them off while one is running cancels it. Changes are logged with ⚙️.
+
+### Lurker purges
+
+An opt-in, staff-supervised sweep of everyone who holds the lurker role. Nobody is kicked without a staff member pressing **Boot**. Logic lives in `purge.py`; the daily cron calls `purge.purge_daily_step`.
+
+**Schedule.** `next_action(meta, now)` decides each day, from `purge_enabled`, `last_purge_started`, `purge_interval_months` and the running `purge`:
+
+- No purge running and none started within `purge_interval_months` (or never) -> `start`.
+- Running, grace days remain (`day + 1 <= purge_grace_days`) -> `remind`: increments `day` and reposts the list.
+- Running, grace over, Boot not yet posted -> `final`: sets `boot_posted_at` and reposts with the Boot button.
+- Boot posted `PURGE_BOOT_EXPIRY_DAYS = 14` days ago, unpressed -> `expire`: components stripped, purge cleared, nobody kicked, a log line says so.
+
+`start_purge` stamps `last_purge_started`, freezes the candidate list and posts it; with no lurkers it just logs a cheerful "nobody to sweep up". Enabling via `/config lurker` calls it right away.
+
+**The list is frozen at start.** Candidates are the non-bot members holding the lurker role at that moment (`select_candidates`, sorted by display name). Later lurkers are never added, and activity never removes anyone — a spared or newly active member stays on the list until staff act. `LurkerPurge.candidates` holds `PurgeCandidate(user_id, display_name, spared_by)`.
+
+**The post.** One embed in the staff log channel (`build_purge_post`) listing candidates, spared ones struck through with "spared by X". Description is capped at 4096 chars with an "...and N more" tail. A select menu (`activity_purge_spare`, max 25 options of the not-yet-spared) lets staff spare members; after the final step a danger **Boot** button (`activity_purge_boot`) appears. Each repost first strips the components from the previous message (`message_id` is tracked). If no log channel is configured the post is skipped with a warning.
+
+**Staff.** `is_purge_staff`: the guild owner, or a member with `purge_staff_role_id`. Anyone else clicking gets an in-voice refusal. Both handlers also reject clicks on a stale message (not the current `message_id`).
+
+**Spare** (`handle_spare`): marks the chosen candidates `spared_by` the clicker's display name, saves, and updates the post in place. Spares are one-way — no un-spare and no reason prompt. Each spare writes a `lurker_spared` journal entry.
+
+**Boot** (`handle_boot`): claims the purge (`meta.purge = None`, saved) before any await so a second press is turned away, updates the post to "booting...", then for each unspared candidate: skip if they have left (REST 404), DM a gentle goodbye (failure is only warned), kick with reason `Lurker purge — booted by <staff>`. A failed kick is collected and reported, and the loop carries on. Each kick writes a `lurker_kicked` journal entry. A final summary (Booted / Had already left / couldn't kick, with a hint to check Kick Members and role hierarchy) goes to the log channel.
+
+**Cancel.** `cancel_purge` strips the components, clears the purge and logs; it does not save — the caller does (`/config lurker` saves after calling it).
+
+**Custom IDs** (registered in `INTERACTION_HANDLERS`): `activity_purge_spare` -> `handle_spare`, `activity_purge_boot` -> `handle_boot`.
+
+**Journal kinds:** `lurker_spared`, `lurker_kicked` (written directly via `journal.record`, with display names captured at list time).
 
 ### Slash Commands (`/activity`)
 
@@ -98,18 +140,20 @@ The button always shows the clicker their own score, so it skips the viewer-role
   1. **Prune:** Per-user contribution-based bucket pruning (see above). Remove departed users.
   2. **Lurker sync:** For each non-bot, non-owner member with at least one role, decide whether they should be a lurker. The decision short-circuits in this order:
      - **Immune** (`has_ignored_role`) → never lurker. If they currently have it, remove it with reason `gained immunity`.
+     - **Newcomer** — joined within the last `purge_interval_months` (`joined_at > add_months(now, -interval)`) -> never lurker. If they currently have it, remove it with reason `still new`. This stops fresh joiners being tagged, and so purged, before they have had a fair chance to be active.
      - **Activity** `score < ACTIVITY_FLOOR` → lurker with reason `no longer active`.
      - Otherwise → not a lurker; if they currently have it, remove it with reason `now active`.
 
      The activity plugin is concerned with activity only — missing introductions are tracked separately by the intros plugin via its own `missing_intro` role (see `plugins/intros/CLAUDE.md`). The two roles are independent: a member can be flagged by both, neither, or either one.
 
-     Role changes are logged to `gc.log()` grouped by reason: `Added (no longer active)`, `Removed (gained immunity)`, `Removed (now active)`. Skipped if total guild bucket count < 168 (7 days × 24h — not enough history yet). Guild owner is always skipped.
+     Role changes are logged to `gc.log()` grouped by reason: `Added (no longer active)`, `Removed (gained immunity)`, `Removed (still new)`, `Removed (now active)`. Skipped if total guild bucket count < 168 (7 days × 24h — not enough history yet). Guild owner is always skipped.
+  3. **Purge step:** when a lurker role is configured, `purge.purge_daily_step` runs after the sync (start / remind / final / expire — see Lurker purges). It runs even when the lurker sync was skipped for lack of history.
 
 ### State
 
 Split across two file types per guild:
 
-- **`state/activity_config_{guild_id}.yaml`** — `ActivityGuildMeta`: guild_id, guild_name, config (ActivityGuildConfig with role_configs, channel_configs, lurker_role_id/name, viewer_role_id/name)
+- **`state/activity_config_{guild_id}.yaml`** — `ActivityGuildMeta`: guild_id, guild_name, config (ActivityGuildConfig with role_configs, channel_configs, lurker_role_id/name, viewer_role_id/name, `purge_enabled` (default off), `purge_interval_months` (4), `purge_grace_days` (5), `purge_staff_role_id`), `purge` (`LurkerPurge | None`: `started_at`, `day`, `boot_posted_at`, `message_id`, `candidates`), `last_purge_started`
 - **`state/activity_user_{guild_id}_{user_id}.yaml`** — `UserActivity`: user_id, list of ContributionBuckets
 
 
@@ -123,12 +167,13 @@ Dirty tracking is per-user: only modified user files are written during the hour
 - **`state.py`** — Per-user YAML persistence: `load_config`, `save_config`, `load_user`, `save_user`, `delete_user`, `list_user_ids`, `mark_user_dirty`, `flush_dirty`
 - **`commands.py`** — `/activity score` and `/activity report`
 - **`chart.py`** — Stacked-bar activity chart rendering (Pillow)
-- **`config.py`** — `/config activity` subcommands
-- **`cron.py`** — Hourly flush + daily prune + lurker sync tasks
+- **`config.py`** — `/config activity` subcommands and `/config lurker` (`LurkerConfig`)
+- **`cron.py`** — Hourly flush + daily prune + lurker sync tasks; calls the purge step
+- **`purge.py`** — Lurker purge: candidate selection, schedule decision (`next_action`), staff post, `start_purge`/`cancel_purge`/`purge_daily_step`, Spare and Boot handlers
 
 ### Logging
 
-- **Info:** Score checks, report views, config changes, lurker role add/remove
+- **Info:** Score checks, report views, config changes, lurker role add/remove, purge starts/spares/boots
 - **Debug:** Per-contribution saves with raw_points, state loads, cron ticks
 - **Warning:** Permission failures (lurker role assignment)
 

@@ -6,6 +6,7 @@ import hikari
 import hikari.impl
 
 from dragonpaw_bot import journal
+from dragonpaw_bot.plugins.activity import config as activity_config
 from dragonpaw_bot.plugins.activity import purge as purge_module
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
@@ -501,3 +502,118 @@ async def test_boot_journal_and_audit_reason(monkeypatch):
     assert kwargs["kind"] == "lurker_kicked"
     assert kwargs["user_id"] == 1
     assert kwargs["summary"] == "Booted in the lurker purge by Staffer"
+
+
+def _lurker_cmd(**options):
+    cmd = activity_config.LurkerConfig()
+    values = dict.fromkeys(("role", "enabled", "frequency", "grace", "staff_role"))
+    values.update(options)
+    for name, value in values.items():
+        setattr(cmd, name, value)
+    return cmd
+
+
+def _lurker_setup(monkeypatch, tmp_path, *, log_channel=555, **config):
+    monkeypatch.setattr(activity_state, "STATE_DIR", tmp_path)
+    activity_state._config_cache.clear()
+    meta = activity_state.load_config(1)
+    for key, value in config.items():
+        setattr(meta.config, key, value)
+    activity_state.save_config(meta)
+
+    gc = MagicMock()
+    gc.name = "Guild"
+    gc.log = AsyncMock()
+    gc.log_channel_id = log_channel
+    gc.bot = MagicMock()
+    monkeypatch.setattr(
+        activity_config.GuildContext, "from_ctx", MagicMock(return_value=gc)
+    )
+    monkeypatch.setattr(
+        activity_config, "check_role_manageable", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        activity_config, "check_guild_perms", AsyncMock(return_value=[])
+    )
+    monkeypatch.setattr(activity_config, "guild_members", AsyncMock(return_value=[]))
+    start = AsyncMock()
+    cancel = AsyncMock()
+    monkeypatch.setattr(activity_config, "start_purge", start)
+    monkeypatch.setattr(activity_config, "cancel_purge", cancel)
+
+    ctx = MagicMock()
+    ctx.guild_id = hikari.Snowflake(1)
+    ctx.respond = AsyncMock()
+    ctx.member.display_name = "Owner"
+    return ctx, gc, start, cancel
+
+
+def _role(role_id: int = ROLE):
+    role = MagicMock()
+    role.id = hikari.Snowflake(role_id)
+    role.name = "Lurker"
+    return role
+
+
+async def test_lurker_config_refuses_enable_without_log_channel(monkeypatch, tmp_path):
+    ctx, _, start, _ = _lurker_setup(
+        monkeypatch, tmp_path, log_channel=None, lurker_role_id=ROLE
+    )
+    await _lurker_cmd(enabled=True).invoke(ctx)
+    assert not activity_state.load_config(1).config.purge_enabled
+    assert "log" in ctx.respond.await_args.args[0]
+    start.assert_not_awaited()
+
+
+async def test_lurker_config_refuses_enable_without_role(monkeypatch, tmp_path):
+    ctx, _, start, _ = _lurker_setup(monkeypatch, tmp_path)
+    await _lurker_cmd(enabled=True).invoke(ctx)
+    assert not activity_state.load_config(1).config.purge_enabled
+    assert "lurker role" in ctx.respond.await_args.args[0]
+    start.assert_not_awaited()
+
+
+async def test_lurker_config_enable_starts_purge(monkeypatch, tmp_path):
+    ctx, _, start, _ = _lurker_setup(monkeypatch, tmp_path, lurker_role_id=ROLE)
+    await _lurker_cmd(enabled=True).invoke(ctx)
+    assert activity_state.load_config(1).config.purge_enabled
+    start.assert_awaited_once()
+    assert start.await_args.args[3].tzinfo is not None
+
+
+async def test_lurker_config_enable_with_role_in_same_call(monkeypatch, tmp_path):
+    ctx, _, start, _ = _lurker_setup(monkeypatch, tmp_path)
+    await _lurker_cmd(enabled=True, role=_role()).invoke(ctx)
+    config = activity_state.load_config(1).config
+    assert config.purge_enabled
+    assert config.lurker_role_id == ROLE
+    start.assert_awaited_once()
+
+
+async def test_lurker_config_disable_cancels_running_purge(monkeypatch, tmp_path):
+    ctx, _, start, cancel = _lurker_setup(
+        monkeypatch, tmp_path, lurker_role_id=ROLE, purge_enabled=True
+    )
+    meta = activity_state.load_config(1)
+    meta.purge = _purge()
+    activity_state.save_config(meta)
+    await _lurker_cmd(enabled=False).invoke(ctx)
+    assert not activity_state.load_config(1).config.purge_enabled
+    cancel.assert_awaited_once()
+    start.assert_not_awaited()
+
+
+async def test_lurker_config_partial_update_keeps_other_fields(monkeypatch, tmp_path):
+    ctx, _, start, _ = _lurker_setup(
+        monkeypatch,
+        tmp_path,
+        purge_enabled=True,
+        purge_interval_months=6,
+        purge_staff_role_id=77,
+    )
+    await _lurker_cmd(grace=7).invoke(ctx)
+    config = activity_state.load_config(1).config
+    assert config.purge_grace_days == 7
+    assert config.purge_interval_months == 6
+    assert config.purge_staff_role_id == 77
+    start.assert_not_awaited()

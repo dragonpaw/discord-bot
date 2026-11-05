@@ -489,6 +489,7 @@ tickets_config.register(_tickets_sub)
 validation_config.register(_validation_sub)
 journal_config.register(_journal_sub)
 activity_config.register(_activity_sub)
+_config_group.register(activity_config.LurkerConfig)
 buttons.register(_buttons_sub)
 loader.command(_config_group)
 

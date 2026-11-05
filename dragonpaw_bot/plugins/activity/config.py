@@ -1,6 +1,8 @@
-"""Slash commands: /config activity role add/remove, channel add/remove, lurker, status"""
+"""Slash commands: /config activity role add/remove, channel add/remove, viewer, status; /config lurker"""
 
 from __future__ import annotations
+
+import datetime
 
 import hikari
 import lightbulb
@@ -10,11 +12,19 @@ from dragonpaw_bot.colors import SOLARIZED_BLUE
 from dragonpaw_bot.context import (
     GuildContext,
     actor_name,
+    check_guild_perms,
     check_role_manageable,
     guild_owner_only,
 )
 from dragonpaw_bot.plugins.activity import state as activity_state
-from dragonpaw_bot.plugins.activity.models import ChannelConfig, RoleConfig
+from dragonpaw_bot.plugins.activity.models import (
+    ActivityGuildConfig,
+    ActivityGuildMeta,
+    ChannelConfig,
+    RoleConfig,
+)
+from dragonpaw_bot.plugins.activity.purge import cancel_purge, start_purge
+from dragonpaw_bot.utils import guild_members
 
 logger = structlog.get_logger(__name__)
 
@@ -37,7 +47,6 @@ def register(activity_sub: lightbulb.SubGroup) -> None:
     activity_sub.register(ActivityRoleRemove)
     activity_sub.register(ActivityChannelAdd)
     activity_sub.register(ActivityChannelRemove)
-    activity_sub.register(ActivityLurker)
     activity_sub.register(ActivityViewer)
     activity_sub.register(ActivityStatus)
 
@@ -247,55 +256,148 @@ class ActivityChannelRemove(
         )
 
 
-class ActivityLurker(
+class LurkerConfig(
     lightbulb.SlashCommand,
     name="lurker",
-    description="Set (or clear) the lurker role assigned to inactive members",
+    description="Lurker role and automatic lurker purges (no options shows settings)",
     hooks=[guild_owner_only],
 ):
-    role = lightbulb.role("role", "The lurker role (omit to clear)", default=None)
+    role = lightbulb.role("role", "The lurker role", default=None)
+    enabled = lightbulb.boolean(
+        "enabled", "Turn automatic lurker purges on or off", default=None
+    )
+    frequency = lightbulb.integer(
+        "frequency", "Months between purges", min_value=1, max_value=12, default=None
+    )
+    grace = lightbulb.integer(
+        "grace",
+        "Days staff have to spare members",
+        min_value=1,
+        max_value=14,
+        default=None,
+    )
+    staff_role = lightbulb.role(
+        "staff_role", "Role allowed to spare members and press Boot", default=None
+    )
 
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
         assert ctx.guild_id
         gc = GuildContext.from_ctx(ctx)
-
         meta = activity_state.load_config(int(ctx.guild_id))
         meta.guild_name = gc.name
+        cfg = meta.config
 
-        if self.role is None:
-            meta.config.lurker_role_id = None
-            meta.config.lurker_role_name = ""
-            activity_state.save_config(meta)
-            await ctx.respond(
-                "🐉 Lurker role cleared — I won't tag inactive members anymore 🐾",
-                flags=hikari.MessageFlag.EPHEMERAL,
-            )
-            gc.logger.info("Activity lurker role cleared")
-            actor = actor_name(ctx)
-            await gc.log(
-                f"📊 **{actor}** cleared the lurker role — no more lurker tags! 🐾"
-            )
+        options = (self.role, self.enabled, self.frequency, self.grace, self.staff_role)
+        if all(option is None for option in options):
+            await ctx.respond(_lurker_summary(meta), flags=hikari.MessageFlag.EPHEMERAL)
             return
 
-        # Check bot can manage the role
-        warning = await check_role_manageable(gc.bot, ctx.guild_id, self.role)
+        was_enabled = cfg.purge_enabled
+        changes: list[str] = []
+        notes: list[str] = []
 
-        meta.config.lurker_role_id = int(self.role.id)
-        meta.config.lurker_role_name = self.role.name
+        if self.role is not None:
+            cfg.lurker_role_id = int(self.role.id)
+            cfg.lurker_role_name = self.role.name
+            changes.append(f"lurker role **{self.role.name}**")
+            warning = await check_role_manageable(gc.bot, ctx.guild_id, self.role)
+            if warning:
+                notes.append(f"⚠️ {warning}")
+        if self.frequency is not None:
+            cfg.purge_interval_months = self.frequency
+            changes.append(f"purge every **{self.frequency}** month(s)")
+        if self.grace is not None:
+            cfg.purge_grace_days = self.grace
+            changes.append(f"**{self.grace}** day(s) to spare")
+        if self.staff_role is not None:
+            cfg.purge_staff_role_id = int(self.staff_role.id)
+            changes.append(f"purge staff role **{self.staff_role.name}**")
+
+        if self.enabled is False and was_enabled:
+            cfg.purge_enabled = False
+            changes.append("purges **off**")
+        elif self.enabled and not was_enabled:
+            problems = await _try_enable(gc, ctx.guild_id, cfg)
+            notes.extend(problems)
+            if cfg.purge_enabled:
+                changes.append("purges **on**")
+
         activity_state.save_config(meta)
 
-        warn_suffix = f"\n⚠️ {warning}" if warning else ""
+        saved = ", ".join(changes) if changes else "nothing changed"
         await ctx.respond(
-            f"🐉 Lurker role set to **{self.role.name}** — I'll assign it daily to inactive members 🐾{warn_suffix}",
+            "\n".join([f"🐉 Saved: {saved} 🐾", *notes]),
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-        gc.logger.info("Activity lurker role set", role=self.role.name)
-        actor = actor_name(ctx)
-        await gc.log(
-            f"📊 **{actor}** set the lurker role to **{self.role.name}** 🐉"
-            + (f" ⚠️ {warning}" if warning else " *happy tail wag* 🐾")
-        )
+        gc.logger.info("Lurker settings changed", changes=changes)
+        if changes:
+            actor = actor_name(ctx)
+            await gc.log(
+                f"⚙️ **{actor}** updated the lurker settings: {', '.join(changes)} 🐉"
+            )
+
+        if cfg.purge_enabled and not was_enabled:
+            members = await guild_members(gc.bot, ctx.guild_id)
+            await start_purge(gc, meta, members, datetime.datetime.now(tz=datetime.UTC))
+            activity_state.save_config(meta)
+        elif was_enabled and not cfg.purge_enabled and meta.purge is not None:
+            await cancel_purge(gc, meta)
+            activity_state.save_config(meta)
+
+
+async def _try_enable(
+    gc: GuildContext, guild_id: hikari.Snowflake, cfg: ActivityGuildConfig
+) -> list[str]:
+    """Turn purges on if possible; return notes for whatever stopped or worried us."""
+    if not cfg.lurker_role_id:
+        return [
+            "🐉 I can't start purging yet — I don't know who the lurkers are!"
+            " Set the lurker role with `role:` first. 🐾"
+        ]
+    if not gc.log_channel_id:
+        return [
+            "🐉 I can't start purging yet — I post the list in the staff log"
+            " channel and I don't have one! Set it with `/config channels log`"
+            " first. 🐾"
+        ]
+    cfg.purge_enabled = True
+    missing = await check_guild_perms(
+        gc.bot, guild_id, {hikari.Permissions.KICK_MEMBERS: "Kick Members"}
+    )
+    if missing:
+        return [
+            "⚠️ I'm missing **Kick Members**, so I won't be able to boot anyone"
+            " until that's fixed."
+        ]
+    return []
+
+
+def _lurker_summary(meta: ActivityGuildMeta) -> str:
+    cfg = meta.config
+    role = f"<@&{cfg.lurker_role_id}>" if cfg.lurker_role_id else "_not set_"
+    staff = (
+        f"<@&{cfg.purge_staff_role_id}>" if cfg.purge_staff_role_id else "_owner only_"
+    )
+    lines = [
+        "🐉 **Lurker settings**",
+        f"Lurker role: {role}",
+        f"Purges: **{'on' if cfg.purge_enabled else 'off'}**,"
+        f" every {cfg.purge_interval_months} month(s),"
+        f" {cfg.purge_grace_days} day(s) to spare",
+        f"Purge staff role: {staff}",
+    ]
+    purge = meta.purge
+    if purge is not None:
+        if purge.boot_posted_at is not None:
+            lines.append(
+                "A purge is in progress: the final list is up, waiting on Boot."
+            )
+        else:
+            lines.append(
+                f"A purge is in progress: day {purge.day} of {cfg.purge_grace_days}."
+            )
+    return "\n".join(lines)
 
 
 class ActivityViewer(
@@ -381,9 +483,9 @@ class ActivityStatus(
             channels_text = "_None configured_"
 
         if cfg.lurker_role_id:
-            lurker_text = f"<@&{cfg.lurker_role_id}>"
+            lurker_text = f"<@&{cfg.lurker_role_id}> (see /config lurker)"
         else:
-            lurker_text = "_Not set_"
+            lurker_text = "_Not set_ (see /config lurker)"
         if cfg.viewer_role_id:
             viewer_text = f"<@&{cfg.viewer_role_id}>"
         else:
