@@ -214,9 +214,10 @@ async def test_daily_step_expire_clears_purge_and_posts_note(monkeypatch):
     monkeypatch.setattr(activity_state, "save_config", lambda meta: None)
     gc = _gc()
     posted = NOW - datetime.timedelta(days=14)
-    meta = _meta(purge=_purge(day=5, boot_posted_at=posted))
+    meta = _meta(purge=_purge(day=5, boot_posted_at=posted, message_id=123))
     await purge_daily_step(gc, meta, [], NOW)
     assert meta.purge is None
+    gc.bot.rest.edit_message.assert_awaited_once_with(7, 123, components=[])
     gc.log.assert_awaited_once()
 
 
@@ -235,3 +236,13 @@ async def test_cancel_purge_clears_state():
     assert meta.purge is None
     gc.bot.rest.edit_message.assert_awaited_once_with(7, 123, components=[])
     gc.log.assert_awaited_once()
+
+
+def test_build_post_caps_description_at_4096():
+    purge = _many(400)
+    for c in purge.candidates:
+        c.display_name = "x" * 30
+    embed, _ = build_purge_post(_bot(), purge, 5)
+    assert len(embed.description) <= 4096
+    assert embed.description.endswith(" more")
+    assert "…and " in embed.description

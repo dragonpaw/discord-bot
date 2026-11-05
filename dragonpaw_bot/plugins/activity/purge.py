@@ -27,6 +27,7 @@ logger = structlog.get_logger(__name__)
 SPARE_ID = "activity_purge_spare"
 BOOT_ID = "activity_purge_boot"
 MAX_MENU_OPTIONS = 25
+MAX_DESCRIPTION = 4096
 
 PurgeAction = Literal["start", "remind", "final", "expire"]
 
@@ -60,6 +61,20 @@ def next_action(meta: ActivityGuildMeta, now: datetime.datetime) -> PurgeAction 
     return "final"
 
 
+def _fit_lines(lines: list[str]) -> str:
+    shown: list[str] = []
+    used = 0
+    for i, line in enumerate(lines):
+        more = f"…and {len(lines) - i} more"
+        reserve = len(more) + 1 if i < len(lines) - 1 else 0
+        if used + len(line) + 1 + reserve > MAX_DESCRIPTION:
+            shown.append(more)
+            break
+        shown.append(line)
+        used += len(line) + 1
+    return "\n".join(shown)
+
+
 def build_purge_post(
     bot: hikari.GatewayBot, purge: LurkerPurge, grace_days: int
 ) -> tuple[hikari.Embed, list[hikari.api.ComponentBuilder]]:
@@ -74,7 +89,7 @@ def build_purge_post(
         else c.display_name
         for c in purge.candidates
     ]
-    embed = hikari.Embed(title=title, description="\n".join(lines))
+    embed = hikari.Embed(title=title, description=_fit_lines(lines))
 
     components: list[hikari.api.ComponentBuilder] = []
     at_risk = [c for c in purge.candidates if c.spared_by is None]
@@ -98,17 +113,24 @@ def build_purge_post(
     return embed, components
 
 
+async def _strip_components(
+    gc: GuildContext, meta: ActivityGuildMeta, purge: LurkerPurge
+) -> None:
+    if purge.message_id is None or gc.log_channel_id is None:
+        return
+    try:
+        await gc.bot.rest.edit_message(
+            gc.log_channel_id, purge.message_id, components=[]
+        )
+    except hikari.NotFoundError:
+        logger.debug("Old purge post already gone", guild=meta.guild_name)
+
+
 async def _post(gc: GuildContext, meta: ActivityGuildMeta, purge: LurkerPurge) -> None:
     if gc.log_channel_id is None:
         logger.warning("No log channel for lurker purge post", guild=meta.guild_name)
         return
-    if purge.message_id is not None:
-        try:
-            await gc.bot.rest.edit_message(
-                gc.log_channel_id, purge.message_id, components=[]
-            )
-        except hikari.NotFoundError:
-            logger.debug("Old purge post already gone", guild=meta.guild_name)
+    await _strip_components(gc, meta, purge)
     embed, components = build_purge_post(gc.bot, purge, meta.config.purge_grace_days)
     message = await gc.bot.rest.create_message(
         gc.log_channel_id, embed=embed, components=components
@@ -140,13 +162,7 @@ async def cancel_purge(gc: GuildContext, meta: ActivityGuildMeta) -> None:
     purge = meta.purge
     if purge is None:
         return
-    if purge.message_id is not None and gc.log_channel_id is not None:
-        try:
-            await gc.bot.rest.edit_message(
-                gc.log_channel_id, purge.message_id, components=[]
-            )
-        except hikari.NotFoundError:
-            logger.debug("Old purge post already gone", guild=meta.guild_name)
+    await _strip_components(gc, meta, purge)
     meta.purge = None
     logger.info("Lurker purge cancelled", guild=meta.guild_name)
     await gc.log(
@@ -171,7 +187,8 @@ async def purge_daily_step(
         else:
             purge.boot_posted_at = now
         await _post(gc, meta, purge)
-    elif action == "expire":
+    elif action == "expire" and purge is not None:
+        await _strip_components(gc, meta, purge)
         meta.purge = None
         logger.info("Lurker purge expired", guild=meta.guild_name)
         await gc.log(
