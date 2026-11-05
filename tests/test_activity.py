@@ -1,5 +1,6 @@
 """Tests for the activity tracker plugin — models, score calc, bucketing, pruning."""
 
+import datetime
 import math
 import time
 from types import SimpleNamespace
@@ -38,6 +39,7 @@ from dragonpaw_bot.plugins.activity.models import (
     ContributionKind,
     RoleConfig,
     UserActivity,
+    add_months,
     best_role_config,
     bucket_is_negligible,
     calculate_score,
@@ -743,6 +745,10 @@ async def test_sync_lurker_role_skips_owner(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------- #
 
 
+_NOW = datetime.datetime(2026, 11, 4, tzinfo=datetime.UTC)
+_OLD_JOIN = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+
+
 def _meta_with_ignored_role(role_id: int = 7) -> ActivityGuildMeta:
     return ActivityGuildMeta(
         guild_id=1,
@@ -755,7 +761,9 @@ def _meta_with_ignored_role(role_id: int = 7) -> ActivityGuildMeta:
 def test_evaluate_lurker_immunity_beats_low_score():
     """Immune members must not be lurkered even when their activity is below the floor."""
     meta = _meta_with_ignored_role()
-    should_lurker, reason = _evaluate_lurker(role_ids=[7], score=0.0, meta=meta)
+    should_lurker, reason = _evaluate_lurker(
+        role_ids=[7], score=0.0, meta=meta, joined_at=_OLD_JOIN, now=_NOW
+    )
     assert should_lurker is False
     assert reason == "gained immunity"
 
@@ -764,7 +772,11 @@ def test_evaluate_lurker_low_score_no_longer_active():
     """A non-immune member below the activity floor is lurkered."""
     meta = ActivityGuildMeta(guild_id=1)
     should_lurker, reason = _evaluate_lurker(
-        role_ids=[1], score=ACTIVITY_FLOOR - 0.01, meta=meta
+        role_ids=[1],
+        score=ACTIVITY_FLOOR - 0.01,
+        meta=meta,
+        joined_at=_OLD_JOIN,
+        now=_NOW,
     )
     assert should_lurker is True
     assert reason == "no longer active"
@@ -773,7 +785,9 @@ def test_evaluate_lurker_low_score_no_longer_active():
 def test_evaluate_lurker_active_default():
     """Active member is not a lurker."""
     meta = ActivityGuildMeta(guild_id=1)
-    should_lurker, reason = _evaluate_lurker(role_ids=[1], score=1.0, meta=meta)
+    should_lurker, reason = _evaluate_lurker(
+        role_ids=[1], score=1.0, meta=meta, joined_at=_OLD_JOIN, now=_NOW
+    )
     assert should_lurker is False
     assert reason == "now active"
 
@@ -782,7 +796,11 @@ def test_evaluate_lurker_score_at_floor_is_not_lurker():
     """Boundary: score == ACTIVITY_FLOOR is not a lurker (the check uses `<`, not `<=`)."""
     meta = ActivityGuildMeta(guild_id=1)
     should_lurker, reason = _evaluate_lurker(
-        role_ids=[1], score=ACTIVITY_FLOOR, meta=meta
+        role_ids=[1],
+        score=ACTIVITY_FLOOR,
+        meta=meta,
+        joined_at=_OLD_JOIN,
+        now=_NOW,
     )
     assert should_lurker is False
     assert reason == "now active"
@@ -1090,3 +1108,54 @@ def test_truncate_description_single_oversized_line_keeps_nothing():
     assert _truncate_description(["y" * (_EMBED_DESCRIPTION_LIMIT + 1)]) == (
         _TRUNCATION_NOTE
     )
+
+
+def test_add_months_clamps_day():
+    jan31 = datetime.datetime(2026, 1, 31, tzinfo=datetime.UTC)
+    assert add_months(jan31, 1) == datetime.datetime(2026, 2, 28, tzinfo=datetime.UTC)
+
+
+def test_add_months_negative_crosses_year():
+    feb15 = datetime.datetime(2026, 2, 15, tzinfo=datetime.UTC)
+    assert add_months(feb15, -4) == datetime.datetime(2025, 10, 15, tzinfo=datetime.UTC)
+
+
+def test_evaluate_lurker_newcomer_never_lurker():
+    meta = ActivityGuildMeta(guild_id=1)
+    assert _evaluate_lurker(
+        role_ids=[1],
+        score=0.0,
+        meta=meta,
+        joined_at=_NOW - datetime.timedelta(days=30),
+        now=_NOW,
+    ) == (False, "still new")
+
+
+def test_evaluate_lurker_old_member_low_score_is_lurker():
+    meta = ActivityGuildMeta(guild_id=1)
+    assert _evaluate_lurker(
+        role_ids=[1],
+        score=0.0,
+        meta=meta,
+        joined_at=add_months(_NOW, -5),
+        now=_NOW,
+    ) == (True, "no longer active")
+
+
+def test_evaluate_lurker_immunity_beats_newcomer():
+    meta = _meta_with_ignored_role()
+    assert _evaluate_lurker(
+        role_ids=[7],
+        score=0.0,
+        meta=meta,
+        joined_at=_NOW - datetime.timedelta(days=1),
+        now=_NOW,
+    ) == (False, "gained immunity")
+
+
+def test_purge_config_defaults():
+    config = ActivityGuildConfig()
+    assert config.purge_enabled is False
+    assert config.purge_interval_months == 4
+    assert config.purge_grace_days == 5
+    assert config.purge_staff_role_id is None

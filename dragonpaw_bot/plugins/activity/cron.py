@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import time
 from typing import TYPE_CHECKING, cast
 
@@ -16,6 +17,7 @@ from dragonpaw_bot.plugins.activity.models import (
     BASE_HALF_LIFE,
     PRUNE_DAYS_MAX,
     ActivityGuildMeta,
+    add_months,
     best_role_config,
     bucket_is_negligible,
     calculate_score,
@@ -164,6 +166,8 @@ def _evaluate_lurker(
     role_ids: list[int],
     score: float,
     meta: ActivityGuildMeta,
+    joined_at: datetime.datetime,
+    now: datetime.datetime,
 ) -> tuple[bool, str]:
     """Decide whether the member should hold the lurker role.
 
@@ -171,10 +175,12 @@ def _evaluate_lurker(
     added or removed (members already in the correct state are filtered out
     by the caller, so the label is only surfaced for true transitions):
       should_be_lurker=True  → 'no longer active'
-      should_be_lurker=False → 'gained immunity' | 'now active'
+      should_be_lurker=False → 'gained immunity' | 'still new' | 'now active'
     """
     if has_ignored_role(role_ids, meta.config.role_configs):
         return False, "gained immunity"
+    if joined_at > add_months(now, -meta.config.purge_interval_months):
+        return False, "still new"
     if score < ACTIVITY_FLOOR:
         return True, "no longer active"
     return False, "now active"
@@ -190,6 +196,7 @@ async def _sync_lurker_role(  # noqa: PLR0912
     lurker_role_id = meta.config.lurker_role_id
     assert lurker_role_id
 
+    now_dt = datetime.datetime.fromtimestamp(now, tz=datetime.UTC)
     added_by_reason: dict[str, list[str]] = {}
     removed_by_reason: dict[str, list[str]] = {}
 
@@ -207,10 +214,13 @@ async def _sync_lurker_role(  # noqa: PLR0912
             buckets = []
         else:
             buckets = ua.buckets
+        assert member.joined_at
         score = calculate_score(
             buckets, best_role_config(role_ids, meta.config.role_configs), now=now
         )
-        should_be_lurker, reason = _evaluate_lurker(role_ids, score, meta)
+        should_be_lurker, reason = _evaluate_lurker(
+            role_ids, score, meta, member.joined_at, now_dt
+        )
         has_lurker = lurker_role_id in role_ids
 
         if should_be_lurker == has_lurker:

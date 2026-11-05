@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import calendar
 import enum
 import math
 import time
+from typing import TYPE_CHECKING
 
 import pydantic
+
+if TYPE_CHECKING:
+    import datetime
 
 
 class ContributionKind(enum.StrEnum):
@@ -27,6 +32,15 @@ BASE_HALF_LIFE = 14 * 24 * 3600  # 14 days in seconds
 ACTIVITY_FLOOR = 0.3
 PRUNE_THRESHOLD = ACTIVITY_FLOOR * 0.1  # 0.03 — bucket is negligible at 10% of floor
 PRUNE_DAYS_MAX = 300  # hard cap; contribution-based pruning fires well before this
+
+
+def add_months(dt: datetime.datetime, months: int) -> datetime.datetime:
+    """Shift by calendar months, clamping the day to the target month's end."""
+    index = dt.year * 12 + dt.month - 1 + months
+    year, month = divmod(index, 12)
+    month += 1
+    day = min(dt.day, calendar.monthrange(year, month)[1])
+    return dt.replace(year=year, month=month, day=day)
 
 
 class ContributionBucket(pydantic.BaseModel):
@@ -70,6 +84,10 @@ class ActivityGuildConfig(pydantic.BaseModel):
     lurker_role_name: str = ""
     viewer_role_id: int | None = None
     viewer_role_name: str = ""
+    purge_enabled: bool = False
+    purge_interval_months: int = 4
+    purge_grace_days: int = 5
+    purge_staff_role_id: int | None = None
 
 
 class ActivityGuildMeta(pydantic.BaseModel):
