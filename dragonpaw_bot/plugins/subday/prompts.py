@@ -151,7 +151,7 @@ def build_weekly_dm_embeds(prompt: WeekPrompt) -> list[hikari.Embed]:
     greeting = hikari.Embed(
         title="📬 Your New Prompt is Here!",
         description=(
-            f"Happy Sunday! Here's your **Week {week}** prompt.\n\n"
+            f"*happy tail wag* Here's your **Week {week}** prompt.\n\n"
             f"{_progress_bar(week)}\n\n"
             f"{milestone_note}\n\n"
             f"📋 **Instructions:**\n{rules_text}"

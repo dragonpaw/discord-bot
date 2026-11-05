@@ -1205,6 +1205,43 @@ def _prepare_backfill(
     return participant, auto_enrolled
 
 
+async def _dm_next_prompt(
+    gc: GuildContext, target: hikari.Member, participant: SubDayParticipant
+) -> bool:
+    """DM the participant (and their owner, if any) the new week's prompt.
+
+    Returns whether the participant's DM was delivered.
+    """
+    prompt = prompts.load_week(participant.current_week)
+    log = logger.bind(guild=gc.name, user=target.display_name, week=prompt.week)
+    delivered = True
+    try:
+        dm = await target.user.fetch_dm_channel()
+        await dm.send(embeds=prompts.build_weekly_dm_embeds(prompt))
+        log.info("Sent SubDay prompt after backfill")
+    except hikari.HTTPError as exc:
+        log.warning("Failed to DM SubDay prompt after backfill", error=str(exc))
+        delivered = False
+
+    if participant.owner_id:
+        try:
+            owner = await gc.bot.rest.fetch_member(
+                gc.guild_id, hikari.Snowflake(participant.owner_id)
+            )
+            owner_dm = await owner.user.fetch_dm_channel()
+            await owner_dm.send(
+                embeds=prompts.build_owner_dm_embeds(prompt, int(target.id))
+            )
+            log.info("Sent owner prompt copy after backfill", owner=owner.display_name)
+        except hikari.HTTPError as exc:
+            log.warning(
+                "Failed to DM owner prompt copy after backfill",
+                owner_id=participant.owner_id,
+                error=str(exc),
+            )
+    return delivered
+
+
 def _validate_normal_complete(
     guild_state: state.SubDayGuildState,
     target: hikari.Member,
@@ -1244,7 +1281,7 @@ class SubDayComplete(
     )
     sent = lightbulb.boolean(
         "sent",
-        "Backfill only: mark the week's prompt as already sent",
+        "Backfill only: advance to the next week and DM its prompt now",
         default=None,
     )
 
@@ -1332,16 +1369,28 @@ class SubDayComplete(
 
         state.save(guild_state)
 
-        # Respond first to avoid interaction timeout, then do async work
+        advance_note = ""
+        if sent_next:
+            advance_note = f"advanced them to Week {week + 1}, "
+            if await _dm_next_prompt(gc, target, participant):
+                advance_note += f"and sent their Week {week + 1} prompt"
+            else:
+                advance_note += (
+                    f"but I couldn't DM their Week {week + 1} prompt — "
+                    "they can use `/subday resend` once their DMs are open"
+                )
+
         if auto_enrolled:
             response = (
                 f"*scribbles them in* 🐉 Enrolled {target.mention} and completed "
-                f"**Week {week}** of Where I am Led! 🐾"
+                f"**Week {week}** of Where I am Led"
+                + (f", then {advance_note}" if sent_next else "")
+                + "! 🐾"
             )
         elif sent_next:
             response = (
                 f"*happy stamp* ✅ Marked {target.mention} complete for **Week {week}** "
-                f"and advanced them to Week {week + 1} (prompt already sent)! 🐉"
+                f"and {advance_note}! 🐉"
             )
         else:
             response = (
@@ -1360,18 +1409,8 @@ class SubDayComplete(
                 staff_msg = (
                     f"⏩ *flips through my journal* **{ctx.member.display_name}** "
                     f"backfilled **{target.display_name}** to **Week {week}** (complete)"
-                    + (
-                        f", advanced to Week {week + 1} (prompt already sent)"
-                        if sent_next
-                        else ""
-                    )
+                    + (f", {advance_note}" if sent_next else "")
                     + " 🐉"
-                )
-            elif sent_next:
-                staff_msg = (
-                    f"✅ *stamps with my paw* **{ctx.member.display_name}** marked "
-                    f"**{target.display_name}** complete for **Week {week}** and "
-                    f"advanced them to Week {week + 1} (prompt already sent)~ 🐾"
                 )
             else:
                 staff_msg = (
@@ -1379,6 +1418,11 @@ class SubDayComplete(
                     f"**{target.display_name}** complete for **Week {week}**~ 🐾"
                 )
             await gc.log(staff_msg)
+        elif sent_next:
+            await gc.log(
+                f"⏭️ *flips the page* **{target.display_name}** is past their "
+                f"milestone — I {advance_note} 🐾"
+            )
         logger.info(
             "Completed SubDay week",
             guild=gc.name,

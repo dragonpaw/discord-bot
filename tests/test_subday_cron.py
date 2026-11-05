@@ -314,3 +314,59 @@ async def test_owner_accept_when_owner_left_guild_cancels_request():
     assert saved.owner_id is None
     assert saved.pending_owner_id is None
     assert "no longer in that server" in _response_content(interaction)
+
+
+# ---------------------------------------------------------------------------- #
+#                     _dm_next_prompt (complete sent:true)                     #
+# ---------------------------------------------------------------------------- #
+
+
+def _gc_with_owner(owner: MagicMock) -> MagicMock:
+    gc = MagicMock()
+    gc.guild_id = GUILD_ID
+    gc.bot.rest.fetch_member = AsyncMock(return_value=owner)
+    return gc
+
+
+async def test_dm_next_prompt_sends_member_and_owner():
+    member, member_send = _member_with_dm()
+    member.id = 12345
+    owner, owner_send = _member_with_dm()
+    participant = _participant(current_week=2, owner_id=999)
+
+    delivered = await commands._dm_next_prompt(
+        _gc_with_owner(owner), member, participant
+    )
+
+    assert delivered is True
+    member_send.assert_awaited_once()
+    assert "Week 2" in member_send.await_args.kwargs["embeds"][0].description
+    owner_send.assert_awaited_once()
+    assert "<@12345>" in owner_send.await_args.kwargs["embeds"][0].description
+
+
+async def test_dm_next_prompt_member_dm_failure_still_copies_owner():
+    member, member_send = _member_with_dm()
+    member.id = 12345
+    member_send.side_effect = hikari.ForbiddenError(url="", headers={}, raw_body=b"")
+    owner, owner_send = _member_with_dm()
+    participant = _participant(current_week=2, owner_id=999)
+
+    delivered = await commands._dm_next_prompt(
+        _gc_with_owner(owner), member, participant
+    )
+
+    assert delivered is False
+    owner_send.assert_awaited_once()
+
+
+async def test_dm_next_prompt_without_owner_skips_owner_lookup():
+    member, member_send = _member_with_dm()
+    gc = _gc_with_owner(MagicMock())
+    participant = _participant(current_week=2)
+
+    delivered = await commands._dm_next_prompt(gc, member, participant)
+
+    assert delivered is True
+    member_send.assert_awaited_once()
+    gc.bot.rest.fetch_member.assert_not_awaited()
