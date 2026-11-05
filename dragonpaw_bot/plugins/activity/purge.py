@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Literal
 import hikari
 import structlog
 
+from dragonpaw_bot import journal
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     PURGE_BOOT_EXPIRY_DAYS,
@@ -20,6 +21,7 @@ from dragonpaw_bot.plugins.activity.models import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from dragonpaw_bot.bot import DragonpawBot
     from dragonpaw_bot.context import GuildContext
 
 logger = structlog.get_logger(__name__)
@@ -198,3 +200,69 @@ async def purge_daily_step(
     else:
         return
     activity_state.save_config(meta)
+
+
+def is_purge_staff(
+    meta: ActivityGuildMeta, member: hikari.Member, owner_id: int
+) -> bool:
+    role_id = meta.config.purge_staff_role_id
+    return member.id == owner_id or (
+        role_id is not None and hikari.Snowflake(role_id) in member.role_ids
+    )
+
+
+async def _reply(interaction: hikari.ComponentInteraction, content: str) -> None:
+    await interaction.create_initial_response(
+        hikari.ResponseType.MESSAGE_CREATE,
+        content,
+        flags=hikari.MessageFlag.EPHEMERAL,
+    )
+
+
+async def handle_spare(interaction: hikari.ComponentInteraction) -> None:
+    assert interaction.guild_id is not None
+    assert interaction.member is not None
+    guild = interaction.get_guild()
+    meta = activity_state.load_config(int(interaction.guild_id))
+    member = interaction.member
+    if guild is None or not is_purge_staff(meta, member, int(guild.owner_id)):
+        logger.warning("Lurker purge spare attempted by non-staff")
+        await _reply(
+            interaction,
+            "*snorts smoke* Only the staff team can spare members from the purge! 🐉",
+        )
+        return
+
+    purge = meta.purge
+    if purge is None or interaction.message.id != purge.message_id:
+        await _reply(
+            interaction,
+            "*tilts head* This list isn't live any more, so there's nothing left"
+            " to spare. 🐾",
+        )
+        return
+
+    chosen = {int(v) for v in interaction.values}
+    spared = [
+        c for c in purge.candidates if c.user_id in chosen and c.spared_by is None
+    ]
+    for c in spared:
+        c.spared_by = member.display_name
+    activity_state.save_config(meta)
+    logger.info("Members spared from lurker purge", count=len(spared))
+
+    bot: DragonpawBot = interaction.app  # type: ignore[assignment]
+    embed, components = build_purge_post(bot, purge, meta.config.purge_grace_days)
+    await interaction.create_initial_response(
+        hikari.ResponseType.MESSAGE_UPDATE, embed=embed, components=components
+    )
+
+    for c in spared:
+        journal.record(
+            meta.guild_id,
+            meta.guild_name,
+            user_id=c.user_id,
+            user_name=c.display_name,
+            kind="lurker_spared",
+            summary=f"🛡️ Spared from the lurker purge by {member.display_name}",
+        )

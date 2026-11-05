@@ -1,10 +1,11 @@
 import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import hikari
 import hikari.impl
 
+from dragonpaw_bot import journal
 from dragonpaw_bot.plugins.activity import state as activity_state
 from dragonpaw_bot.plugins.activity.models import (
     ActivityGuildConfig,
@@ -17,6 +18,7 @@ from dragonpaw_bot.plugins.activity.purge import (
     SPARE_ID,
     build_purge_post,
     cancel_purge,
+    handle_spare,
     next_action,
     purge_daily_step,
     select_candidates,
@@ -246,3 +248,110 @@ def test_build_post_caps_description_at_4096():
     assert len(embed.description) <= 4096
     assert embed.description.endswith(" more")
     assert "…and " in embed.description
+
+
+OWNER = 500
+STAFF_ROLE = 77
+
+
+def _spare_setup(monkeypatch, *, purge=None, roles=(STAFF_ROLE,), message_id=555):
+    meta = ActivityGuildMeta(
+        guild_id=1,
+        config=ActivityGuildConfig(purge_staff_role_id=STAFF_ROLE),
+        purge=purge,
+    )
+    monkeypatch.setattr(activity_state, "load_config", lambda _gid: meta)
+    monkeypatch.setattr(activity_state, "save_config", lambda _m: None)
+    record = MagicMock()
+    monkeypatch.setattr(journal, "record", record)
+    interaction = SimpleNamespace(
+        guild_id=1,
+        app=_bot(),
+        member=SimpleNamespace(id=9, display_name="Staffer", role_ids=roles),
+        message=SimpleNamespace(id=message_id),
+        values=["1"],
+        get_guild=lambda: SimpleNamespace(owner_id=OWNER),
+        create_initial_response=AsyncMock(),
+    )
+    return meta, interaction, record
+
+
+def _response_type(interaction):
+    return interaction.create_initial_response.await_args.args[0]
+
+
+async def test_spare_denied_for_non_staff(monkeypatch):
+    purge = _many(2)
+    purge.message_id = 555
+    _, interaction, record = _spare_setup(monkeypatch, purge=purge, roles=())
+    await handle_spare(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_CREATE
+    assert purge.candidates[0].spared_by is None
+    record.assert_not_called()
+
+
+async def test_spare_marks_and_updates_message(monkeypatch):
+    purge = _many(2)
+    purge.message_id = 555
+    _, interaction, _ = _spare_setup(monkeypatch, purge=purge)
+    await handle_spare(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_UPDATE
+    assert purge.candidates[0].spared_by == "Staffer"
+    components = interaction.create_initial_response.await_args.kwargs["components"]
+    assert _menu_options(components)[1] == ["2"]
+
+
+async def test_spare_is_one_way(monkeypatch):
+    purge = _many(2, spared=1)
+    purge.message_id = 555
+    _, interaction, record = _spare_setup(monkeypatch, purge=purge)
+    await handle_spare(interaction)
+    assert purge.candidates[0].spared_by == "Staff"
+    record.assert_not_called()
+
+
+async def test_spare_rejected_after_purge_cleared(monkeypatch):
+    _, interaction, record = _spare_setup(monkeypatch, purge=None)
+    await handle_spare(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_CREATE
+    record.assert_not_called()
+
+
+async def test_spare_rejected_on_old_message(monkeypatch):
+    purge = _many(2)
+    purge.message_id = 556
+    _, interaction, record = _spare_setup(monkeypatch, purge=purge)
+    await handle_spare(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_CREATE
+    assert purge.candidates[0].spared_by is None
+    record.assert_not_called()
+
+
+async def test_spare_writes_journal_entry(monkeypatch):
+    purge = _many(2)
+    purge.message_id = 555
+    _, interaction, record = _spare_setup(monkeypatch, purge=purge)
+    await handle_spare(interaction)
+    kwargs = record.call_args.kwargs
+    assert kwargs["kind"] == "lurker_spared"
+    assert kwargs["user_id"] == 1
+    assert "Staffer" in kwargs["summary"]
+
+
+async def test_spare_allowed_on_boot_post(monkeypatch):
+    purge = _many(2)
+    purge.message_id = 555
+    purge.boot_posted_at = NOW
+    _, interaction, _ = _spare_setup(monkeypatch, purge=purge)
+    await handle_spare(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_UPDATE
+    assert purge.candidates[0].spared_by == "Staffer"
+
+
+async def test_spare_allowed_for_owner(monkeypatch):
+    purge = _many(2)
+    purge.message_id = 555
+    _, interaction, _ = _spare_setup(monkeypatch, purge=purge, roles=())
+    interaction.member.id = OWNER
+    await handle_spare(interaction)
+    assert _response_type(interaction) == hikari.ResponseType.MESSAGE_UPDATE
