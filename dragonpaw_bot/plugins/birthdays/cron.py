@@ -73,23 +73,35 @@ async def announce_birthday(
     await gc.log(f"🎂 Happy Birthday to **{member.display_name}**!")
 
 
-async def cleanup_birthday_role(
-    gc: GuildContext,
-    member: hikari.Member,
-    cfg: BirthdayGuildConfig,
+async def sweep_birthday_role(
+    gc: GuildContext, guild_state: state.BirthdayGuildState
 ) -> None:
-    """Remove birthday role from a member whose birthday was yesterday."""
+    """Remove the birthday role from every member for whom it isn't their birthday
+    (in their local timezone) right now.
+
+    Runs every hour rather than once the day after, so a removal missed by a
+    restart or failed by a Discord error is retried on the next run.
+    """
+    cfg = guild_state.config
     if not cfg.birthday_role:
         return
     role = await utils.guild_role_by_name(gc, cfg.birthday_role)
     if not role:
         return
-    log = gc.logger.bind(user=member.display_name)
-    try:
-        await gc.bot.rest.remove_role_from_member(gc.guild_id, member.id, role.id)
-        log.info("Removed birthday role (birthday over)")
-    except hikari.HTTPError as exc:
-        log.warning("Failed to remove birthday role", error=str(exc))
+    for member in await utils.guild_members(gc.bot, gc.guild_id):
+        if role.id not in member.role_ids:
+            continue
+        entry = guild_state.birthdays.get(int(member.id))
+        if entry and commands.is_birthday_on_date(
+            entry, commands.user_local_date(entry)
+        ):
+            continue
+        log = gc.logger.bind(user=member.display_name)
+        try:
+            await gc.bot.rest.remove_role_from_member(gc.guild_id, member.id, role.id)
+            log.info("Removed birthday role (birthday over)")
+        except hikari.HTTPError as exc:
+            log.warning("Failed to remove birthday role", error=str(exc))
 
 
 async def send_week_ahead_dm(
@@ -132,12 +144,14 @@ async def send_week_ahead_dm(
 async def process_guild_birthdays(gc: GuildContext) -> None:
     """Process birthday announcements, role cleanup, and reminders for one guild.
 
-    Runs hourly. For each user, computes "today" in their local timezone and only
-    processes events during the user's midnight hour (hour 0).
+    Runs hourly. The birthday role sweep runs every hour; for announcements and
+    reminders, computes "today" in each user's local timezone and only acts
+    during the user's midnight hour (hour 0).
     """
     log = gc.logger
     guild_id = int(gc.guild_id)
     guild_state = state.load(guild_id)
+    await sweep_birthday_role(gc, guild_state)
 
     if not guild_state.birthdays:
         log.debug("No birthday entries, skipping")
@@ -155,7 +169,6 @@ async def process_guild_birthdays(gc: GuildContext) -> None:
             continue
 
         local_today = commands.user_local_date(entry)
-        local_yesterday = commands.user_local_date_offset(entry, days=-1)
         local_week_ahead = commands.user_local_date_offset(entry, days=7)
 
         # Birthday announcements
@@ -173,19 +186,6 @@ async def process_guild_birthdays(gc: GuildContext) -> None:
             entry.last_announced = local_today
             changed = True
             await asyncio.sleep(1)
-
-        # Role cleanup for yesterday's birthdays
-        elif cfg.birthday_role and commands.is_birthday_on_date(entry, local_yesterday):
-            member = await utils.guild_member(gc.bot, gc.guild_id, uid)
-            if member is None:
-                log.warning(
-                    "Member left guild during role cleanup, removing entry",
-                    user_id=uid,
-                )
-                del guild_state.birthdays[uid]
-                changed = True
-                continue
-            await cleanup_birthday_role(gc, member, cfg)
 
         # Week-ahead DM reminder
         if commands.is_birthday_on_date(entry, local_week_ahead):

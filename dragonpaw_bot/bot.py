@@ -567,10 +567,15 @@ async def on_component_interaction(event: hikari.InteractionCreateEvent) -> None
 
 @bot.listen(hikari.StartingEvent)
 async def on_starting(_: hikari.StartingEvent) -> None:
-    await loader.add_to_client(client)
-
-    await client.load_extensions_from_package(_plugins, recursive=True)
-    await client.start()
+    # hikari logs and swallows a listener's Exception, which would leave the bot
+    # connected with no cron tasks. SystemExit escapes it, so Docker restarts us.
+    try:
+        await loader.add_to_client(client)
+        await client.load_extensions_from_package(_plugins, recursive=True)
+        await client.start()
+    except Exception:
+        logger.exception("Startup failed, exiting so the container restarts")
+        raise SystemExit(1) from None
 
     # Log all registered cron tasks
     for task in sorted(client._tasks, key=lambda t: getattr(t._func, "__name__", "")):

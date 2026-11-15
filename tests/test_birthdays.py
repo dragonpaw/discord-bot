@@ -160,3 +160,94 @@ def test_entry_rejects_feb_30():
 def test_entry_rejects_april_31():
     with pytest.raises(pydantic.ValidationError):
         BirthdayEntry(user_id=1, month=4, day=31)
+
+
+# ---------------------------------------------------------------------------- #
+#                            birthday role sweep                               #
+# ---------------------------------------------------------------------------- #
+
+
+def _sweep_gc() -> MagicMock:
+    gc = MagicMock()
+    gc.guild_id = hikari.Snowflake(1)
+    gc.logger = MagicMock()
+    gc.bot.rest.remove_role_from_member = AsyncMock()
+    return gc
+
+
+async def test_sweep_removes_role_only_when_birthday_is_over(monkeypatch):
+    """The role must come off anyone it isn't currently their birthday for —
+    including a day-old birthday whose one-shot removal was missed — and stay
+    on today's birthday person."""
+    role_id = 99
+    today = datetime.datetime.now(tz=datetime.UTC).date()
+    yesterday = today - datetime.timedelta(days=1)
+
+    def _member(uid: int, role_ids: list[int]) -> Mock:
+        m = Mock()
+        m.id = hikari.Snowflake(uid)
+        m.display_name = f"user{uid}"
+        m.role_ids = [hikari.Snowflake(r) for r in role_ids]
+        return m
+
+    birthday_today = _member(1, [role_id])
+    birthday_yesterday = _member(2, [role_id])
+    no_entry = _member(3, [role_id])
+    without_role = _member(4, [])
+    members = [birthday_today, birthday_yesterday, no_entry, without_role]
+
+    st = BirthdayGuildState(
+        guild_id=1,
+        guild_name="TestGuild",
+        config={"birthday_role": "Birthday"},
+        birthdays={
+            1: BirthdayEntry(user_id=1, month=today.month, day=today.day),
+            2: BirthdayEntry(user_id=2, month=yesterday.month, day=yesterday.day),
+            4: BirthdayEntry(user_id=4, month=yesterday.month, day=yesterday.day),
+        },
+    )
+    role = Mock()
+    role.id = hikari.Snowflake(role_id)
+    monkeypatch.setattr(
+        birthdays_cron.utils, "guild_role_by_name", AsyncMock(return_value=role)
+    )
+    monkeypatch.setattr(
+        birthdays_cron.utils, "guild_members", AsyncMock(return_value=members)
+    )
+    gc = _sweep_gc()
+
+    await birthdays_cron.sweep_birthday_role(gc, st)
+
+    removed = [c.args[1] for c in gc.bot.rest.remove_role_from_member.call_args_list]
+    assert removed == [birthday_yesterday.id, no_entry.id]
+
+
+async def test_sweep_continues_after_removal_failure(monkeypatch):
+    """One failed removal must not stop the rest; it's retried next hour."""
+    role = Mock()
+    role.id = hikari.Snowflake(99)
+    members = []
+    for uid in (1, 2):
+        m = Mock()
+        m.id = hikari.Snowflake(uid)
+        m.display_name = f"user{uid}"
+        m.role_ids = [role.id]
+        members.append(m)
+    st = BirthdayGuildState(
+        guild_id=1, guild_name="TestGuild", config={"birthday_role": "Birthday"}
+    )
+    monkeypatch.setattr(
+        birthdays_cron.utils, "guild_role_by_name", AsyncMock(return_value=role)
+    )
+    monkeypatch.setattr(
+        birthdays_cron.utils, "guild_members", AsyncMock(return_value=members)
+    )
+    gc = _sweep_gc()
+    gc.bot.rest.remove_role_from_member.side_effect = [
+        hikari.HTTPError(message="boom"),
+        None,
+    ]
+
+    await birthdays_cron.sweep_birthday_role(gc, st)
+
+    assert gc.bot.rest.remove_role_from_member.await_count == 2

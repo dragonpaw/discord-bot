@@ -29,7 +29,7 @@ Notifications (registrations, removals, config changes) are sent to the guild-wi
 - **Register role(s)** (role multi-select, default: _None/owner-only_) — Role(s) allowed to self-register, view status, update wishlist, and remove own birthday
 - **Manage role** (role select, default: _None/owner-only_) — Role allowed to set/remove birthdays for others
 - **Announcement channel** (channel select, default: _None/disabled_) — Channel where birthday announcements are posted
-- **Birthday role** (role select, default: _None/disabled_) — Role auto-assigned on the user's birthday and removed the next day
+- **Birthday role** (role select, default: _None/disabled_) — Role auto-assigned on the user's birthday and removed once it's over (the hourly sweep removes it from anyone it isn't currently their birthday)
 
 ### Button Channel Card
 
@@ -52,10 +52,13 @@ No birth year is collected or stored.
 
 ### Hourly Cron Task
 
-Runs at `:05` past each hour (`5 * * * *`). Per guild, with per-guild error isolation. For each user, computes the current date and hour in their configured timezone (defaulting to UTC). Only processes events when the user's local hour is 0 (midnight):
+Runs at `:05` past each hour (`5 * * * *`). Per guild, with per-guild error isolation.
 
-1. **Birthday announcements:** If it's the user's birthday in their local timezone and `last_announced` doesn't match today, post a themed embed in the announcement channel (if configured). Assign the birthday role (if configured). Update `last_announced` to prevent double-posting.
-2. **Birthday role cleanup:** If the user's birthday was yesterday in their local timezone and a birthday role is configured, remove the role.
+1. **Birthday role sweep (every run):** If a birthday role is configured, remove it from every member holding it for whom it isn't their birthday in their local timezone right now — including members with no birthday entry, so a hand-granted role comes off too. Running every hour (instead of once the day after) means a removal missed by a restart or failed by a Discord error is retried next hour.
+
+The remaining steps compute the current date and hour in each user's configured timezone (defaulting to UTC) and only act when the user's local hour is 0 (midnight):
+
+2. **Birthday announcements:** If it's the user's birthday in their local timezone and `last_announced` doesn't match today, post a themed embed in the announcement channel (if configured). Assign the birthday role (if configured). Update `last_announced` to prevent double-posting.
 3. **Week-ahead DM reminder:** If the user's birthday is 7 days away in their local timezone, verify they are still in the guild (remove their entry and skip if not). DM them a reminder with their current wishlist URL. Handle DM failures gracefully.
 
 ### Member Leave Cleanup
