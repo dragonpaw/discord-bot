@@ -15,23 +15,24 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 git archive HEAD | tar -x -C "$TMP"
 git describe --tags --always > "$TMP/BUILD_TAG"   # logged at startup (bot.py BUILD_TAG)
 
-rsync -az --delete --rsync-path="sudo rsync" \
-  --exclude .venv --exclude .uv-cache --exclude state \
-  "$TMP/" "$HOST:$APP/"
+rsync -az --delete --rsync-path="sudo rsync" --exclude state "$TMP/" "$HOST:$APP/"
 
 ssh "$HOST" bash -s <<REMOTE
 set -euo pipefail
 getent passwd discord-bot >/dev/null || sudo useradd -r -d /var/lib/discord-bot -s /usr/bin/nologin discord-bot
 sudo install -d -o discord-bot -g discord-bot -m 700 /var/lib/discord-bot
 sudo ln -sfn /var/lib/discord-bot $APP/state
-# Code and unit stay root-owned (the service user must not be able to rewrite what
-# root installs); the bot user owns only what uv writes.
-sudo chown -R root:root $APP && sudo chmod -R go-w $APP
-sudo install -d -o discord-bot -g discord-bot $APP/.venv $APP/.uv-cache
-sudo chown -R discord-bot:discord-bot $APP/.venv $APP/.uv-cache
+# Code and unit stay root-owned and read-only to the service user (it must not be able
+# to rewrite what root installs). The venv + uv cache live in /var/cache/discord-bot,
+# which the bot user owns, so uv can rebuild the venv (e.g. after a Python bump).
+# mktemp's dir is 0700 and rsync copies that mode, so reset the top dir to 0755.
+sudo chown -R root:root $APP && sudo chmod -R go-w $APP && sudo chmod 755 $APP
 sudo chown -h discord-bot:discord-bot $APP/state
-cd $APP && sudo -u discord-bot env HOME=/var/lib/discord-bot UV_PYTHON_DOWNLOADS=never \
-  UV_CACHE_DIR=$APP/.uv-cache uv sync --frozen --no-dev
+sudo install -d -o discord-bot -g discord-bot -m 755 /var/cache/discord-bot
+cd $APP
+sudo -u discord-bot env HOME=/var/lib/discord-bot UV_PYTHON_DOWNLOADS=never \
+  UV_CACHE_DIR=/var/cache/discord-bot/uv UV_PROJECT_ENVIRONMENT=/var/cache/discord-bot/venv \
+  uv sync --frozen --no-dev
 sudo install -m 644 $APP/discord-bot.service /etc/systemd/system/discord-bot.service
 sudo systemctl daemon-reload
 sudo systemctl enable discord-bot.service >/dev/null 2>&1
