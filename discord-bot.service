@@ -1,13 +1,31 @@
+# Dragonpaw Discord bot as a native systemd service on plugger (replaced the
+# ghcr.io/dragonpaw/discord-bot container 2026-11-16). Installed by bin/deploy.
+# Code: /opt/discord-bot (rsynced from this repo; .venv built there by `uv sync` with
+# a uv-managed Python 3.13, since requires-python is <3.14 and Arch ships 3.14).
+# State: /var/lib/discord-bot, linked as /opt/discord-bot/state.
+# Secrets: BOT_TOKEN, CLIENT_ID in /srv/discord-bot/stack.env (root 0600).
 [Unit]
-Description="Dragonpaw Discord Bot"
-After=network.target
+Description=Dragonpaw Discord bot
+After=network-online.target
+Wants=network-online.target
+OnFailure=pushover-onfailure@%n.service
 
 [Service]
-User=bot
-Group=nogroup
-Environment=LANG=en_US.UTF-8,LC_ALL=en_US.UTF-8
-ExecStart=/home/bot/app/bin/start
+User=discord-bot
+Group=discord-bot
+WorkingDirectory=/opt/discord-bot
+EnvironmentFile=/srv/discord-bot/stack.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/discord-bot/.venv/bin/python -OO -m dragonpaw_bot
 Restart=always
+RestartSec=10
+# Interactions have a 3 s deadline; win the CPU the moment one lands (was cpu_shares 4096).
+CPUWeight=400
+StateDirectory=discord-bot
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target

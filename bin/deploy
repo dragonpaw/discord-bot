@@ -1,0 +1,28 @@
+#!/bin/bash
+# Deploy the bot natively to plugger: rsync the code to /opt/discord-bot, build the
+# venv there with uv (Python 3.13, uv-managed), install the unit, restart.
+# Usage: bin/deploy [user@host]   (default ash@10.0.2.203; needs passwordless sudo there)
+set -euo pipefail
+HOST="${1:-ash@10.0.2.203}"
+APP=/opt/discord-bot
+cd "$(dirname "$0")/.."
+
+rsync -az --delete --rsync-path="sudo rsync" \
+  --exclude .git --exclude .venv --exclude state --exclude .python --exclude .uv-cache --exclude __pycache__ \
+  --exclude .pytest_cache --exclude .ruff_cache \
+  ./ "$HOST:$APP/"
+
+ssh "$HOST" bash -s <<REMOTE
+set -euo pipefail
+getent passwd discord-bot >/dev/null || sudo useradd -r -d /var/lib/discord-bot -s /usr/bin/nologin discord-bot
+sudo install -d -o discord-bot -g discord-bot -m 700 /var/lib/discord-bot
+sudo ln -sfn /var/lib/discord-bot $APP/state
+sudo chown -R discord-bot:discord-bot $APP
+cd $APP && sudo -u discord-bot env HOME=/var/lib/discord-bot UV_PYTHON_INSTALL_DIR=$APP/.python \
+  UV_CACHE_DIR=$APP/.uv-cache uv sync --frozen --no-dev --python 3.13
+sudo install -m 644 $APP/discord-bot.service /etc/systemd/system/discord-bot.service
+sudo systemctl daemon-reload
+sudo systemctl enable discord-bot.service >/dev/null 2>&1
+sudo systemctl restart discord-bot.service
+REMOTE
+echo "deployed; logs: ssh $HOST journalctl -u discord-bot -f"
