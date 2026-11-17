@@ -95,7 +95,7 @@ CLIENT_ID = environ["CLIENT_ID"]
 
 
 def _read_build_tag() -> str:
-    """Read build tag from .tag file (baked in at docker build), env var, or default."""
+    """Read build tag from the BUILD_TAG file (written by bin/deploy), env var, or default."""
     tag_file = Path(__file__).parent.parent / "BUILD_TAG"
     if tag_file.is_file():
         return tag_file.read_text().strip() or "dev"
@@ -574,7 +574,7 @@ async def on_starting(_: hikari.StartingEvent) -> None:
         await client.load_extensions_from_package(_plugins, recursive=True)
         await client.start()
     except Exception:
-        logger.exception("Startup failed, exiting so the container restarts")
+        logger.exception("Startup failed, exiting so systemd restarts it")
         raise SystemExit(1) from None
 
     # Log all registered cron tasks

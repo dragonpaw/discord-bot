@@ -1,7 +1,8 @@
 # Dragonpaw Discord bot as a native systemd service on plugger (replaced the
 # ghcr.io/dragonpaw/discord-bot container 2026-11-16). Installed by bin/deploy.
-# Code: /opt/discord-bot (rsynced from this repo; .venv built there by `uv sync` with
-# a uv-managed Python 3.13, since requires-python is <3.14 and Arch ships 3.14).
+# Code: /opt/discord-bot (git archive HEAD, rsynced; .venv built there by `uv sync` on
+# Arch's system Python, which requires-python must match). An Arch Python major bump
+# (e.g. 3.15) breaks the venv: bump requires-python, relock, test, redeploy.
 # State: /var/lib/discord-bot, linked as /opt/discord-bot/state.
 # Secrets: BOT_TOKEN, CLIENT_ID in /srv/discord-bot/stack.env (root 0600).
 [Unit]

@@ -4,7 +4,7 @@ version = "2.0.0"
 description = "Dragonpaw's Discord Bot"
 license = "Apache-2.0"
 authors = [{ name = "Ash Arnold", email = "ash@dragonpaw.org" }]
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.14,<3.15"
 dependencies = [
     "aiohttp>=3.11,<4",
     "emojis>=0.7,<1",
@@ -35,12 +35,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.ty.environment]
-python-version = "3.13"
+python-version = "3.14"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 
 [tool.ruff]
+# Runs on Python 3.14, but lint as 3.13: under 3.14's lazy annotations ruff wants
+# annotation-only imports moved into TYPE_CHECKING (TC00x), which breaks pydantic
+# models and hikari types that resolve annotations at runtime.
 target-version = "py313"
 
 [tool.ruff.lint]

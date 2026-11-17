@@ -24,6 +24,7 @@ A Discord bot ("Dragonpaw Bot") built with Python using the **hikari** + **hikar
 
 - **Install dependencies:** `uv sync`
 - **Run the bot:** `uv run python -m dragonpaw_bot`
+- **Deploy:** `bin/deploy` (native systemd service on plugger; ships committed HEAD via `git archive`, builds the venv there on Arch's system Python)
 - **Type checking:** `uv run ty check dragonpaw_bot/`
 - **Linting:** `uv run ruff check dragonpaw_bot/`
 - **Formatting:** `uv run ruff format dragonpaw_bot/`

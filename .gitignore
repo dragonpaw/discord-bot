@@ -47,3 +47,4 @@ BUILD_TAG
 
 # Session working files
 scratchpad/
+/BUILD_TAG
